@@ -19,8 +19,8 @@ import {
   toApiError,
   HttpStatus,
   type ApiErrorResponse,
-} from "../../src/lib/errors.js";
-import { errorHandler } from "../../src/middleware/errorHandler.js";
+} from "../src/lib/errors";
+import { errorHandler } from "../src/middleware/errorHandler";
 
 describe("Error Classes", () => {
   describe("ApiError base class", () => {
@@ -286,7 +286,7 @@ describe("Error Handler Middleware", () => {
     const requestIds = new Set<string>();
 
     app.get("/req", (c) => {
-      const id = c.get("requestId");
+      const id = (c.req.header("x-request-id") || "") as string;
       requestIds.add(id);
       throw new BadRequestError("test");
     });
