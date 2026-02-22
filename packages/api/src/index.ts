@@ -5,6 +5,8 @@ import { compress } from "hono/compress";
 import { serve } from "@hono/node-server";
 import { createLogger, sendInfoAlert } from "@percolator/shared";
 import { initSentry, sentryMiddleware, flushSentry } from "./middleware/sentry.js";
+import { errorHandler } from "./middleware/errorHandler.js";
+import { BadRequestError } from "./lib/errors.js";
 
 // Initialize Sentry before anything else
 initSentry();
@@ -89,6 +91,9 @@ app.use("*", async (c, next) => {
 
 // Compression Middleware (gzip/brotli for JSON responses)
 app.use("*", compress());
+
+// Global Error Handler Middleware - should be early to catch all errors
+app.use("*", errorHandler());
 
 // Sentry error tracking middleware
 app.use("*", sentryMiddleware());
