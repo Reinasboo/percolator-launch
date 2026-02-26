@@ -44,9 +44,6 @@ const ALLOWED_RPC_METHODS = new Set([
   "getRecentPrioritizationFees",
   "getFeeForMessage",
   "isBlockhashValid",
-  // Transaction submission
-  "sendTransaction",
-  "simulateTransaction",
   // Misc read
   "getMinimumBalanceForRentExemption",
   "getSupply",
