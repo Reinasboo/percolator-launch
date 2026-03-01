@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceClient } from "@/lib/supabase";
+import { requireAuth, UNAUTHORIZED } from "@/lib/api-auth";
 
 export const dynamic = 'force-dynamic';
 
@@ -23,7 +24,9 @@ function sanitize(str: string): string {
 
 const TABLE = "bug_reports";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  if (!requireAuth(req)) return UNAUTHORIZED;
+
   try {
     const sb = getServiceClient();
     const { data, error } = await (sb.from as any)(TABLE)
