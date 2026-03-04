@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceClient } from "@/lib/supabase";
+import { requireAuth, UNAUTHORIZED } from "@/lib/api-auth";
 
 export const dynamic = 'force-dynamic';
 
@@ -23,11 +24,15 @@ function sanitize(str: string): string {
 
 const TABLE = "job_applications";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  if (!requireAuth(req)) return UNAUTHORIZED;
+
   try {
     const sb = getServiceClient();
-    const { data, error } = await (sb.from as any)(TABLE)
-      .select("id, name, twitter_handle, discord, telegram, email, desired_role, experience_level, about, portfolio_links, cv_filename, availability, solana_wallet, status, created_at")
+    const { data, error } = await (sb.from as any)("job_applications")
+      .select(
+        "id, name, twitter_handle, discord, telegram, email, desired_role, experience_level, about, portfolio_links, cv_filename, availability, solana_wallet, status, created_at"
+      )
       .order("created_at", { ascending: false })
       .limit(50);
 
@@ -78,7 +83,8 @@ export async function POST(req: NextRequest) {
     if (!twitter_handle || twitter_handle.length > 30) {
       return NextResponse.json({ error: "Twitter handle required (max 30 chars)" }, { status: 400 });
     }
-    if (!email || email.length > 200 || !email.includes("@")) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || email.length > 200 || !emailRegex.test(email)) {
       return NextResponse.json({ error: "Valid email required" }, { status: 400 });
     }
     const validRoles = ["developer", "designer", "community", "marketing", "trader", "other"];
