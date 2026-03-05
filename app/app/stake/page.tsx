@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
+import { useWalletCompat } from "@/hooks/useWalletCompat";
 import type { StakePoolData } from "@/app/api/stake/pools/route";
 import type { PositionData } from "@/components/stake/YourPosition";
 
@@ -22,6 +23,7 @@ const MOCK_POSITION: PositionData = {
 };
 
 export default function StakePage() {
+  const { connected } = useWalletCompat();
   const [pools, setPools] = useState<StakePoolData[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPoolId, setSelectedPoolId] = useState<string | undefined>();
@@ -62,10 +64,11 @@ export default function StakePage() {
         {/* Hero — full width */}
         <StakeHero
           totalStaked={totalStaked}
-          yourDeposits={MOCK_POSITION.est_value_usd}
+          yourDeposits={connected ? MOCK_POSITION.est_value_usd : 0}
           activePools={activePools}
           avgApr={avgApr}
           loading={loading}
+          walletConnected={connected}
         />
 
         {/* Desktop: 3/5 PoolList + 2/5 DepositWidget + YourPosition */}

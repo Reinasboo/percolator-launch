@@ -10,6 +10,15 @@ interface AnimatedNumberProps {
   decimals?: number;
   duration?: number;
   className?: string;
+  /** Abbreviate large values: 1 000 → 1K, 1 000 000 → 1M, 1 000 000 000 → 1B */
+  abbrev?: boolean;
+}
+
+function formatAbbrev(v: number): string {
+  if (v >= 1_000_000_000) return `${(v / 1_000_000_000).toFixed(1)}B`;
+  if (v >= 1_000_000)     return `${(v /     1_000_000).toFixed(1)}M`;
+  if (v >= 1_000)         return `${(v /         1_000).toFixed(1)}K`;
+  return String(Math.round(v));
 }
 
 export function AnimatedNumber({
@@ -19,6 +28,7 @@ export function AnimatedNumber({
   decimals = 0,
   duration = 1.2,
   className = "",
+  abbrev = false,
 }: AnimatedNumberProps) {
   const spanRef = useRef<HTMLSpanElement>(null);
   const numRef = useRef({ val: 0 });
@@ -31,7 +41,8 @@ export function AnimatedNumber({
   useEffect(() => {
     if (!spanRef.current) return;
     if (prefersReduced) {
-      spanRef.current.textContent = `${prefix}${value.toFixed(decimals)}${suffix}`;
+      const reduced = abbrev ? formatAbbrev(value) : value.toFixed(decimals);
+      spanRef.current.textContent = `${prefix}${reduced}${suffix}`;
       return;
     }
 
@@ -42,12 +53,16 @@ export function AnimatedNumber({
       onUpdate: () => {
         if (spanRef.current) {
           const v = numRef.current.val;
-          const formatted = decimals > 0 ? v.toFixed(decimals) : Math.round(v).toLocaleString();
+          const formatted = abbrev
+            ? formatAbbrev(v)
+            : decimals > 0
+              ? v.toFixed(decimals)
+              : Math.round(v).toLocaleString();
           spanRef.current.textContent = `${prefix}${formatted}${suffix}`;
         }
       },
     });
-  }, [value, prefix, suffix, decimals, duration, prefersReduced]);
+  }, [value, prefix, suffix, decimals, duration, prefersReduced, abbrev]);
 
   return (
     <span ref={spanRef} className={`font-[var(--font-jetbrains-mono)] tabular-nums ${className}`} style={{ willChange: 'contents' }}>

@@ -10,14 +10,15 @@ interface StakeHeroProps {
   activePools: number;
   avgApr: number;
   loading: boolean;
+  walletConnected: boolean;
 }
 
-export function StakeHero({ totalStaked, yourDeposits, activePools, avgApr, loading }: StakeHeroProps) {
+export function StakeHero({ totalStaked, yourDeposits, activePools, avgApr, loading, walletConnected }: StakeHeroProps) {
   const metrics = [
-    { label: "Total Staked", value: totalStaked, prefix: "$", decimals: 0, color: "text-[var(--accent)]" },
-    { label: "Your Deposits", value: yourDeposits, prefix: "$", decimals: 2, color: "text-[var(--text-secondary)]" },
-    { label: "Active Pools", value: activePools, prefix: "", decimals: 0, color: "text-[var(--accent)]" },
-    { label: "Avg APR", value: avgApr, prefix: "", suffix: "%", decimals: 1, color: "text-[var(--cyan)]" },
+    { label: "Total Staked",  value: totalStaked,  prefix: "$", suffix: "", decimals: 0, abbrev: true,  color: "text-[var(--accent)]",        walletGated: false },
+    { label: "Your Deposits", value: yourDeposits, prefix: "$", suffix: "", decimals: 2, abbrev: false, color: "text-[var(--text-secondary)]", walletGated: true  },
+    { label: "Active Pools",  value: activePools,  prefix: "",  suffix: "", decimals: 0, abbrev: false, color: "text-[var(--accent)]",        walletGated: false },
+    { label: "Avg APR",       value: avgApr,       prefix: "",  suffix: "%", decimals: 1, abbrev: false, color: "text-[var(--cyan)]",         walletGated: false },
   ];
 
   return (
@@ -62,9 +63,13 @@ export function StakeHero({ totalStaked, yourDeposits, activePools, avgApr, load
               <p className="mb-2 text-[9px] font-medium uppercase tracking-[0.2em] text-[var(--text-muted)]">{m.label}</p>
               {loading ? (
                 <ShimmerSkeleton className="h-6 w-24" />
+              ) : m.walletGated && !walletConnected ? (
+                <span className={`text-lg sm:text-xl font-semibold tracking-tight ${m.color}`} style={{ fontFamily: "var(--font-heading)" }}>
+                  $—
+                </span>
               ) : (
                 <span className={`text-lg sm:text-xl font-semibold tracking-tight ${m.color}`} style={{ fontFamily: "var(--font-heading)" }}>
-                  <AnimatedNumber value={m.value} prefix={m.prefix} suffix={m.suffix} decimals={m.decimals} />
+                  <AnimatedNumber value={m.value} prefix={m.prefix} suffix={m.suffix} decimals={m.decimals} abbrev={m.abbrev} />
                 </span>
               )}
             </div>
