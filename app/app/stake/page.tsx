@@ -34,18 +34,27 @@ export default function StakePage() {
   }, []);
 
   useEffect(() => {
-    fetch("/api/stake/pools")
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8_000);
+
+    fetch("/api/stake/pools", { signal: controller.signal })
       .then((r) => r.json())
-      .then((data) => {
-        setPools(data.pools);
-        setTotalStaked(data.total_staked_usd);
-        setActivePools(data.active_pools);
-        setAvgApr(data.avg_apr_pct);
-        if (data.pools.length > 0 && !selectedPoolId) {
+      .then((data: { pools: StakePoolData[]; total_staked_usd: number; active_pools: number; avg_apr_pct: number }) => {
+        setPools(data.pools ?? []);
+        setTotalStaked(data.total_staked_usd ?? 0);
+        setActivePools(data.active_pools ?? 0);
+        setAvgApr(data.avg_apr_pct ?? 0);
+        if ((data.pools ?? []).length > 0 && !selectedPoolId) {
           setSelectedPoolId(data.pools[0].id);
         }
       })
-      .finally(() => setLoading(false));
+      .catch(() => {})
+      .finally(() => {
+        clearTimeout(timeout);
+        setLoading(false);
+      });
+
+    return () => { clearTimeout(timeout); controller.abort(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
