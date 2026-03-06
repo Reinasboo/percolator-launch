@@ -51,7 +51,12 @@ const ALL_ZEROS = new PublicKey("11111111111111111111111111111111");
 const keypairPath = process.env.ADMIN_KEYPAIR_PATH || "./admin-keypair.json";
 const raw = fs.readFileSync(keypairPath, "utf-8");
 const payer = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(raw)));
-const connection = new Connection(process.env.RPC_URL || "https://api.mainnet-beta.solana.com", "confirmed");
+const rpcUrl = process.env.RPC_URL;
+if (!rpcUrl) {
+  console.error("❌ RPC_URL env var is required. Refusing to start without an explicit RPC endpoint.");
+  process.exit(1);
+}
+const connection = new Connection(rpcUrl, "confirmed");
 
 // Per-market price cache
 const priceCache = new Map<string, { priceE6: number; fetchedAt: number }>();
