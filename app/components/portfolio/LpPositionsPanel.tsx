@@ -22,6 +22,36 @@ function formatPct(n: number): string {
   return `${n.toFixed(2)}%`;
 }
 
+/**
+ * Detect if a "symbol" is actually a truncated address hash (e.g. "7MkErbg1").
+ *
+ * Real token symbols are ALL-CAPS letters only (e.g. "BTC", "SOL", "PERP").
+ * Pool address slabs look like "7MkErbg1" — mixed case + digits, not a proper symbol.
+ * Using a positive match (/^[A-Z]{1,10}$/) is more reliable than a digit-ratio
+ * heuristic, which failed for "7MkErbg1" (2/8 = 25%, below the old 30% threshold).
+ */
+function isAddressHash(s: string): boolean {
+  if (!s) return true;
+  // A valid symbol is 1-10 uppercase letters only.
+  // Anything that doesn't match is treated as an address hash.
+  return !/^[A-Z]{1,10}$/.test(s);
+}
+
+/** Get a clean display symbol from position data. */
+function getDisplaySymbol(pos: { symbol: string; name: string }): string {
+  if (!isAddressHash(pos.symbol)) return pos.symbol;
+  // Fallback: extract clean symbol from name if it ends in "-PERP" / " PERP"
+  // e.g. name="Pool 7MkErbg1" → still a hash, skip; name="BTC-PERP" → strip suffix
+  if (pos.name) {
+    const nameSymbol = pos.name
+      .replace(/[-\s]PERP$/i, "")   // strip -PERP / PERP suffix
+      .replace(/^Pool\s+/i, "")     // strip "Pool " prefix
+      .trim();
+    if (!isAddressHash(nameSymbol)) return nameSymbol;
+  }
+  return pos.symbol;
+}
+
 function slotsToTime(slots: number): string {
   const seconds = Math.round(slots * 0.4);
   if (seconds < 60) return `~${seconds}s`;
@@ -39,6 +69,7 @@ interface LpPositionCardProps {
 }
 
 function LpPositionCard({ position: pos }: LpPositionCardProps) {
+  const displaySymbol = getDisplaySymbol(pos);
   const cooldownLabel = pos.cooldownElapsed
     ? null
     : slotsToTime(pos.cooldownSlots);
@@ -56,7 +87,7 @@ function LpPositionCard({ position: pos }: LpPositionCardProps) {
             {pos.logoUrl ? (
               <img
                 src={pos.logoUrl}
-                alt={pos.symbol}
+                alt={displaySymbol}
                 className="h-6 w-6 rounded-full flex-shrink-0 object-cover"
                 onError={(e) => {
                   (e.currentTarget as HTMLImageElement).style.display = "none";
@@ -64,12 +95,12 @@ function LpPositionCard({ position: pos }: LpPositionCardProps) {
               />
             ) : (
               <div className="h-6 w-6 rounded-full flex-shrink-0 bg-[var(--accent)]/20 flex items-center justify-center text-[9px] font-bold text-[var(--accent)]">
-                {pos.symbol.slice(0, 2)}
+                {displaySymbol.slice(0, 2)}
               </div>
             )}
             <div className="min-w-0">
               <p className="text-sm font-semibold text-white truncate" style={{ fontFamily: "var(--font-jetbrains-mono)" }}>
-                {pos.symbol}-PERP
+                {displaySymbol}-PERP
               </p>
               <p className="text-[10px] text-[var(--text-dim)] truncate">
                 {pos.poolMode === 0 ? "Insurance LP" : "Trading LP"}
