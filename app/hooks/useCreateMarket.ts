@@ -588,6 +588,46 @@ export function useCreateMarket() {
 
           const userAta = await getAssociatedTokenAddress(params.mint, wallet.publicKey);
 
+          // Pre-flight: verify user has enough tokens for LP deposit + insurance top-up.
+          // Fixes #757/#758 — pre-fund only checked seed amount (500), but TX4 also
+          // needs lpCollateral + insuranceAmount (default 1,000 + 100 = 1,100 more).
+          const tx4Required = params.lpCollateral + params.insuranceAmount;
+          let tx4Balance = 0n;
+          try {
+            const tx4Acct = await getAccount(connection, userAta);
+            tx4Balance = tx4Acct.amount;
+          } catch {
+            // ATA doesn't exist — balance stays 0
+          }
+          if (tx4Balance < tx4Required) {
+            if (isDevnetEnv) {
+              setState((s) => ({ ...s, stepLabel: "Funding devnet wallet for deposit..." }));
+              const fundResp4 = await fetch("/api/devnet-pre-fund", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  mintAddress: params.mint.toBase58(),
+                  walletAddress: wallet.publicKey.toBase58(),
+                }),
+              });
+              if (!fundResp4.ok) {
+                const err4 = await fundResp4.json().catch(() => ({ error: "Unknown error" }));
+                throw new Error(`Devnet pre-fund failed at deposit step: ${err4.error ?? fundResp4.status}`);
+              }
+              setState((s) => ({ ...s, stepLabel: STEP_LABELS[3] }));
+            } else {
+              const decimals = params.decimals ?? 6;
+              const needed = Number(tx4Required) / 10 ** decimals;
+              const have = Number(tx4Balance) / 10 ** decimals;
+              throw new Error(
+                `Insufficient token balance for deposit. ` +
+                `You need ${needed.toLocaleString()} tokens for LP collateral and insurance ` +
+                `but your wallet holds ${have.toLocaleString()}. ` +
+                `Please add tokens to your wallet before continuing.`
+              );
+            }
+          }
+
           const depositData = encodeDepositCollateral({
             userIdx: 0,
             amount: params.lpCollateral.toString(),
