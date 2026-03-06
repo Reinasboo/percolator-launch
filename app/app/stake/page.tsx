@@ -7,10 +7,13 @@ import { PublicKey } from "@solana/web3.js";
 import {
   deriveStakePool,
   deriveDepositPda,
+  STAKE_POOL_SIZE,
+  decodeStakePool,
 } from "@percolator/sdk";
-import { unpackAccount } from "@solana/spl-token";
+import { unpackAccount, getMint } from "@solana/spl-token";
 import { useStakeDepositByPool } from "@/hooks/useStakeDepositByPool";
 import { useStakeWithdrawByPool } from "@/hooks/useStakeWithdrawByPool";
+import { parseHumanAmount } from "@/lib/parseAmount";
 import { ScrollReveal } from "@/components/ui/ScrollReveal";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
@@ -374,10 +377,12 @@ function DepositWidget({
   const capRatio = pool && pool.capTotal > 0 ? pool.capUsed / pool.capTotal : 0;
 
   const handleDeposit = useCallback(async () => {
-    if (!pool || amountNum <= 0 || depositLoading) return;
+    if (!pool || depositLoading) return;
     setTxStatus(null);
     try {
-      const rawAmount = BigInt(Math.round(amountNum * Math.pow(10, balanceDecimals)));
+      // Use string-based BigInt parsing to avoid float precision loss at large amounts.
+      const rawAmount = parseHumanAmount(amount, balanceDecimals);
+      if (rawAmount <= 0n) return;
       const sig = await deposit(rawAmount);
       setAmount("");
       setTxStatus({ type: "success", msg: `Deposit confirmed: ${sig.slice(0, 8)}…` });
@@ -386,7 +391,7 @@ function DepositWidget({
       const msg = e instanceof Error ? e.message : String(e);
       setTxStatus({ type: "error", msg });
     }
-  }, [pool, amountNum, balanceDecimals, deposit, depositLoading, onDepositSuccess]);
+  }, [pool, amount, balanceDecimals, deposit, depositLoading, onDepositSuccess]);
 
   return (
     <div id="deposit" className="border border-[var(--border)]/50 bg-[var(--panel-bg)]">
@@ -670,11 +675,10 @@ export default function StakePage() {
             const [poolPda] = deriveStakePool(slabPk);
             const [depositPdaAddress] = deriveDepositPda(poolPda, publicKey);
 
-            // Fetch pool account to get lpMint
+            // Fetch pool account to get lpMint using canonical StakePool layout
             const poolInfo = await connection.getAccountInfo(poolPda);
-            if (!poolInfo || poolInfo.data.length < 186) continue;
-            const poolData = Buffer.from(poolInfo.data);
-            const lpMint = new PublicKey(poolData.subarray(65, 97));
+            if (!poolInfo || poolInfo.data.length < STAKE_POOL_SIZE) continue;
+            const { lpMint } = decodeStakePool(Buffer.from(poolInfo.data));
 
             // Get user LP ATA balance
             const userLpAta = getAssociatedTokenAddressSync(lpMint, publicKey);
@@ -683,7 +687,17 @@ export default function StakePage() {
             const lpAccount = unpackAccount(userLpAta, lpAtaInfo);
             if (lpAccount.amount === 0n) continue;
 
-            const lpBalance = Number(lpAccount.amount) / 1e6; // assume 6 decimals
+            // Derive decimals from on-chain LP mint rather than assuming 6.
+            // Wrapped in its own try/catch: a transient RPC error must not gate
+            // position discovery — lpAccount.amount already confirmed the position exists.
+            let lpDecimals = 6; // safe default
+            try {
+              const lpMintInfo = await getMint(connection, lpMint);
+              lpDecimals = lpMintInfo.decimals;
+            } catch {
+              // RPC failure: fall back to default decimals; position is still shown
+            }
+            const lpBalance = Number(lpAccount.amount) / Math.pow(10, lpDecimals);
 
             // Calculate estimated value: (user_lp / total_lp_supply) * vault_balance
             const estimatedValue = pool.totalLpSupply > 0
