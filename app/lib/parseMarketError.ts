@@ -32,11 +32,22 @@ export function parseMarketCreationError(error: unknown): string {
     return "Transaction cancelled — you rejected the signing request in your wallet. Click Retry to try again.";
   }
 
+  // Insufficient SPL token balance (token program error 0x1 or transfer failure).
+  // Must be checked BEFORE the SOL/lamports branch — Solana simulation errors for
+  // token transfers also include "insufficient funds" but are not a SOL problem. Fixes #758.
+  if (
+    msg.includes("insufficient funds for transfer") ||
+    (msg.includes("insufficient funds") && !msg.includes("lamports")) ||
+    (msg.includes("custom program error: 0x1") && msg.includes("TokenkegQ"))
+  ) {
+    return "Insufficient token balance. Your wallet doesn't have enough collateral tokens to complete this step. On devnet, refresh the page and retry — the faucet will top up your balance.";
+  }
+
   // Insufficient SOL for rent/fees
   if (
     msg.includes("Attempt to debit an account but found no record of a prior credit") ||
-    msg.includes("insufficient funds") ||
-    msg.includes("insufficient lamports")
+    msg.includes("insufficient lamports") ||
+    msg.includes("insufficient funds")
   ) {
     return "Insufficient SOL balance. You need enough SOL to cover the slab rent and transaction fees. Check your wallet balance.";
   }
