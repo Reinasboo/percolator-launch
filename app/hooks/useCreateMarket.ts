@@ -238,8 +238,25 @@ export function useCreateMarket() {
                 wallet.publicKey, vaultAta, vaultPda, params.mint,
               );
 
-              // Seed the vault — same fix as fresh creation path
+              // Pre-flight: verify user holds enough tokens for the vault seed transfer
               const userCollateralAtaRecovery = await getAssociatedTokenAddress(params.mint, wallet.publicKey);
+              let recoveryBalance = 0n;
+              try {
+                const acct = await getAccount(connection, userCollateralAtaRecovery);
+                recoveryBalance = acct.amount;
+              } catch {
+                // Account doesn't exist
+              }
+              if (recoveryBalance < MIN_INIT_MARKET_SEED) {
+                const decimals = params.decimals ?? 6;
+                const needed = Number(MIN_INIT_MARKET_SEED) / 10 ** decimals;
+                const have = Number(recoveryBalance) / 10 ** decimals;
+                throw new Error(
+                  `Insufficient token balance for vault seed. ` +
+                  `You need at least ${needed.toLocaleString()} tokens but your wallet holds ${have.toLocaleString()}. ` +
+                  `Please fund your wallet with the collateral mint before creating a market.`
+                );
+              }
               const seedTransferIxRecovery = createTransferInstruction(
                 userCollateralAtaRecovery, vaultAta, wallet.publicKey, MIN_INIT_MARKET_SEED,
               );
@@ -288,7 +305,32 @@ export function useCreateMarket() {
               }));
             }
           } else {
-            // Fresh creation — atomic: createAccount + createATA + InitMarket
+            // Fresh creation — atomic: createAccount + createATA + seed transfer + InitMarket
+
+            // Pre-flight: verify user holds enough tokens for the vault seed transfer.
+            // Without this check the TX fails at the Transfer instruction with an opaque
+            // "invalid account data" error (the user's ATA doesn't exist or has
+            // insufficient balance).
+            const userCollateralAtaCheck = await getAssociatedTokenAddress(params.mint, wallet.publicKey);
+            let userTokenBalance = 0n;
+            try {
+              const acct = await getAccount(connection, userCollateralAtaCheck);
+              userTokenBalance = acct.amount;
+            } catch {
+              // Account doesn't exist — balance stays 0
+            }
+            if (userTokenBalance < MIN_INIT_MARKET_SEED) {
+              const decimals = params.decimals ?? 6;
+              const needed = Number(MIN_INIT_MARKET_SEED) / 10 ** decimals;
+              const have = Number(userTokenBalance) / 10 ** decimals;
+              throw new Error(
+                `Insufficient token balance for vault seed. ` +
+                `You need at least ${needed.toLocaleString()} tokens (${MIN_INIT_MARKET_SEED.toString()} raw) ` +
+                `but your wallet holds ${have.toLocaleString()}. ` +
+                `Please fund your wallet with the collateral mint before creating a market.`
+              );
+            }
+
             const effectiveSlabSize = params.slabDataSize ?? DEFAULT_SLAB_SIZE;
             const slabRent = await connection.getMinimumBalanceForRentExemption(effectiveSlabSize);
             const createAccountIx = SystemProgram.createAccount({
