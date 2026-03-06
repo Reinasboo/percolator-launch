@@ -57,19 +57,38 @@ const MATCHER_CTX_SIZE = 320; // Minimum context size for percolator matcher
  * Returns null on any failure — caller falls back to params.initialPriceE6.
  */
 async function fetchJupiterPriceE6(ca: string): Promise<bigint | null> {
+  // 1. Try Jupiter Lite API
   try {
     const resp = await fetch(
       `https://lite.jup.ag/v6/price?ids=${ca}`,
       { signal: AbortSignal.timeout(5_000) },
     );
-    if (!resp.ok) return null;
-    const json = await resp.json() as { data?: Record<string, { price?: number }> };
-    const price = json.data?.[ca]?.price;
-    if (!price || !isFinite(price) || price <= 0) return null;
-    return BigInt(Math.round(price * 1_000_000));
-  } catch {
-    return null;
-  }
+    if (resp.ok) {
+      const json = await resp.json() as { data?: Record<string, { price?: number }> };
+      const price = json.data?.[ca]?.price;
+      if (price && isFinite(price) && price > 0) {
+        return BigInt(Math.round(price * 1_000_000));
+      }
+    }
+  } catch { /* fall through */ }
+
+  // 2. Fallback: DexScreener (covers Pump.fun + PumpSwap tokens Jupiter misses)
+  try {
+    const resp = await fetch(
+      `https://api.dexscreener.com/latest/dex/tokens/${ca}`,
+      { signal: AbortSignal.timeout(5_000) },
+    );
+    if (resp.ok) {
+      const json = await resp.json() as { pairs?: Array<{ priceUsd?: string }> };
+      const priceStr = json.pairs?.[0]?.priceUsd;
+      const price = priceStr ? parseFloat(priceStr) : 0;
+      if (price > 0 && isFinite(price)) {
+        return BigInt(Math.round(price * 1_000_000));
+      }
+    }
+  } catch { /* fall through */ }
+
+  return null;
 }
 
 /** Minimum vault seed required by percolator-prog before InitMarket (500_000_000 raw tokens). */
