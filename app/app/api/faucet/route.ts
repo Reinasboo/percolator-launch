@@ -30,7 +30,7 @@ import * as Sentry from "@sentry/nextjs";
 
 export const dynamic = "force-dynamic";
 
-const NETWORK = process.env.NEXT_PUBLIC_SOLANA_NETWORK ?? "devnet";
+const NETWORK = process.env.NEXT_PUBLIC_SOLANA_NETWORK;
 const USDC_MINT_AMOUNT = 10_000_000_000; // 10,000 USDC (6 decimals)
 const RATE_LIMIT_HOURS = 24;
 
