@@ -24,8 +24,8 @@ import * as Sentry from "@sentry/nextjs";
 
 export const dynamic = "force-dynamic";
 
-// Only enable on devnet
-const NETWORK = process.env.NEXT_PUBLIC_SOLANA_NETWORK ?? "devnet";
+// Only enable on devnet — no fallback default; missing env var is treated as non-devnet (fail-closed)
+const NETWORK = process.env.NEXT_PUBLIC_SOLANA_NETWORK;
 const MIN_SOL_BALANCE = 0.1 * LAMPORTS_PER_SOL; // 0.1 SOL threshold
 const AIRDROP_AMOUNT = 2 * LAMPORTS_PER_SOL; // 2 SOL
 const USDC_MINT_AMOUNT = 1_000_000_000; // 1,000 USDC (6 decimals) — PERC-372

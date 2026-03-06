@@ -26,7 +26,7 @@ import * as Sentry from "@sentry/nextjs";
 
 export const dynamic = "force-dynamic";
 
-const NETWORK = process.env.NEXT_PUBLIC_SOLANA_NETWORK ?? "devnet";
+const NETWORK = process.env.NEXT_PUBLIC_SOLANA_NETWORK;
 const AIRDROP_USD_VALUE = 500;
 const RATE_LIMIT_HOURS = 24;
 const ORACLE_BRIDGE_URL = process.env.ORACLE_BRIDGE_URL ?? "http://127.0.0.1:18802";
