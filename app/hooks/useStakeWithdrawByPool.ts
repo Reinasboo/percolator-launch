@@ -5,11 +5,13 @@ import { PublicKey, TransactionInstruction } from '@solana/web3.js';
 import { useWalletCompat, useConnectionCompat } from '@/hooks/useWalletCompat';
 import {
   STAKE_PROGRAM_ID,
+  STAKE_POOL_SIZE,
   deriveStakePool,
   deriveStakeVaultAuth,
   deriveDepositPda,
   encodeStakeWithdraw,
   withdrawAccounts,
+  decodeStakePool,
 } from '@percolator/sdk';
 import {
   getAssociatedTokenAddress,
@@ -84,13 +86,20 @@ export function useStakeWithdrawByPool({ slabAddress, collateralMint }: StakeWit
 
         // Fetch pool account to get lpMint and vault
         const poolInfo = await connection.getAccountInfo(pool);
-        if (!poolInfo || poolInfo.data.length < 186) {
+        if (!poolInfo || poolInfo.data.length < STAKE_POOL_SIZE) {
           throw new Error('Stake pool not initialized for this market.');
         }
 
-        const poolData = Buffer.from(poolInfo.data);
-        const lpMint = new PublicKey(poolData.subarray(65, 97));
-        const vault = new PublicKey(poolData.subarray(97, 129));
+        // Defense-in-depth: validate pool account owner matches stake program.
+        // The pool is a PDA so an attacker cannot substitute a malicious account,
+        // but this guards against edge cases in test environments or network misconfigs.
+        if (!poolInfo.owner.equals(STAKE_PROGRAM_ID)) {
+          throw new Error('Stake pool account owner mismatch — possible network misconfiguration.');
+        }
+
+        // Decode pool using canonical StakePool layout from SDK (352 bytes).
+        // Avoids manual byte offset arithmetic — offsets are versioned in decodeStakePool.
+        const { lpMint, vault } = decodeStakePool(Buffer.from(poolInfo.data));
 
         // Get user's ATAs
         const userCollateralAta = await getAssociatedTokenAddress(collMintPk, wallet.publicKey);
