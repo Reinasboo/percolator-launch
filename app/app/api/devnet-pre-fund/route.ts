@@ -8,7 +8,8 @@
  * cover the vault seed deposit (MIN_INIT_MARKET_SEED = 500_000_000 raw)
  * plus a reasonable buffer.
  *
- * Only callable on devnet. Rate-limited to prevent abuse.
+ * Only callable on devnet. Global rate limiting (120 req/min/IP) is handled
+ * by middleware.ts. mintAddress must be in DEVNET_ALLOWED_MINTS env var.
  *
  * Requires: DEVNET_MINT_AUTHORITY_KEYPAIR env var (JSON secret key bytes)
  * — the keypair must be the mint authority for the given mint.
@@ -33,13 +34,41 @@ import * as Sentry from "@sentry/nextjs";
 
 export const dynamic = "force-dynamic";
 
-const NETWORK = process.env.NEXT_PUBLIC_SOLANA_NETWORK ?? "devnet";
+// Default to 'mainnet' so misconfigured deployments fail closed, not open
+const NETWORK = process.env.NEXT_PUBLIC_SOLANA_NETWORK?.trim() ?? "mainnet";
 
-/** Minimum seed the program requires (must match percolator.rs constants::MIN_INIT_MARKET_SEED) */
+/**
+ * Allowlist of devnet mint addresses this endpoint may fund.
+ * Set DEVNET_ALLOWED_MINTS as a comma-separated list in your env.
+ * Requests for mints not on this list are rejected with 400.
+ */
+const DEVNET_ALLOWED_MINTS: Set<string> = new Set(
+  (process.env.DEVNET_ALLOWED_MINTS ?? "")
+    .split(",")
+    .map((m) => m.trim())
+    .filter(Boolean),
+);
+
+/**
+ * Minimum seed the program requires.
+ * Kept local to avoid importing a "use client" module into a server route.
+ * Source of truth: hooks/useCreateMarket.ts → MIN_INIT_MARKET_SEED.
+ * Must also match percolator.rs constants::MIN_INIT_MARKET_SEED.
+ */
 const MIN_INIT_MARKET_SEED = 500_000_000n;
 
 /** Fund 2× the minimum so user can retry without re-requesting */
 const FUND_AMOUNT = MIN_INIT_MARKET_SEED * 2n;
+
+/** Wrap a promise with a timeout; rejects after `ms` milliseconds. */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`Operation timed out after ${ms}ms`)), ms),
+    ),
+  ]);
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -58,6 +87,11 @@ export async function POST(req: NextRequest) {
         { error: "Missing mintAddress or walletAddress" },
         { status: 400 },
       );
+    }
+
+    // Validate mintAddress against allowlist before touching any keys/RPC
+    if (DEVNET_ALLOWED_MINTS.size > 0 && !DEVNET_ALLOWED_MINTS.has(mintAddress)) {
+      return NextResponse.json({ error: "mintAddress not permitted" }, { status: 400 });
     }
 
     let mintPk: PublicKey;
@@ -145,11 +179,9 @@ export async function POST(req: NextRequest) {
       ),
     );
 
-    const sig = await sendAndConfirmTransaction(
-      connection,
-      tx,
-      [mintAuthority],
-      { commitment: "confirmed" },
+    const sig = await withTimeout(
+      sendAndConfirmTransaction(connection, tx, [mintAuthority], { commitment: "confirmed" }),
+      30_000, // 30s — devnet RPC should confirm well within this
     );
 
     return NextResponse.json({
@@ -163,9 +195,7 @@ export async function POST(req: NextRequest) {
       tags: { endpoint: "/api/devnet-pre-fund", method: "POST" },
     });
     return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Internal server error",
-      },
+      { error: "Internal server error" },
       { status: 500 },
     );
   }

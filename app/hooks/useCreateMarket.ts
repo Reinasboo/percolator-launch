@@ -264,6 +264,8 @@ export function useCreateMarket() {
                     const err = await fundResp.json().catch(() => ({ error: "Unknown error" }));
                     throw new Error(`Devnet pre-fund failed: ${err.error ?? fundResp.status}`);
                   }
+                  // Reset label — don't leave UI stuck at "Funding devnet wallet…"
+                  setState((s) => ({ ...s, stepLabel: STEP_LABELS[0] }));
                 } else {
                   const decimals = params.decimals ?? 6;
                   const needed = Number(MIN_INIT_MARKET_SEED) / 10 ** decimals;
