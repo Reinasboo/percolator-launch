@@ -328,7 +328,7 @@ export function useCreateMarket() {
             // Fresh creation — atomic: createAccount + createATA + seed transfer + InitMarket
 
             // Pre-flight: verify user holds enough tokens for the vault seed transfer.
-            // Without this check the TX fails at IX4 (SPL Token Transfer) with an opaque
+            // Without this check the TX fails at the Transfer instruction with an opaque
             // "invalid account data" error when the user's ATA doesn't exist or is empty.
             // On devnet, auto-fund via /api/devnet-pre-fund; on mainnet, surface a clear error.
             const userCollateralAtaCheck = await getAssociatedTokenAddress(params.mint, wallet.publicKey);
