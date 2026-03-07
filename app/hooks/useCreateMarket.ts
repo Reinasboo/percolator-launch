@@ -225,7 +225,10 @@ export function useCreateMarket() {
       const oracleMode: "pyth" | "hyperp" | "admin" = (resolvedOracleMode === "hyperp" && isDevnetMirror) ? "admin" : resolvedOracleMode;
       const isAdminOracle = oracleMode === "admin";
       const isHyperpOracle = oracleMode === "hyperp";
-      const isDevnetEnv = (process.env.NEXT_PUBLIC_SOLANA_NETWORK?.trim() ?? "mainnet") === "devnet";
+      // PERC-devnet: isDevnetEnv must be runtime-detected, not build-time.
+      // Users toggle devnet via localStorage — NEXT_PUBLIC_SOLANA_NETWORK is always "mainnet" on Vercel prod.
+      // params.mainnetCA is only set for devnet mirror markets, making it a reliable runtime signal.
+      const isDevnetEnv = !!params.mainnetCA || connection.rpcEndpoint.includes("devnet");
 
       // PERC-470: Resolve DEX pool vault addresses for hyperp mode
       // If vaults weren't provided, fetch the pool account on-chain
