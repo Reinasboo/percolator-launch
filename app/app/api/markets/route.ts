@@ -19,6 +19,15 @@ function sanitizeFundingRate(v: number | null | undefined): number | null {
   return v;
 }
 
+// #868: Blocklist for markets with corrupt state or wrong oracle_authority (e.g. issue #837).
+// Populated from BLOCKED_MARKET_ADDRESSES env var (comma-separated slab addresses).
+const BLOCKED_MARKET_ADDRESSES: ReadonlySet<string> = new Set(
+  (process.env.BLOCKED_MARKET_ADDRESSES ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
+);
+
 export const dynamic = "force-dynamic";
 
 // GET /api/markets — list all active markets with stats
@@ -47,7 +56,9 @@ export async function GET() {
     // Derive from oracle_authority: zero pubkey → pyth-pinned, else admin/hyperp.
     // Default to "admin" when unknown — safest assumption for old devnet markets.
     const ZERO_PUBKEY = "11111111111111111111111111111111";
-    const sanitized = ((data ?? []) as unknown as Record<string, unknown>[]).map((m) => {
+    const sanitized = ((data ?? []) as unknown as Record<string, unknown>[])
+      .filter((m) => !BLOCKED_MARKET_ADDRESSES.has(m.slab_address as string))
+      .map((m) => {
       let oracle_mode = m.oracle_mode as string | null;
       if (!oracle_mode) {
         const auth = m.oracle_authority as string | null;
