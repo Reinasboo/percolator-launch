@@ -9,6 +9,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { useWalletCompat } from "@/hooks/useWalletCompat";
+import { getNetwork } from "@/lib/config";
 
 interface AirdropButtonProps {
   marketAddress: string;
@@ -25,7 +26,7 @@ export function AirdropButton({ marketAddress, symbol, isUserCreated = true }: A
   const [countdown, setCountdown] = useState<string | null>(null);
   const [nextClaimAt, setNextClaimAt] = useState<string | null>(null);
 
-  const isDevnet = process.env.NEXT_PUBLIC_SOLANA_NETWORK === "devnet";
+  const isDevnet = getNetwork() === "devnet"; // runtime check — not build-time env var
 
   // Countdown timer
   useEffect(() => {
@@ -56,7 +57,7 @@ export function AirdropButton({ marketAddress, symbol, isUserCreated = true }: A
     setError(null);
 
     try {
-      const resp = await fetch("/api/airdrop", {
+      const resp = await fetch("/api/devnet-airdrop", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
