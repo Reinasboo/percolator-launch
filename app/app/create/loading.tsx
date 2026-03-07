@@ -27,8 +27,8 @@ export default function CreateLoading() {
             ))}
           </div>
 
-          {/* Form content */}
-          <div className="space-y-6">
+          {/* Form content — single-column fields only, matching wizard step 1 layout (#866) */}
+          <div className="space-y-5">
             <div>
               <ShimmerSkeleton className="h-4 w-32 mb-2" />
               <ShimmerSkeleton className="h-12 w-full" />
@@ -37,15 +37,9 @@ export default function CreateLoading() {
               <ShimmerSkeleton className="h-4 w-40 mb-2" />
               <ShimmerSkeleton className="h-12 w-full" />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <ShimmerSkeleton className="h-4 w-24 mb-2" />
-                <ShimmerSkeleton className="h-12 w-full" />
-              </div>
-              <div>
-                <ShimmerSkeleton className="h-4 w-24 mb-2" />
-                <ShimmerSkeleton className="h-12 w-full" />
-              </div>
+            <div>
+              <ShimmerSkeleton className="h-4 w-28 mb-2" />
+              <ShimmerSkeleton className="h-12 w-full" />
             </div>
           </div>
 
