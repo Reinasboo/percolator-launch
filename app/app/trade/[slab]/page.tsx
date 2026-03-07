@@ -92,20 +92,23 @@ function Tabs({ tabs, children, defaultTab }: { tabs: string[]; children: React.
   const [active, setActive] = useState(defaultTab ?? 0);
   return (
     <div>
-      <div className="flex border-b border-[var(--border)]/50 bg-transparent">
-        {tabs.map((label, i) => (
-          <button
-            key={label}
-            onClick={() => setActive(i)}
-            className={`px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.15em] transition-colors border-b-2 ${
-              active === i
-                ? "border-[var(--accent)] text-[var(--accent)]"
-                : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:border-[var(--border)]"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
+      {/* overflow-x-auto + whitespace-nowrap prevents 5-tab bar from overflowing at 375px (#860) */}
+      <div className="overflow-x-auto border-b border-[var(--border)]/50 bg-transparent">
+        <div className="flex whitespace-nowrap">
+          {tabs.map((label, i) => (
+            <button
+              key={label}
+              onClick={() => setActive(i)}
+              className={`shrink-0 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.15em] transition-colors border-b-2 ${
+                active === i
+                  ? "border-[var(--accent)] text-[var(--accent)]"
+                  : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:border-[var(--border)]"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
       <div>{children[active]}</div>
     </div>

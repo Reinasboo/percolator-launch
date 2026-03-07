@@ -233,9 +233,10 @@ export const MarketStatsCard: FC = () => {
           {stats.map((s) => (
             <div
               key={s.label}
-              className="px-1.5 py-1 overflow-hidden border-b border-r border-[var(--border)]/20 [&:nth-child(3n)]:border-r-0 [&:nth-last-child(-n+3)]:border-b-0"
+              /* min-w-0 prevents the grid cell from overflowing its track (#864) */
+              className="min-w-0 px-1.5 py-1 overflow-hidden border-b border-r border-[var(--border)]/20 [&:nth-child(3n)]:border-r-0 [&:nth-last-child(-n+3)]:border-b-0"
             >
-              <p className="text-[8px] uppercase tracking-[0.1em] text-[var(--text-muted)] truncate">{s.label}</p>
+              <p className="text-[8px] uppercase tracking-[0.05em] text-[var(--text-muted)] truncate" title={s.label}>{s.label}</p>
               <p
                 className={`text-[11px] font-medium truncate ${s.valueClass ?? "text-[var(--text)]"}`}
                 title={s.tooltip ?? s.value}

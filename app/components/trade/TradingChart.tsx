@@ -222,9 +222,9 @@ export const TradingChart: FC<{ slabAddress: string }> = ({ slabAddress }) => {
 
   return (
     <div className="rounded-none border border-[var(--border)] bg-[var(--bg)] p-3">
-      {/* Header */}
-      <div className="mb-3 flex items-center justify-between">
-        <div>
+      {/* Header — wraps on small mobile so controls don't overflow viewport (#860) */}
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-y-2">
+        <div className="min-w-0">
           <div className="text-2xl font-bold" style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", color: isUp ? "var(--long)" : "var(--short)" }}>
             ${currentPrice.toFixed(currentPrice < 1 ? 4 : 2)}
           </div>
@@ -233,8 +233,8 @@ export const TradingChart: FC<{ slabAddress: string }> = ({ slabAddress }) => {
           </div>
         </div>
 
-        {/* Controls */}
-        <div className="flex items-center gap-2">
+        {/* Controls — shrink-wrap so they don't force parent wider than viewport */}
+        <div className="flex flex-wrap items-center gap-2">
           {/* Chart type */}
           <div className="flex gap-1 rounded-none border border-[var(--border)] bg-[var(--bg-elevated)] p-0.5">
             <button
