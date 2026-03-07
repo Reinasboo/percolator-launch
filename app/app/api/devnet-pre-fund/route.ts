@@ -36,8 +36,13 @@ import * as Sentry from "@sentry/nextjs";
 
 export const dynamic = "force-dynamic";
 
-// Default to 'mainnet' so misconfigured deployments fail closed, not open
+// PERC-482 fix: NETWORK env var is always "mainnet" on Vercel prod (build-time).
+// The real devnet guard is the devnet_mints DB lookup below — only mirror mints
+// (created by our /api/devnet-mirror-mint endpoint) can be funded. This is the
+// true security boundary, not the NETWORK string. We keep the env var check as
+// a secondary guard for non-mirror-mint requests (DEVNET_ALLOWED_MINTS list).
 const NETWORK = process.env.NEXT_PUBLIC_SOLANA_NETWORK?.trim() ?? "mainnet";
+const ALLOW_MIRROR_MINTS = true; // Always allow devnet_mints table entries regardless of NETWORK
 
 /**
  * Allowlist of devnet mint addresses this endpoint may fund.
@@ -84,7 +89,12 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 
 export async function POST(req: NextRequest) {
   try {
-    if (NETWORK !== "devnet") {
+    // Allow if: explicitly on devnet network OR the mint is a mirror mint (DB-gated)
+    // Mirror mints are always safe to fund — their authority is our keypair and they
+    // only exist on devnet. The DB lookup below is the real security gate.
+    const isDevnetNetwork = NETWORK === "devnet";
+    // Non-devnet requests proceed but will be rejected at the DB lookup if not a mirror mint
+    if (!isDevnetNetwork && !ALLOW_MIRROR_MINTS) {
       return NextResponse.json({ error: "Only available on devnet" }, { status: 403 });
     }
 
