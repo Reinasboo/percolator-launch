@@ -227,6 +227,56 @@ describe("markets routes", () => {
       expect(market).toHaveProperty("fundingRate", 3);
     });
 
+    it("should sanitize corrupt indexPrice values to null (#881)", async () => {
+      const mockMarketsWithStats = [
+        {
+          slab_address: "44444444444444444444444444444444",
+          mint_address: "Mint4444444444444444444444444444",
+          symbol: "TEST-PERP",
+          name: "Test Perpetual",
+          decimals: 6,
+          deployer: "Deployer44444444444444444444444444",
+          oracle_authority: "Oracle444444444444444444444444444",
+          initial_price_e6: 1000000,
+          max_leverage: 10,
+          trading_fee_bps: 5,
+          lp_collateral: "1000000",
+          matcher_context: null,
+          status: "active",
+          logo_url: null,
+          created_at: "2025-01-01T00:00:00Z",
+          updated_at: "2025-01-01T00:00:00Z",
+          total_open_interest: null,
+          total_accounts: null,
+          last_crank_slot: null,
+          // Corrupt garbage value (like unscaled u64) — should be sanitized to null
+          last_price: null,
+          mark_price: null,
+          index_price: 900_000_000, // >$1M ceiling — should be nulled
+          funding_rate: null,
+          net_lp_pos: null,
+        },
+      ];
+
+      mockSupabase.from.mockImplementation((table: string) => {
+        if (table === "markets_with_stats") {
+          return {
+            select: vi.fn().mockResolvedValue({ data: mockMarketsWithStats, error: null }),
+          };
+        }
+        return mockSupabase;
+      });
+
+      const app = marketRoutes();
+      const res = await app.request("/markets");
+
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.markets).toHaveLength(1);
+      // Corrupt index_price above cap must be returned as null
+      expect(data.markets[0].indexPrice).toBeNull();
+    });
+
     it("should return 400 for malformed slab address in /:slab route", async () => {
       const app = marketRoutes();
       // All /:slab routes should reject garbage inputs

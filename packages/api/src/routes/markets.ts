@@ -58,7 +58,9 @@ export function marketRoutes(): Hono {
           lastCrankSlot: m.last_crank_slot ?? null,
           lastPrice: (m.last_price != null && Number.isFinite(m.last_price) && m.last_price > 0 && m.last_price <= 1_000_000) ? m.last_price : null,
           markPrice: (m.mark_price != null && Number.isFinite(m.mark_price) && m.mark_price > 0 && m.mark_price <= 1_000_000) ? m.mark_price : null,
-          indexPrice: m.index_price ?? null,
+          // #881: Apply same bounds check as lastPrice/markPrice — index_price is the same
+          // DB column type and subject to the same corruption vector (uninitialized slab values).
+          indexPrice: (m.index_price != null && Number.isFinite(m.index_price) && m.index_price > 0 && m.index_price <= 1_000_000) ? m.index_price : null,
           fundingRate: (m.funding_rate != null && Number.isFinite(m.funding_rate) && Math.abs(m.funding_rate) <= 10_000) ? m.funding_rate : null,
           netLpPos: m.net_lp_pos ?? null,
         }));
