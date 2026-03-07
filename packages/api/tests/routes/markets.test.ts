@@ -4,6 +4,13 @@ import { marketRoutes } from "../../src/routes/markets.js";
 import { clearCache } from "../../src/middleware/cache.js";
 import { clearDbCache } from "../../src/middleware/db-cache-fallback.js";
 
+// Mock Sentry so captureMessage calls can be asserted in tests (#882)
+// Use vi.hoisted so the variable is initialised before vi.mock hoisting.
+const { mockCaptureMessage } = vi.hoisted(() => ({ mockCaptureMessage: vi.fn() }));
+vi.mock("@sentry/node", () => ({
+  captureMessage: mockCaptureMessage,
+}));
+
 // Mock dependencies
 vi.mock("@percolator/shared", () => ({
   getSupabase: vi.fn(),
@@ -40,6 +47,7 @@ describe("markets routes", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockCaptureMessage.mockReset();
     // Clear both caches to prevent cross-test cache pollution
     clearCache();
     clearDbCache();
@@ -225,6 +233,60 @@ describe("markets routes", () => {
       expect(market).toHaveProperty("lastPrice", 42500);
       expect(market).toHaveProperty("markPrice", 42500);
       expect(market).toHaveProperty("fundingRate", 3);
+    });
+
+    it("should emit a Sentry warning when a price is sanitized to null (#882)", async () => {
+      const corruptSlab = "55555555555555555555555555555555";
+      const mockMarketsWithStats = [
+        {
+          slab_address: corruptSlab,
+          mint_address: "Mint5555555555555555555555555555",
+          symbol: "CORRUPT-PERP",
+          name: "Corrupt Perpetual",
+          decimals: 6,
+          deployer: "Deployer55555555555555555555555555",
+          oracle_authority: "Oracle555555555555555555555555555",
+          initial_price_e6: 1000000,
+          max_leverage: 10,
+          trading_fee_bps: 5,
+          lp_collateral: "1000000",
+          matcher_context: null,
+          status: "active",
+          logo_url: null,
+          created_at: "2025-01-01T00:00:00Z",
+          updated_at: "2025-01-01T00:00:00Z",
+          total_open_interest: null,
+          total_accounts: null,
+          last_crank_slot: null,
+          last_price: 999_999_999, // out-of-range — should trigger Sentry warning
+          mark_price: null,
+          index_price: null,
+          funding_rate: null,
+          net_lp_pos: null,
+        },
+      ];
+
+      mockSupabase.from.mockImplementation((table: string) => {
+        if (table === "markets_with_stats") {
+          return {
+            select: vi.fn().mockResolvedValue({ data: mockMarketsWithStats, error: null }),
+          };
+        }
+        return mockSupabase;
+      });
+
+      const app = marketRoutes();
+      const res = await app.request("/markets");
+
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      // Corrupt price must be nulled
+      expect(data.markets[0].lastPrice).toBeNull();
+      // And a Sentry warning must have been emitted (#882)
+      expect(mockCaptureMessage).toHaveBeenCalledWith(
+        expect.stringContaining("last_price"),
+        expect.objectContaining({ level: "warning" }),
+      );
     });
 
     it("should return 400 for malformed slab address in /:slab route", async () => {

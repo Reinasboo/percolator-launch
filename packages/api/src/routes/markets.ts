@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { PublicKey } from "@solana/web3.js";
+import * as Sentry from "@sentry/node";
 import { validateSlab } from "../middleware/validateSlab.js";
 import { cacheMiddleware } from "../middleware/cache.js";
 import { withDbCacheFallback } from "../middleware/db-cache-fallback.js";
@@ -7,6 +8,39 @@ import { fetchSlab, parseHeader, parseConfig, parseEngine } from "@percolator/sd
 import { getConnection, getSupabase, createLogger, sanitizeSlabAddress } from "@percolator/shared";
 
 const logger = createLogger("api:markets");
+
+/**
+ * Maximum sane price in USD (float) stored in the DB.
+ * Prices are stored as USD floats (e.g. 42500 = $42,500).
+ * Cap at $1M — well above any real crypto today but well below
+ * unscaled admin-set garbage values (e.g. 900,000,000 = $900M). (#882, #856)
+ * If price units ever change (e.g. micro-USD, or BTC > $1M) this constant
+ * must be revisited — do NOT silently change it without a comment update.
+ */
+const MAX_SANE_PRICE_USD = 1_000_000;
+
+/**
+ * Sanitize a price field from the DB view.
+ * Returns the value when valid; null when out-of-range or non-finite.
+ * Emits a Sentry warning when a non-null value is rejected so that any
+ * corruption reaching the API surface is observable. (#882)
+ */
+function sanitizeMarketPrice(
+  value: number | null | undefined,
+  field: string,
+  slabAddress: string,
+): number | null {
+  if (value == null) return null;
+  if (!Number.isFinite(value) || value <= 0 || value > MAX_SANE_PRICE_USD) {
+    Sentry.captureMessage(
+      `[markets] Corrupt ${field} sanitized to null — slab: ${slabAddress}, value: ${value}`,
+      { level: "warning", tags: { field, slab: slabAddress } },
+    );
+    logger.warn(`Corrupt ${field} sanitized to null`, { slab: slabAddress, value });
+    return null;
+  }
+  return value;
+}
 
 // Markets to exclude from public API responses.
 // Populated from BLOCKED_MARKET_ADDRESSES env var (comma-separated slab addresses).
@@ -56,9 +90,10 @@ export function marketRoutes(): Hono {
           totalOpenInterest: m.total_open_interest ?? null,
           totalAccounts: m.total_accounts ?? null,
           lastCrankSlot: m.last_crank_slot ?? null,
-          lastPrice: (m.last_price != null && Number.isFinite(m.last_price) && m.last_price > 0 && m.last_price <= 1_000_000) ? m.last_price : null,
-          markPrice: (m.mark_price != null && Number.isFinite(m.mark_price) && m.mark_price > 0 && m.mark_price <= 1_000_000) ? m.mark_price : null,
-          indexPrice: m.index_price ?? null,
+          lastPrice: sanitizeMarketPrice(m.last_price, "last_price", m.slab_address),
+          markPrice: sanitizeMarketPrice(m.mark_price, "mark_price", m.slab_address),
+          // #881/#882: Apply same guard to indexPrice — same DB column type and corruption vector.
+          indexPrice: sanitizeMarketPrice(m.index_price, "index_price", m.slab_address),
           fundingRate: (m.funding_rate != null && Number.isFinite(m.funding_rate) && Math.abs(m.funding_rate) <= 10_000) ? m.funding_rate : null,
           netLpPos: m.net_lp_pos ?? null,
         }));
