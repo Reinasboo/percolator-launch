@@ -4,19 +4,30 @@
  * and Percolator program-specific error codes.
  */
 
-// Percolator program custom error codes (from percolator-prog/src/percolator.rs)
+// Percolator program custom error codes (from percolator-prog/src/percolator.rs PercolatorError enum)
+// IMPORTANT: These must match the exact order of the enum variants in the Rust program.
+// Last verified: 2026-03-08 against percolator-prog main.
 const PERCOLATOR_ERRORS: Record<number, string> = {
-  0: "Market is already initialized. Cannot re-initialize.",
-  1: "Market is not initialized. The slab account may be corrupted.",
-  2: "Invalid slab length. The account size doesn't match the program.",
-  3: "Account not found in the market.",
-  4: "Insufficient balance to complete this operation.",
-  5: "Math overflow — values are too large.",
-  6: "Margin requirement not met. Increase collateral.",
-  7: "Invalid version — program upgrade may be needed.",
-  8: "Insufficient seed deposit. The vault needs at least 500 USDC before market initialization.",
-  9: "Market is paused by admin.",
-  10: "Oracle price is invalid or stale.",
+  0: "Invalid magic number. The slab account data is corrupted.",                          // InvalidMagic
+  1: "Invalid version — program upgrade may be needed.",                                   // InvalidVersion
+  2: "Market is already initialized. Cannot re-initialize.",                               // AlreadyInitialized
+  3: "Market is not initialized. The slab account may not have been set up correctly.",     // NotInitialized
+  4: "Invalid slab length. The account size doesn't match the deployed program. "          // InvalidSlabLen
+   + "Try a different slab tier or check that you're using the correct program for this tier.",
+  5: "Invalid oracle key. The oracle feed ID doesn't match.",                              // InvalidOracleKey
+  6: "Oracle price is stale. The oracle hasn't been updated recently enough.",              // OracleStale
+  7: "Oracle confidence interval too wide. Price may be unreliable.",                       // OracleConfTooWide
+  8: "Invalid vault token account. The ATA doesn't match the expected address.",            // InvalidVaultAta
+  9: "Invalid collateral mint. The token mint doesn't match the market's collateral.",      // InvalidMint
+  10: "Expected signer. A required account was not a signer on the transaction.",           // ExpectedSigner
+  11: "Expected writable. A required account was not marked as writable.",                  // ExpectedWritable
+  12: "Oracle data is invalid or malformed.",                                               // OracleInvalid
+  13: "Insufficient balance — deposit more collateral.",                                    // EngineInsufficientBalance
+  14: "Math overflow — values are too large for safe computation.",                         // MathOverflow
+  15: "Margin requirement not met. Increase collateral or reduce position size.",           // MarginInsufficient
+  16: "Account not found in the market.",                                                   // AccountNotFound
+  17: "Market is paused by admin.",                                                         // MarketPaused
+  18: "Insufficient seed deposit. The vault needs collateral before market initialization.",// InsufficientSeed
 };
 
 export function parseMarketCreationError(error: unknown): string {

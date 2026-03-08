@@ -99,68 +99,75 @@ describe("Market Creation — Failure Scenarios", () => {
     });
   });
 
-  describe("Program error flows", () => {
-    it("handles already-initialized market (code 0x0)", () => {
+  describe("Program error flows (corrected enum mapping — PERC-509)", () => {
+    // Error codes match percolator-prog/src/percolator.rs PercolatorError enum order:
+    // 0=InvalidMagic, 1=InvalidVersion, 2=AlreadyInitialized, 3=NotInitialized,
+    // 4=InvalidSlabLen, 5=InvalidOracleKey, 6=OracleStale, 7=OracleConfTooWide,
+    // 8=InvalidVaultAta, 9=InvalidMint, 10=ExpectedSigner, 11=ExpectedWritable,
+    // 12=OracleInvalid, 13=EngineInsufficientBalance, ...
+    // 18=InsufficientSeed
+
+    it("handles InvalidMagic (code 0x0)", () => {
       const msg = parseMarketCreationError(
         new Error("custom program error: 0x0")
+      );
+      expect(msg).toContain("magic number");
+    });
+
+    it("handles InvalidVersion (code 0x1)", () => {
+      const msg = parseMarketCreationError(
+        new Error("custom program error: 0x1")
+      );
+      expect(msg).toContain("version");
+    });
+
+    it("handles AlreadyInitialized (code 0x2)", () => {
+      const msg = parseMarketCreationError(
+        new Error("custom program error: 0x2")
       );
       expect(msg).toContain("already initialized");
     });
 
-    it("handles uninitialized market (code 0x1)", () => {
+    it("handles NotInitialized (code 0x3)", () => {
       const msg = parseMarketCreationError(
-        new Error("custom program error: 0x1")
+        new Error("custom program error: 0x3")
       );
       expect(msg).toContain("not initialized");
     });
 
-    it("handles invalid slab length (code 0x2)", () => {
+    it("handles InvalidSlabLen (code 0x4)", () => {
       const msg = parseMarketCreationError(
-        new Error("custom program error: 0x2")
+        new Error("custom program error: 0x4")
       );
       expect(msg).toContain("slab length");
     });
 
-    it("handles insufficient balance in program (code 0x4)", () => {
+    it("handles OracleStale (code 0x6)", () => {
       const msg = parseMarketCreationError(
-        new Error("custom program error: 0x4")
+        new Error("custom program error: 0x6")
+      );
+      expect(msg).toContain("stale");
+    });
+
+    it("handles InvalidVaultAta (code 0x8)", () => {
+      const msg = parseMarketCreationError(
+        new Error("custom program error: 0x8")
+      );
+      expect(msg).toContain("vault token account");
+    });
+
+    it("handles EngineInsufficientBalance (code 0xd)", () => {
+      const msg = parseMarketCreationError(
+        new Error("custom program error: 0xd")
       );
       expect(msg).toContain("Insufficient balance");
     });
 
-    it("handles math overflow (code 0x5)", () => {
+    it("handles InsufficientSeed (code 0x12)", () => {
       const msg = parseMarketCreationError(
-        new Error("custom program error: 0x5")
-      );
-      expect(msg).toContain("overflow");
-    });
-
-    it("handles margin requirement not met (code 0x6)", () => {
-      const msg = parseMarketCreationError(
-        new Error("custom program error: 0x6")
-      );
-      expect(msg).toContain("Margin requirement");
-    });
-
-    it("handles insufficient seed deposit (code 0x8)", () => {
-      const msg = parseMarketCreationError(
-        new Error("custom program error: 0x8")
+        new Error("custom program error: 0x12")
       );
       expect(msg).toContain("seed deposit");
-    });
-
-    it("handles market paused (code 0x9)", () => {
-      const msg = parseMarketCreationError(
-        new Error("custom program error: 0x9")
-      );
-      expect(msg).toContain("paused");
-    });
-
-    it("handles stale oracle price (code 0xA)", () => {
-      const msg = parseMarketCreationError(
-        new Error("custom program error: 0xA")
-      );
-      expect(msg).toContain("Oracle price");
     });
 
     it("handles unknown program error code", () => {
@@ -171,11 +178,11 @@ describe("Market Creation — Failure Scenarios", () => {
       expect(msg).toContain("57005"); // 0xDEAD = 57005
     });
 
-    it("handles InstructionError format", () => {
+    it("handles InstructionError format with Custom: 8 (InvalidVaultAta)", () => {
       const msg = parseMarketCreationError(
         new Error('InstructionError: [2, { Custom: 8 }]')
       );
-      expect(msg).toContain("seed deposit");
+      expect(msg).toContain("vault token account");
     });
   });
 
