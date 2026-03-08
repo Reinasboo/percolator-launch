@@ -461,6 +461,39 @@ export function useCreateMarket() {
 
             const effectiveSlabSize = params.slabDataSize ?? DEFAULT_SLAB_SIZE;
             const slabRent = await connection.getMinimumBalanceForRentExemption(effectiveSlabSize);
+
+            // PERC-509: Pre-check SOL balance before attempting createAccount.
+            // Without this, the tx fails with an opaque "insufficient lamports" error.
+            // We need slabRent + ~0.01 SOL for ATA creation + tx fees.
+            const solBalance = await connection.getBalance(wallet.publicKey);
+            const minSolRequired = slabRent + 10_000_000; // rent + ~0.01 SOL for fees
+            if (solBalance < minSolRequired) {
+              const solNeeded = (minSolRequired / 1e9).toFixed(3);
+              const solHave = (solBalance / 1e9).toFixed(3);
+              if (isDevnetEnv) {
+                // Auto-airdrop SOL on devnet
+                setState((s) => ({ ...s, stepLabel: "Airdropping SOL for slab rent..." }));
+                try {
+                  const airdropSig = await connection.requestAirdrop(
+                    wallet.publicKey,
+                    Math.max(2_000_000_000, minSolRequired - solBalance + 500_000_000),
+                  );
+                  await connection.confirmTransaction(airdropSig, "confirmed");
+                  setState((s) => ({ ...s, stepLabel: STEP_LABELS[0] }));
+                } catch (airdropErr) {
+                  throw new Error(
+                    `Insufficient SOL (have ${solHave}, need ~${solNeeded}). ` +
+                    `Devnet airdrop failed — try again in a few seconds or use the faucet at faucet.solana.com.`
+                  );
+                }
+              } else {
+                throw new Error(
+                  `Insufficient SOL for slab rent. You need ~${solNeeded} SOL but your wallet has ${solHave} SOL. ` +
+                  `The slab account requires ${(slabRent / 1e9).toFixed(3)} SOL in rent-exemption fees.`
+                );
+              }
+            }
+
             const createAccountIx = SystemProgram.createAccount({
               fromPubkey: wallet.publicKey,
               newAccountPubkey: slabKp.publicKey,
