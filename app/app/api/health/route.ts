@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server";
-import { getRpcEndpoint } from "@/lib/config";
+import { getBackendUrl, getRpcEndpoint } from "@/lib/config";
 export const dynamic = "force-dynamic";
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ||
-  "https://percolator-api1-production.up.railway.app";
+const API_URL = getBackendUrl();
 
 const RPC_URL = getRpcEndpoint();
 
