@@ -32,18 +32,46 @@ describe("parseMarketCreationError", () => {
     expect(msg).toContain("Retry");
   });
 
-  it("parses custom program error hex code", () => {
+  it("parses custom program error hex code 0x8 (InvalidVaultAta)", () => {
     const msg = parseMarketCreationError(
       new Error("Transaction simulation failed: custom program error: 0x8")
     );
-    expect(msg).toContain("seed deposit");
+    expect(msg).toContain("vault token account");
   });
 
-  it("parses already initialized error", () => {
+  it("parses InvalidSlabLen error (0x4)", () => {
+    const msg = parseMarketCreationError(
+      new Error("custom program error: 0x4")
+    );
+    expect(msg).toContain("slab length");
+  });
+
+  it("parses AlreadyInitialized error (0x2)", () => {
+    const msg = parseMarketCreationError(
+      new Error("custom program error: 0x2")
+    );
+    expect(msg).toContain("already initialized");
+  });
+
+  it("parses InvalidMagic error (0x0)", () => {
     const msg = parseMarketCreationError(
       new Error("custom program error: 0x0")
     );
-    expect(msg).toContain("already initialized");
+    expect(msg).toContain("magic number");
+  });
+
+  it("parses EngineInsufficientBalance error (0xd)", () => {
+    const msg = parseMarketCreationError(
+      new Error("custom program error: 0xd")
+    );
+    expect(msg).toContain("Insufficient balance");
+  });
+
+  it("parses InsufficientSeed error (0x12)", () => {
+    const msg = parseMarketCreationError(
+      new Error("custom program error: 0x12")
+    );
+    expect(msg).toContain("seed deposit");
   });
 
   it("parses network error", () => {
