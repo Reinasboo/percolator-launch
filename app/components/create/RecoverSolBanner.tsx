@@ -5,8 +5,12 @@ import { useStuckSlabs, type StuckSlab } from "@/hooks/useStuckSlabs";
 import { useCloseMarket } from "@/hooks/useCloseMarket";
 
 interface RecoverSolBannerProps {
-  /** Called when user wants to resume market creation with the stuck slab */
-  onResume?: (slabPublicKey: string) => void;
+  /**
+   * Called when user wants to resume market creation with the stuck slab.
+   * `fromStep` is 1 when the market is initialized (need oracle/LP/insurance),
+   * or 0 when the slab exists but InitMarket didn't complete (retry from scratch).
+   */
+  onResume?: (slabPublicKey: string, fromStep: 0 | 1) => void;
 }
 
 /**
