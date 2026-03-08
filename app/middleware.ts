@@ -54,6 +54,8 @@ interface _BlockEntry {
   mask?: number;
 }
 
+// IPv4 only — IPv6 addresses are not supported and will pass through unblocked.
+// See packages/api/src/middleware/ip-blocklist.ts for the Hono equivalent (also IPv4-only).
 function _ipToInt(ip: string): number {
   const p = ip.split(".").map(Number);
   if (p.length !== 4 || p.some((n) => isNaN(n) || n < 0 || n > 255)) return -1;
@@ -93,6 +95,10 @@ export async function middleware(request: NextRequest) {
   if (_blocklist.length > 0) {
     const _proxyDepth = Math.max(0, Number(process.env.TRUSTED_PROXY_DEPTH ?? 1));
     let _clientIp = "unknown";
+    // NOTE: depth=0 means "no proxy" — _clientIp stays "unknown" and
+    // _isBlocked("unknown") returns false, effectively disabling the
+    // Edge Runtime blocklist. The Hono ip-blocklist.ts middleware
+    // handles depth=0 correctly for the API server path.
     if (_proxyDepth > 0) {
       const _fwd = request.headers.get("x-forwarded-for");
       if (_fwd) {
