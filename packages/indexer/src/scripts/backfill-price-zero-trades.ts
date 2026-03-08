@@ -8,7 +8,8 @@
  * 1. Fetch all trades WHERE price = 0 AND tx_signature IS NOT NULL
  * 2. Batch-request Helius Parse Transactions API (up to 100 sigs per call)
  * 3. Extract mark_price_e6 from slab account post-state data (same logic as
- *    the PERC-421 webhook fix: ENGINE_OFF=640 + ENGINE_MARK_PRICE_OFF=400)
+ *    the PERC-421 webhook fix, auto-detecting V0/V1 layout from data length;
+ *    V0 slabs have no mark_price field; V1: ENGINE_OFF=640 + ENGINE_MARK_PRICE_OFF=400)
  * 4. UPDATE trades SET price = <recovered> WHERE id = <id>
  * 5. Print a summary (fixed / skipped / failed)
  *
@@ -22,11 +23,7 @@
 
 import { getSupabase } from "@percolator/shared";
 import { config } from "@percolator/shared";
-
-// Slab layout constants (from packages/core/src/solana/slab.ts)
-const ENGINE_OFF = 640;
-const ENGINE_MARK_PRICE_OFF = 400;
-const MARK_PRICE_OFFSET = ENGINE_OFF + ENGINE_MARK_PRICE_OFF; // 1040
+import { detectSlabLayout } from "@percolator/sdk";
 
 // Helius Parse Transactions batch limit
 const HELIUS_BATCH_SIZE = 100;
@@ -60,6 +57,21 @@ async function fetchEnhancedTxs(signatures: string[]): Promise<any[]> {
 
 // ─── Price extraction (mirrors PERC-421 webhook fix) ─────────────────────────
 
+/**
+ * Extract execution price from an enhanced Helius transaction.
+ *
+ * Strategy (in order):
+ * 1. Read mark_price_e6 from slab account post-state (V1 layout only).
+ * 2. Fall back to parsing program logs (covers V0 slabs on devnet where the
+ *    mark_price field does not exist).
+ * 3. Return 0 if neither strategy yields a result.
+ */
+function extractPrice(tx: any, slabAddress: string): number {
+  const priceFromAccount = extractPriceFromAccountData(tx, slabAddress);
+  if (priceFromAccount > 0) return priceFromAccount;
+  return extractPriceFromLogs(tx);
+}
+
 function extractPriceFromAccountData(tx: any, slabAddress: string): number {
   const accountData: any[] = tx.accountData ?? [];
   for (const acc of accountData) {
@@ -77,14 +89,52 @@ function extractPriceFromAccountData(tx: any, slabAddress: string): number {
     }
     if (!raw) continue;
 
-    if (raw.length < MARK_PRICE_OFFSET + 8) continue;
+    // Auto-detect V0 vs V1 layout from the actual slab data length.
+    // V0 (deployed devnet): ENGINE_OFF=480, no mark_price field (engineMarkPriceOff=-1).
+    // V1 (future upgrade): ENGINE_OFF=640, mark_price at ENGINE_OFF+400=1040.
+    const layout = detectSlabLayout(raw.length);
+    if (!layout || layout.engineMarkPriceOff < 0) continue; // V0 has no mark_price; fall through to logs
+
+    const markPriceOffset = layout.engineOff + layout.engineMarkPriceOff;
+    if (raw.length < markPriceOffset + 8) continue;
 
     const dv = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
-    const markPriceE6 = dv.getBigUint64(MARK_PRICE_OFFSET, true);
+    const markPriceE6 = dv.getBigUint64(markPriceOffset, true);
 
     // Sanity range: $0.001 → $1 000 000 (in e6 units)
     if (markPriceE6 > 0n && markPriceE6 < 1_000_000_000_000n) {
       return Number(markPriceE6) / 1_000_000;
+    }
+  }
+  return 0;
+}
+
+/**
+ * Parse program logs for comma-separated numeric values (hex or decimal).
+ * Mirrors the same logic in packages/indexer/src/routes/webhook.ts so that
+ * V0 devnet slabs (no mark_price field) are recovered during backfill.
+ */
+function extractPriceFromLogs(tx: any): number {
+  const logs: string[] = tx.logs ?? tx.logMessages ?? [];
+  const valuePattern = /0x[0-9a-fA-F]+|\d+/g;
+
+  for (const log of logs) {
+    if (!log.startsWith("Program log: ")) continue;
+    const payload = log.slice("Program log: ".length).trim();
+    if (!/^[\d, a-fA-Fx]+$/.test(payload)) continue;
+
+    const matches = payload.match(valuePattern);
+    if (!matches || matches.length < 2) continue;
+
+    const values = matches.map((v) =>
+      v.startsWith("0x") ? parseInt(v, 16) : Number(v),
+    );
+
+    for (const v of values) {
+      // Reasonable price_e6 range: $0.001 to $1,000,000
+      if (v >= 1_000 && v <= 1_000_000_000_000) {
+        return v / 1_000_000;
+      }
     }
   }
   return 0;
@@ -185,7 +235,7 @@ async function main() {
     }
 
     for (const trade of tradeList) {
-      const price = extractPriceFromAccountData(tx, trade.slab_address);
+      const price = extractPrice(tx, trade.slab_address);
       if (price > 0) {
         updates.push({ id: trade.id, price });
         console.log(`  ✓  trade ${trade.id} | slab ${trade.slab_address.slice(0, 8)}… → $${price.toFixed(6)}`);

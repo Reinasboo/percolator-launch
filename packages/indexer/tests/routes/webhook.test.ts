@@ -2,8 +2,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@percolator/sdk', () => ({
   IX_TAG: { TradeNoCpi: 10, TradeCpi: 11 },
-  ENGINE_OFF: 8,
-  ENGINE_MARK_PRICE_OFF: 1032,
+  // detectSlabLayout: returns a V1-style layout so engineOff + engineMarkPriceOff = 1040,
+  // matching the mock slab buffers built in tests below.
+  detectSlabLayout: vi.fn((dataLen: number) => {
+    if (dataLen < 8) return null; // too small
+    return { version: 1, engineOff: 640, engineMarkPriceOff: 400, engineBitmapOff: 656 };
+  }),
 }));
 
 vi.mock('@percolator/shared', () => ({
@@ -65,6 +69,36 @@ describe('POST /webhook/trades — price extraction', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     app = webhookRoutes();
+  });
+
+  it('falls back to log parsing when slab is V0 layout (engineMarkPriceOff < 0)', async () => {
+    // Arrange: make detectSlabLayout return a V0 layout for a 512-byte buffer.
+    // V0 slabs have engineMarkPriceOff=-1 — no mark_price field.
+    const { detectSlabLayout } = await import('@percolator/sdk');
+    vi.mocked(detectSlabLayout).mockImplementationOnce((dataLen: number) => {
+      if (dataLen === 512) return { version: 0, engineOff: 480, engineMarkPriceOff: -1, engineBitmapOff: 496 } as any;
+      if (dataLen < 8) return null;
+      return { version: 1, engineOff: 640, engineMarkPriceOff: 400, engineBitmapOff: 656 } as any;
+    });
+
+    const v0SlabData = new Uint8Array(512); // V0 size — no mark_price bytes
+
+    const tx = {
+      signature: SIG,
+      instructions: makeBaseInstructions(),
+      innerInstructions: [],
+      accountData: [{
+        account: SLAB,
+        data: Buffer.from(v0SlabData).toString('base64'),
+      }],
+      logs: ['Program log: 3750000, 4000000, 5000000, 6000000, 7000000'], // $3.75 in logs
+    };
+    await app.fetch(makeRequest([tx]));
+
+    // Should NOT read from slab (V0 has no mark_price), MUST fall back to logs
+    expect(shared.insertTrade).toHaveBeenCalledWith(
+      expect.objectContaining({ price: 3.75 }) // 3_750_000 / 1_000_000
+    );
   });
 
   it('extracts price from slab accountData (primary strategy)', async () => {
