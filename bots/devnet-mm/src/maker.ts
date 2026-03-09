@@ -165,7 +165,7 @@ export class MakerBot {
 
   /** Active connection — follows RPC endpoint rotation when available. */
   private get conn(): Connection {
-    return this.rpc?.connection ?? this.conn;
+    return this.rpc?.connection ?? this.connection;
   }
 
   /**
