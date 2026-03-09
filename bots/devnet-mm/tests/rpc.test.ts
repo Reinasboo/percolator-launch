@@ -122,3 +122,34 @@ describe("ResilientRpc", () => {
     ).rejects.toThrow("429");
   });
 });
+
+describe("currentEndpoint URL masking", () => {
+  it("masks query-param API keys", () => {
+    const rpc = new ResilientRpc("https://api.helius.xyz?api-key=secret123", "confirmed");
+    expect(rpc.currentEndpoint).not.toContain("secret123");
+    expect(rpc.currentEndpoint).toContain("helius.xyz");
+  });
+
+  it("masks path-based API keys (QuickNode style)", () => {
+    const rpc = new ResilientRpc(
+      "https://cool-dawn-hexagon.solana-devnet.quiknode.pro/abc123def456789012/",
+      "confirmed",
+    );
+    expect(rpc.currentEndpoint).not.toContain("abc123def456789012");
+    expect(rpc.currentEndpoint).toContain("quiknode.pro");
+  });
+
+  it("masks Alchemy-style path keys", () => {
+    const rpc = new ResilientRpc(
+      "https://solana-devnet.g.alchemy.com/v2/abcdefghijklmnopqr",
+      "confirmed",
+    );
+    expect(rpc.currentEndpoint).not.toContain("abcdefghijklmnopqr");
+    expect(rpc.currentEndpoint).toContain("alchemy.com");
+  });
+
+  it("preserves simple devnet URLs", () => {
+    const rpc = new ResilientRpc("https://api.devnet.solana.com", "confirmed");
+    expect(rpc.currentEndpoint).toBe("https://api.devnet.solana.com/");
+  });
+});

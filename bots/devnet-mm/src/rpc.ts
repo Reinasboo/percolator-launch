@@ -237,9 +237,25 @@ export class ResilientRpc {
     log("rpc", `${label}: rotated endpoint ${this.maskUrl(this.endpoints[prevIdx])} → ${this.maskUrl(this.endpoints[this.currentIdx])}`);
   }
 
-  /** Mask API keys in URLs for safe logging. */
+  /** Mask API keys in URLs for safe logging.
+   *
+   * Handles:
+   *  - Query-param keys: `?api-key=xxx` → `?***`
+   *  - Path-based keys (QuickNode, Alchemy): `host.com/abcdef123` → `host.com/***`
+   *  - Keeps scheme + hostname visible for debugging.
+   */
   private maskUrl(url: string): string {
-    return url.replace(/api-key=[^&]+/, "api-key=***").replace(/\?.*/, "?***");
+    try {
+      const u = new URL(url);
+      // Strip query string entirely
+      u.search = "";
+      // If pathname has a segment that looks like an API key (hex/alphanum 16+ chars), mask it
+      u.pathname = u.pathname.replace(/\/[a-zA-Z0-9_-]{16,}(\/|$)/g, "/***$1");
+      return u.origin + u.pathname;
+    } catch {
+      // Fallback for malformed URLs: just show hostname-ish prefix
+      return url.replace(/(:\/\/[^/]+).*/, "$1/***");
+    }
   }
 }
 
