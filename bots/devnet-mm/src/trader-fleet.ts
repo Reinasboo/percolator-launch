@@ -49,6 +49,7 @@ import {
   setupMarketAccounts,
 } from "./market.js";
 import { log, logError } from "./logger.js";
+import type { ResilientRpc } from "./rpc.js";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
@@ -438,6 +439,7 @@ export class TraderFleetBot {
   private readonly connection: Connection;
   private readonly botConfig: BotConfig;
   private readonly fleetConfig: TraderFleetConfig;
+  private readonly rpc?: ResilientRpc;
   private traders: SimTrader[] = [];
   private discoveredMarkets: DiscoveredMarket[] = [];
   private running = false;
@@ -445,9 +447,10 @@ export class TraderFleetBot {
   private discoveryTimer: ReturnType<typeof setTimeout> | null = null;
   readonly stats: FleetStats;
 
-  constructor(connection: Connection, botConfig: BotConfig) {
+  constructor(connection: Connection, botConfig: BotConfig, rpc?: ResilientRpc) {
     this.connection = connection;
     this.botConfig = botConfig;
+    this.rpc = rpc;
     this.fleetConfig = loadFleetConfig();
     this.stats = {
       startedAt: Date.now(),
@@ -457,6 +460,11 @@ export class TraderFleetBot {
       activeTraders: 0,
       lastCycleMs: 0,
     };
+  }
+
+  /** Active connection — follows RPC endpoint rotation when available. */
+  private get conn(): Connection {
+    return this.rpc?.connection ?? this.conn;
   }
 
   // ── Init ──────────────────────────────────────────────────────
@@ -479,7 +487,7 @@ export class TraderFleetBot {
 
     // Discover markets
     log("fleet", "Discovering markets...");
-    this.discoveredMarkets = await discoverAllMarkets(this.connection, this.botConfig);
+    this.discoveredMarkets = await discoverAllMarkets(this.conn, this.botConfig);
     if (this.discoveredMarkets.length === 0) {
       logError("fleet", "No active markets found — trader fleet will wait for markets");
       return;
@@ -518,13 +526,13 @@ export class TraderFleetBot {
       log("fleet", `Setting up ${label}: ${wallet.publicKey.toBase58()}`);
 
       // 1. Ensure SOL
-      await ensureSol(this.connection, wallet, label, 0.3);
+      await ensureSol(this.conn, wallet, label, 0.3);
 
       // 2. Fund tokens if mint authority available
       if (mintAuthority && usdcMint) {
         const mintAmt = initialCollateralE6 * BigInt(marketsPerTrader) * 2n; // 2x buffer
         await fundTokens(
-          this.connection,
+          this.conn,
           mintAuthority,
           usdcMint,
           wallet.publicKey,
@@ -544,12 +552,13 @@ export class TraderFleetBot {
       for (const dm of assignedMarkets) {
         await sleep(500); // rate-limit RPC
         const mm = await setupMarketAccounts(
-          this.connection,
+          this.conn,
           this.botConfig,
           dm,
           wallet,
           initialCollateralE6,
           false, // don't create LP — traders are users only
+          this.rpc,
         );
         if (mm) {
           managedMarkets.push(mm);
@@ -672,7 +681,7 @@ export class TraderFleetBot {
 
       // Refresh on-chain position state
       try {
-        await refreshPosition(this.connection, market, trader.wallet);
+        await refreshPosition(this.conn, market, trader.wallet);
       } catch {
         // Non-fatal
       }
@@ -700,12 +709,13 @@ export class TraderFleetBot {
       } else {
         try {
           const result = await executeTrade(
-            this.connection,
+            this.conn,
             this.botConfig,
             market,
             trader.wallet,
             tradeSize,
             `${trader.id} ${label}`,
+            this.rpc,
           );
 
           if (result.success) {
@@ -750,7 +760,7 @@ export class TraderFleetBot {
     for (const trader of this.traders) {
       for (const market of trader.markets) {
         try {
-          await refreshPosition(this.connection, market, trader.wallet);
+          await refreshPosition(this.conn, market, trader.wallet);
         } catch {
           // Non-fatal
         }
@@ -760,7 +770,7 @@ export class TraderFleetBot {
 
     // Re-discover markets (new ones may have been created)
     try {
-      const fresh = await discoverAllMarkets(this.connection, this.botConfig);
+      const fresh = await discoverAllMarkets(this.conn, this.botConfig);
       if (fresh.length > this.discoveredMarkets.length) {
         log(
           "fleet",

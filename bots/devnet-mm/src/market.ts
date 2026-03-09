@@ -11,10 +11,10 @@ import {
   PublicKey,
   Transaction,
   ComputeBudgetProgram,
-  sendAndConfirmTransaction,
   SYSVAR_CLOCK_PUBKEY,
   LAMPORTS_PER_SOL,
 } from "@solana/web3.js";
+import type { ResilientRpc } from "./rpc.js";
 import {
   getAssociatedTokenAddress,
   getAccount,
@@ -203,6 +203,7 @@ async function sendTx(
   label: string,
   computeUnits = 400_000,
   dryRun = false,
+  rpc?: ResilientRpc,
 ): Promise<string | null> {
   if (dryRun) {
     log("tx", `[DRY RUN] ${label}`);
@@ -213,10 +214,18 @@ async function sendTx(
   tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }));
   for (const ix of ixs) tx.add(ix);
   try {
-    const sig = await sendAndConfirmTransaction(connection, tx, signers, {
-      commitment: "confirmed",
-      skipPreflight: true,
-    });
+    let sig: string;
+    if (rpc) {
+      // Use ResilientRpc with exponential backoff + endpoint rotation on 429s
+      sig = await rpc.sendAndConfirmTx(tx, signers, undefined, label);
+    } else {
+      // Fallback: direct send (legacy callers)
+      const { sendAndConfirmTransaction } = await import("@solana/web3.js");
+      sig = await sendAndConfirmTransaction(connection, tx, signers, {
+        commitment: "confirmed",
+        skipPreflight: true,
+      });
+    }
     log("tx", `✅ ${label} → ${sig.slice(0, 16)}...`);
     return sig;
   } catch (e: unknown) {
@@ -278,6 +287,7 @@ async function ensureWalletAta(
   mint: PublicKey,
   label: string,
   dryRun = false,
+  rpc?: ResilientRpc,
 ): Promise<PublicKey> {
   const ata = await getAssociatedTokenAddress(mint, owner);
   try {
@@ -300,10 +310,16 @@ async function ensureWalletAta(
     tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }));
     tx.add(ix);
     try {
-      const sig = await sendAndConfirmTransaction(connection, tx, [payer], {
-        commitment: "confirmed",
-        skipPreflight: false,
-      });
+      let sig: string;
+      if (rpc) {
+        sig = await rpc.sendAndConfirmTx(tx, [payer], { skipPreflight: false }, `${label} createATA`);
+      } else {
+        const { sendAndConfirmTransaction } = await import("@solana/web3.js");
+        sig = await sendAndConfirmTransaction(connection, tx, [payer], {
+          commitment: "confirmed",
+          skipPreflight: false,
+        });
+      }
       log("setup", `${label}: ✅ created ATA ${ata.toBase58().slice(0, 16)}... → ${sig.slice(0, 16)}...`);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -351,6 +367,7 @@ export async function setupMarketAccounts(
   wallet: Keypair,
   depositCollateral: bigint,
   createLp: boolean,
+  rpc?: ResilientRpc,
 ): Promise<ManagedMarket | null> {
   const symbol = inferSymbol(market);
   const slab = market.slabAddress;
@@ -387,7 +404,7 @@ export async function setupMarketAccounts(
   if (!lpAccount && createLp) {
     await ensureSolBalance(connection, wallet, symbol);
     // Ensure walletAta exists before attempting LP init (fee is debited from it)
-    walletAta = await ensureWalletAta(connection, wallet, wallet.publicKey, mint, symbol, config.dryRun);
+    walletAta = await ensureWalletAta(connection, wallet, wallet.publicKey, mint, symbol, config.dryRun, rpc);
     log("setup", `${symbol}: creating LP account...`);
     const initLpData = encodeInitLP({
       matcherProgram: config.matcherProgramId,
@@ -398,7 +415,7 @@ export async function setupMarketAccounts(
       wallet.publicKey, slab, walletAta, vaultAta, WELL_KNOWN.tokenProgram,
     ]);
     const ix = buildIx({ programId, keys: initLpKeys, data: initLpData });
-    const sig = await sendTx(connection, [ix], [wallet], `${symbol} InitLP`, 200_000, config.dryRun);
+    const sig = await sendTx(connection, [ix], [wallet], `${symbol} InitLP`, 200_000, config.dryRun, rpc);
     if (!sig) return null;
 
     // Refetch
@@ -425,14 +442,14 @@ export async function setupMarketAccounts(
   if (!userAccount) {
     await ensureSolBalance(connection, wallet, symbol);
     // Ensure walletAta exists before attempting InitUser (1 USDC fee is debited from it)
-    walletAta = await ensureWalletAta(connection, wallet, wallet.publicKey, mint, symbol, config.dryRun);
+    walletAta = await ensureWalletAta(connection, wallet, wallet.publicKey, mint, symbol, config.dryRun, rpc);
     log("setup", `${symbol}: creating user account...`);
     const initUserData = encodeInitUser({ feePayment: "1000000" });
     const initUserKeys = buildAccountMetas(ACCOUNTS_INIT_USER, [
       wallet.publicKey, slab, walletAta, vaultAta, WELL_KNOWN.tokenProgram,
     ]);
     const ix = buildIx({ programId, keys: initUserKeys, data: initUserData });
-    const sig = await sendTx(connection, [ix], [wallet], `${symbol} InitUser`, 200_000, config.dryRun);
+    const sig = await sendTx(connection, [ix], [wallet], `${symbol} InitUser`, 200_000, config.dryRun, rpc);
     if (!sig) return null;
 
     await sleep(1500);
@@ -459,7 +476,7 @@ export async function setupMarketAccounts(
         wallet.publicKey, slab, walletAta, vaultAta, WELL_KNOWN.tokenProgram, SYSVAR_CLOCK_PUBKEY,
       ]);
       const depositIx = buildIx({ programId, keys: depositKeys, data: depositData });
-      await sendTx(connection, [depositIx], [wallet], `${symbol} Deposit`, 200_000, config.dryRun);
+      await sendTx(connection, [depositIx], [wallet], `${symbol} Deposit`, 200_000, config.dryRun, rpc);
     }
   }
 
@@ -511,6 +528,7 @@ export async function crankMarket(
   config: BotConfig,
   market: ManagedMarket,
   wallet: Keypair,
+  rpc?: ResilientRpc,
 ): Promise<boolean> {
   const crankData = encodeKeeperCrank({ callerIdx: 65535, allowPanic: false });
   const oracleKey = market.oracleMode === "authority" ? market.slabAddress : market.slabAddress; // TODO: derive pyth PDA
@@ -521,7 +539,7 @@ export async function crankMarket(
     oracleKey,
   ]);
   const ix = buildIx({ programId: market.programId, keys: crankKeys, data: crankData });
-  const sig = await sendTx(connection, [ix], [wallet], `${market.symbol} Crank`, 200_000, config.dryRun);
+  const sig = await sendTx(connection, [ix], [wallet], `${market.symbol} Crank`, 200_000, config.dryRun, rpc);
   return sig !== null;
 }
 
@@ -534,6 +552,7 @@ export async function pushOraclePrice(
   market: ManagedMarket,
   wallet: Keypair,
   priceE6: bigint,
+  rpc?: ResilientRpc,
 ): Promise<boolean> {
   if (market.oracleMode !== "authority") return true;
   if (priceE6 === market.lastOraclePriceE6) return true;
@@ -545,7 +564,7 @@ export async function pushOraclePrice(
     market.slabAddress,
   ]);
   const ix = buildIx({ programId: market.programId, keys: pushKeys, data: pushData });
-  const sig = await sendTx(connection, [ix], [wallet], `${market.symbol} OraclePush $${Number(priceE6) / 1e6}`, 200_000, config.dryRun);
+  const sig = await sendTx(connection, [ix], [wallet], `${market.symbol} OraclePush $${Number(priceE6) / 1e6}`, 200_000, config.dryRun, rpc);
   if (sig) market.lastOraclePriceE6 = priceE6;
   return sig !== null;
 }
@@ -561,6 +580,7 @@ export async function executeTrade(
   wallet: Keypair,
   size: bigint,
   label: string,
+  rpc?: ResilientRpc,
 ): Promise<TradeResult> {
   const [lpPda] = deriveLpPda(market.programId, market.slabAddress, market.lpIdx);
 
@@ -596,6 +616,7 @@ export async function executeTrade(
     `${market.symbol} ${label}`,
     600_000,
     config.dryRun,
+    rpc,
   );
 
   if (sig) {
