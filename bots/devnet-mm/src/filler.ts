@@ -30,6 +30,7 @@ import {
 } from "./market.js";
 import { fetchPrice } from "./prices.js";
 import { log, logError } from "./logger.js";
+import type { ResilientRpc } from "./rpc.js";
 import * as fs from "fs";
 
 // ═══════════════════════════════════════════════════════════════
@@ -61,6 +62,7 @@ export class FillerBot {
   private readonly connection: Connection;
   private readonly config: BotConfig;
   private readonly wallet: Keypair;
+  private readonly rpc?: ResilientRpc;
   private markets: Map<string, MarketCrankState> = new Map();
   private timer: ReturnType<typeof setInterval> | null = null;
   private discoveryTimer: ReturnType<typeof setInterval> | null = null;
@@ -68,9 +70,10 @@ export class FillerBot {
   private cycling = false;
   readonly stats: FillerStats;
 
-  constructor(connection: Connection, config: BotConfig) {
+  constructor(connection: Connection, config: BotConfig, rpc?: ResilientRpc) {
     this.connection = connection;
     this.config = config;
+    this.rpc = rpc;
 
     // Load wallet
     const raw = JSON.parse(fs.readFileSync(config.fillerKeypairPath, "utf8"));
@@ -91,13 +94,19 @@ export class FillerBot {
     return this.wallet.publicKey;
   }
 
+  /** Active connection — follows RPC endpoint rotation when available. */
+  private get conn(): Connection {
+    return this.rpc?.connection ?? this.connection;
+  }
+
   /**
    * Discover markets and set up filler accounts.
    * The filler doesn't need its own LP — it uses existing LPs.
    */
   async discover(): Promise<void> {
     log("filler", "Discovering markets...");
-    const discovered = await discoverAllMarkets(this.connection, this.config);
+    const discovered = await discoverAllMarkets(this.conn, this.config);
+    // Note: this.conn follows RPC rotation via ResilientRpc
 
     for (const raw of discovered) {
       const key = raw.slabAddress.toBase58();
@@ -105,12 +114,13 @@ export class FillerBot {
 
       try {
         const managed = await setupMarketAccounts(
-          this.connection,
+          this.conn,
           this.config,
           raw,
           this.wallet,
           0n, // Filler doesn't need collateral (only cranks)
           false, // Don't create LP
+          this.rpc,
         );
         if (managed) {
           this.markets.set(key, {
@@ -166,7 +176,7 @@ export class FillerBot {
                 // cycle may have pushed a price to the chain already.
                 if (state.market.symbol === "UNKNOWN") {
                   const resolved = await resolveSymbolFromSlab(
-                    this.connection,
+                    this.conn,
                     state.market.slabAddress,
                   );
                   if (resolved !== "UNKNOWN") {
@@ -187,7 +197,7 @@ export class FillerBot {
                   if (priceData) {
                     const priceE6 = BigInt(Math.round(priceData.priceUsd * 1_000_000));
                     const pushed = await pushOraclePrice(
-                      this.connection, this.config, state.market, this.wallet, priceE6,
+                      this.conn, this.config, state.market, this.wallet, priceE6, this.rpc,
                     );
                     if (pushed) this.stats.oraclePushes++;
                   }
@@ -195,7 +205,7 @@ export class FillerBot {
               }
 
               // Crank
-              const ok = await crankMarket(this.connection, this.config, state.market, this.wallet);
+              const ok = await crankMarket(this.conn, this.config, state.market, this.wallet, this.rpc);
               if (ok) {
                 state.lastCrankTime = Date.now();
                 state.consecutiveFailures = 0;

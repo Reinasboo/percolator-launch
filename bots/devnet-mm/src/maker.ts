@@ -27,6 +27,7 @@ import {
 } from "./market.js";
 import { fetchPrice } from "./prices.js";
 import { log, logError } from "./logger.js";
+import type { ResilientRpc } from "./rpc.js";
 import * as fs from "fs";
 
 // ═══════════════════════════════════════════════════════════════
@@ -132,6 +133,7 @@ export class MakerBot {
   private readonly connection: Connection;
   private readonly config: BotConfig;
   private readonly wallet: Keypair;
+  private readonly rpc?: ResilientRpc;
   private markets: ManagedMarket[] = [];
   private timer: ReturnType<typeof setInterval> | null = null;
   private discoveryTimer: ReturnType<typeof setInterval> | null = null;
@@ -139,9 +141,10 @@ export class MakerBot {
   private cycling = false;
   readonly stats: MakerStats;
 
-  constructor(connection: Connection, config: BotConfig) {
+  constructor(connection: Connection, config: BotConfig, rpc?: ResilientRpc) {
     this.connection = connection;
     this.config = config;
+    this.rpc = rpc;
 
     const raw = JSON.parse(fs.readFileSync(config.makerKeypairPath, "utf8"));
     this.wallet = Keypair.fromSecretKey(Uint8Array.from(raw));
@@ -160,12 +163,17 @@ export class MakerBot {
     return this.wallet.publicKey;
   }
 
+  /** Active connection — follows RPC endpoint rotation when available. */
+  private get conn(): Connection {
+    return this.rpc?.connection ?? this.connection;
+  }
+
   /**
    * Discover and set up markets with LP + user accounts.
    */
   async discover(): Promise<void> {
     log("maker", "Discovering markets...");
-    const discovered = await discoverAllMarkets(this.connection, this.config);
+    const discovered = await discoverAllMarkets(this.conn, this.config);
 
     for (const raw of discovered) {
       const key = raw.slabAddress.toBase58();
@@ -174,12 +182,13 @@ export class MakerBot {
 
       try {
         const managed = await setupMarketAccounts(
-          this.connection,
+          this.conn,
           this.config,
           raw,
           this.wallet,
           this.config.initialCollateralUsdc,
           true, // Create LP for maker
+          this.rpc,
         );
         if (managed) {
           this.markets.push(managed);
@@ -200,7 +209,7 @@ export class MakerBot {
     // If symbol was not resolved at discovery time (Hyperp market with no initial
     // oracle price), re-check on-chain — filler may have pushed a price since startup.
     if (market.symbol === "UNKNOWN" && market.oracleMode === "authority") {
-      const resolved = await resolveSymbolFromSlab(this.connection, market.slabAddress);
+      const resolved = await resolveSymbolFromSlab(this.conn, market.slabAddress);
       if (resolved !== "UNKNOWN") {
         log("maker", `${market.slabAddress.toBase58().slice(0, 16)}...: resolved symbol → ${resolved} (was UNKNOWN)`);
         market.symbol = resolved;
@@ -220,11 +229,11 @@ export class MakerBot {
     // Push oracle price if Hyperp mode
     if (this.config.pushOraclePrices && market.oracleMode === "authority") {
       const priceE6 = BigInt(Math.round(priceData.priceUsd * 1_000_000));
-      await pushOraclePrice(this.connection, this.config, market, this.wallet, priceE6);
+      await pushOraclePrice(this.conn, this.config, market, this.wallet, priceE6, this.rpc);
     }
 
     // Refresh position periodically
-    await refreshPosition(this.connection, market, this.wallet);
+    await refreshPosition(this.conn, market, this.wallet);
 
     // Calculate quotes
     const quotes = calculateQuotes(
@@ -243,12 +252,13 @@ export class MakerBot {
       const sizeUsd = Number(quotes.bidSize) / 1e6;
       log("maker", `  BID @ $${quotes.bidPrice.toFixed(4)} | $${sizeUsd.toFixed(0)}`);
       const result = await executeTrade(
-        this.connection,
+        this.conn,
         this.config,
         market,
         this.wallet,
         quotes.bidSize,
         `BID@${quotes.bidPrice.toFixed(2)}`,
+        this.rpc,
       );
       if (result.success) this.stats.tradesExecuted++;
       else this.stats.tradesFailed++;
@@ -263,12 +273,13 @@ export class MakerBot {
       const sizeUsd = Number(quotes.askSize) / 1e6;
       log("maker", `  ASK @ $${quotes.askPrice.toFixed(4)} | $${sizeUsd.toFixed(0)}`);
       const result = await executeTrade(
-        this.connection,
+        this.conn,
         this.config,
         market,
         this.wallet,
         -quotes.askSize,
         `ASK@${quotes.askPrice.toFixed(2)}`,
+        this.rpc,
       );
       if (result.success) this.stats.tradesExecuted++;
       else this.stats.tradesFailed++;
