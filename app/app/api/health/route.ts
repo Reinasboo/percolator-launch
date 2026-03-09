@@ -2,10 +2,6 @@ import { NextResponse } from "next/server";
 import { getBackendUrl, getRpcEndpoint } from "@/lib/config";
 export const dynamic = "force-dynamic";
 
-const API_URL = getBackendUrl();
-
-const RPC_URL = getRpcEndpoint();
-
 async function checkWithTimeout(
   url: string,
   init: RequestInit,
@@ -24,6 +20,19 @@ async function checkWithTimeout(
 }
 
 export async function GET() {
+  let API_URL: string;
+  try {
+    API_URL = getBackendUrl();
+  } catch {
+    // getBackendUrl() throws in non-production when env vars are missing.
+    // Return a degraded response instead of crashing the route at import time.
+    return NextResponse.json(
+      { status: "offline", api: false, rpc: false, ts: Date.now(), error: "Backend URL not configured" },
+      { headers: { "Cache-Control": "no-store, max-age=0" } }
+    );
+  }
+  const RPC_URL = getRpcEndpoint();
+
   const [apiOk, rpcOk] = await Promise.all([
     checkWithTimeout(`${API_URL}/health`, {}, 3000),
     checkWithTimeout(
