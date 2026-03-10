@@ -332,36 +332,49 @@ export class CrankService {
   }
 
   async crankAll(): Promise<{ success: number; failed: number; skipped: number }> {
-    let success = 0;
-    let failed = 0;
-    let skipped = 0;
+  let success = 0;
+  let failed = 0;
 
-    const MAX_CONSECUTIVE_FAILURES = 10;
+  // NEW: split skipped into categories
+  let skippedPermanent = 0;
+  let skippedFailures = 0;
+  let skippedNotDue = 0;
 
-    const toCrank: string[] = [];
+  const MAX_CONSECUTIVE_FAILURES = 10;
 
-    // H5: Crank all discovered markets, not just admin-oracle ones
-    for (const [slabAddress, state] of this.markets) {
-      if (state.permanentlySkipped) {
-        skipped++;
-        continue;
-      }
-      if (state.consecutiveFailures > MAX_CONSECUTIVE_FAILURES) {
-        skipped++;
-        continue;
-      }
+  const toCrank: string[] = [];
 
-      if (!this.isDue(state)) {
-        skipped++;
-        continue;
-      }
-
-      toCrank.push(slabAddress);
+  for (const [slabAddress, state] of this.markets) {
+    if (state.permanentlySkipped) {
+      skippedPermanent++;
+      continue;
     }
-
-    if (toCrank.length !== this.markets.size - skipped) {
-      logger.warn("Crank mismatch", { totalMarkets: this.markets.size, toCrank: toCrank.length, skipped });
+    if (state.consecutiveFailures > MAX_CONSECUTIVE_FAILURES) {
+      skippedFailures++;
+      continue;
     }
+    if (!this.isDue(state)) {
+      skippedNotDue++;
+      continue;
+    }
+    toCrank.push(slabAddress);
+  }
+
+  // NEW: meaningful accounting check
+  const skipped = skippedPermanent + skippedFailures + skippedNotDue;
+  const total = this.markets.size;
+  const accounted = toCrank.length + skipped;
+
+  if (accounted !== total) {
+    logger.warn("Crank accounting mismatch", {
+      totalMarkets: total,
+      toCrank: toCrank.length,
+      skipped,
+      skippedPermanent,
+      skippedFailures,
+      skippedNotDue,
+    });
+  }
 
     // PERC-204: Full parallel fan-out — all market cranks are independent transactions,
     // submit them all simultaneously instead of in sequential batches.
