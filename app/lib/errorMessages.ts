@@ -1,6 +1,16 @@
 /**
- * Percolator program error codes (Custom(N)) → human-readable messages.
- * Maps directly to the PercolatorError enum in program/src/percolator.rs.
+ * Percolator on-chain program error code to human-readable message mappings.
+ * 
+ * Provides user-friendly explanations for blockchain transaction errors returned by the Percolator program.
+ * Each numeric code maps 1:1 to the PercolatorError enum defined in program/src/percolator.rs.
+ * 
+ * Used by:
+ * - API error responses (translateProgram Errors)
+ * - Frontend error dialogs
+ * - Transaction simulation to predict failures
+ * 
+ * When a Solana transaction fails with a Percolator custom error, the error code number
+ * is extracted and looked up here to display context-appropriate text to the user.
  */
 const ERROR_CODE_MAP: Record<number, string> = {
   0: "Invalid market magic — data corrupted.",
