@@ -34,6 +34,10 @@ vi.mock('@percolator/shared', () => ({
   eventBus: {
     publish: vi.fn(),
   },
+  getErrorMessage: vi.fn((err: unknown) => {
+    if (err instanceof Error) return err.message;
+    return String(err);
+  }),
 }));
 
 import { OracleService } from '../../src/services/oracle.js';
