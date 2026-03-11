@@ -89,7 +89,7 @@ export class MarketDiscovery {
         }
       } catch (err) {
         logger.error("Initial discovery failed", { error: err, attempt: attempt + 1 });
-        captureException(err, { tags: { context: "market-discovery-initial", attempt: attempt + 1 } });
+        captureException(err, { tags: { context: "market-discovery-initial", attempt: String(attempt + 1) } });
         if (attempt < INITIAL_RETRY_DELAYS.length) {
           const delay = INITIAL_RETRY_DELAYS[attempt];
           logger.warn(`Retrying initial discovery in ${delay / 1000}s`);
