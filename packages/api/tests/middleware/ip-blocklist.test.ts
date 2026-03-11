@@ -118,3 +118,37 @@ describe("ipBlocklist middleware", () => {
     expect(res.status).toBe(200);
   });
 });
+
+// ---------------------------------------------------------------------------
+// isClientIpBlocked — standalone helper used by the WebSocket upgrade handler
+// ---------------------------------------------------------------------------
+
+async function loadIsClientIpBlocked(blocklist: string) {
+  vi.resetModules();
+  process.env.IP_BLOCKLIST = blocklist;
+  const mod = await import("../../src/middleware/ip-blocklist.js");
+  return mod.isClientIpBlocked;
+}
+
+describe("isClientIpBlocked", () => {
+  it("returns false when blocklist is empty", async () => {
+    const check = await loadIsClientIpBlocked("");
+    expect(check("88.97.223.158")).toBe(false);
+  });
+
+  it("returns true for a blocked exact-match IP", async () => {
+    const check = await loadIsClientIpBlocked("88.97.223.158");
+    expect(check("88.97.223.158")).toBe(true);
+  });
+
+  it("returns false for an IP not in the blocklist", async () => {
+    const check = await loadIsClientIpBlocked("88.97.223.158");
+    expect(check("1.2.3.4")).toBe(false);
+  });
+
+  it("returns true for an IP inside a blocked CIDR", async () => {
+    const check = await loadIsClientIpBlocked("192.168.1.0/24");
+    expect(check("192.168.1.55")).toBe(true);
+    expect(check("192.168.2.1")).toBe(false);
+  });
+});

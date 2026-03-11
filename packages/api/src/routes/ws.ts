@@ -3,6 +3,7 @@ import type { Server } from "node:http";
 import type { IncomingMessage } from "node:http";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { eventBus, getSupabase, createLogger, sanitizeSlabAddress } from "@percolator/shared";
+import { isClientIpBlocked } from "../middleware/ip-blocklist.js";
 
 const logger = createLogger("api:ws");
 
@@ -12,7 +13,16 @@ const MAX_CONNECTIONS_PER_SLAB = 100; // New: per-slab connection limit
 const MAX_BUFFER_BYTES = 64 * 1024; // 64KB
 const MAX_SUBSCRIPTIONS_PER_CLIENT = 50; // Prevent Helius WS subscription exhaustion
 const MAX_GLOBAL_SUBSCRIPTIONS = 1000; // Global subscription cap to prevent DoS
-const MAX_CONNECTIONS_PER_IP = 5; // Max concurrent connections per IP
+/** Authenticated clients get the standard per-IP slot budget. */
+const MAX_CONNECTIONS_PER_IP = 5;
+/**
+ * Unauthenticated clients (no valid token at upgrade time) are limited to 3
+ * concurrent connections per IP.  This gives a harder stop against connection-
+ * flood DoS attacks before an attacker can exhaust the global limit.
+ */
+const MAX_UNAUTHENTICATED_CONNECTIONS_PER_IP = Number(
+  process.env.MAX_UNAUTH_WS_CONNECTIONS_PER_IP ?? 3
+);
 
 // Authentication settings
 // In production, WS_AUTH_REQUIRED must be explicitly set. Defaults to true unless NODE_ENV=development.
@@ -55,6 +65,9 @@ interface WsClient {
   pongTimeout?: ReturnType<typeof setTimeout>; // BH2: Pong response timeout
   isAlive: boolean; // BH2: Track pong responses
   authenticated: boolean; // Auth status
+  /** Whether the client presented a valid token at upgrade time. Used on
+   *  disconnect to determine which per-IP counter to decrement. */
+  initiallyAuthenticated: boolean;
   authenticatedSlab?: string; // Slab address from auth token (if slab-bound)
   ip: string; // Client IP address
   authTimeout?: ReturnType<typeof setTimeout>; // Auth timeout timer
@@ -63,8 +76,10 @@ interface WsClient {
 // Track global subscription count across all clients
 let globalSubscriptionCount = 0;
 
-// Track connections per IP
+// Track connections per IP (all connections — used for authenticated budget)
 const connectionsPerIp = new Map<string, number>();
+// Track unauthenticated connections per IP separately (tighter budget)
+const unauthenticatedConnectionsPerIp = new Map<string, number>();
 
 // Auth failure rate limiting per IP (issue #839: connection flood from repeat auth failures)
 // Tracks recent auth failures to temporarily ban repeat offenders.
@@ -365,6 +380,7 @@ export function getWebSocketMetrics(): any {
       maxGlobalConnections: MAX_WS_CONNECTIONS,
       maxConnectionsPerSlab: MAX_CONNECTIONS_PER_SLAB,
       maxConnectionsPerIp: MAX_CONNECTIONS_PER_IP,
+      maxUnauthConnectionsPerIp: MAX_UNAUTHENTICATED_CONNECTIONS_PER_IP,
     },
   };
 }
@@ -466,6 +482,15 @@ export function setupWebSocket(server: Server): WebSocketServer {
 
   wss.on("connection", (ws, req: IncomingMessage) => {
     const clientIp = getClientIp(req);
+
+    // --- IP blocklist check (mirrors HTTP middleware for WS upgrades) ---
+    // WebSocket upgrades bypass Hono middleware, so we enforce the blocklist
+    // here as well.  isClientIpBlocked() reads the same env-parsed list.
+    if (isClientIpBlocked(clientIp)) {
+      logger.warn("Blocked WS connection from blocklisted IP", { ip: clientIp });
+      ws.close(1008, "Forbidden");
+      return;
+    }
     
     // H2: Reject if at max connections
     if (clients.size >= MAX_WS_CONNECTIONS) {
@@ -481,35 +506,46 @@ export function setupWebSocket(server: Server): WebSocketServer {
       return;
     }
 
-    // Check connections per IP
-    const ipConnections = connectionsPerIp.get(clientIp) || 0;
-    if (ipConnections >= MAX_CONNECTIONS_PER_IP) {
-      logger.warn("Max connections per IP reached", { ip: clientIp, count: ipConnections });
-      ws.close(1008, `Max ${MAX_CONNECTIONS_PER_IP} connections per IP`);
-      return;
-    }
-    
-    // Increment IP connection count
-    connectionsPerIp.set(clientIp, ipConnections + 1);
-    
-    // Check for auth token in query params (optional)
+    // Check for auth token in query params (optional) — resolved *before* the
+    // per-IP connection check so that the correct budget applies immediately.
     const url = new URL(req.url || "", `http://${req.headers.host}`);
     const token = url.searchParams.get("token");
-    
-    // Determine if authenticated
+
+    // Determine if authenticated at upgrade time
     let authenticated = !WS_AUTH_REQUIRED; // If auth not required, auto-authenticate
     let authenticatedSlab: string | undefined = undefined;
-    
+
     if (WS_AUTH_REQUIRED && token) {
       const tokenVerification = verifyWsToken(token);
       authenticated = tokenVerification.isValid;
       authenticatedSlab = tokenVerification.slabAddress || undefined;
-      
+
       if (!authenticated) {
         logger.warn("Invalid WS auth token provided", { ip: clientIp });
       } else if (authenticatedSlab) {
         logger.info("Client authenticated with slab binding", { ip: clientIp, slab: authenticatedSlab });
       }
+    }
+
+    // Per-IP connection limit — differentiated by initial auth state.
+    // Unauthenticated clients get a tighter budget (default 3) to limit
+    // connection-flood DoS before any auth logic can fire.
+    const ipConnections = connectionsPerIp.get(clientIp) || 0;
+    if (authenticated) {
+      if (ipConnections >= MAX_CONNECTIONS_PER_IP) {
+        logger.warn("Max authenticated connections per IP reached", { ip: clientIp, count: ipConnections });
+        ws.close(1008, `Max ${MAX_CONNECTIONS_PER_IP} connections per IP`);
+        return;
+      }
+      connectionsPerIp.set(clientIp, ipConnections + 1);
+    } else {
+      const unauthCount = unauthenticatedConnectionsPerIp.get(clientIp) || 0;
+      if (unauthCount >= MAX_UNAUTHENTICATED_CONNECTIONS_PER_IP) {
+        logger.warn("Max unauthenticated connections per IP reached", { ip: clientIp, count: unauthCount });
+        ws.close(1008, `Max ${MAX_UNAUTHENTICATED_CONNECTIONS_PER_IP} unauthenticated connections per IP`);
+        return;
+      }
+      unauthenticatedConnectionsPerIp.set(clientIp, unauthCount + 1);
     }
 
     // H2: No default "*" subscription — clients must explicitly subscribe
@@ -518,6 +554,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
       subscriptions: new Set(), 
       isAlive: true,
       authenticated,
+      initiallyAuthenticated: authenticated,
       authenticatedSlab,
       ip: clientIp
     };
@@ -849,12 +886,21 @@ export function setupWebSocket(server: Server): WebSocketServer {
         clearTimeout(client.authTimeout);
       }
       
-      // Decrement IP connection count
-      const ipCount = connectionsPerIp.get(client.ip) || 1;
-      if (ipCount <= 1) {
-        connectionsPerIp.delete(client.ip);
+      // Decrement the correct per-IP counter based on initial auth state
+      if (client.initiallyAuthenticated) {
+        const ipCount = connectionsPerIp.get(client.ip) || 1;
+        if (ipCount <= 1) {
+          connectionsPerIp.delete(client.ip);
+        } else {
+          connectionsPerIp.set(client.ip, ipCount - 1);
+        }
       } else {
-        connectionsPerIp.set(client.ip, ipCount - 1);
+        const unauthCount = unauthenticatedConnectionsPerIp.get(client.ip) || 1;
+        if (unauthCount <= 1) {
+          unauthenticatedConnectionsPerIp.delete(client.ip);
+        } else {
+          unauthenticatedConnectionsPerIp.set(client.ip, unauthCount - 1);
+        }
       }
       
       // Remove from slab tracking

@@ -114,3 +114,12 @@ export function ipBlocklist() {
     return next();
   };
 }
+
+/**
+ * Check whether a raw IP string (already extracted from headers) is on the
+ * blocklist. Used by non-Hono code paths such as the WebSocket upgrade
+ * handler, which runs before Hono middleware gets a chance to fire.
+ */
+export function isClientIpBlocked(ip: string): boolean {
+  return isBlocked(ip);
+}
