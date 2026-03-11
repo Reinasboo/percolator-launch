@@ -15,7 +15,8 @@
  * - USDC: USD Coin (USDC bridged)
  * - USDT: USDTether (Ethereum-bridged)
  * - BONK: Bonk community token
- */\nexport const SLUG_ALIASES: Record<string, string> = {
+ */
+export const SLUG_ALIASES: Record<string, string> = {
   SOL: "So11111111111111111111111111111111111111112",
   WSOL: "So11111111111111111111111111111111111111112",
   USDC: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
