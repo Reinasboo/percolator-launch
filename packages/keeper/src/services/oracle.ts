@@ -6,7 +6,7 @@ import {
   ACCOUNTS_PUSH_ORACLE_PRICE,
   type MarketConfig,
 } from "@percolator/sdk";
-import { config, getConnection, loadKeypair, sendWithRetry, eventBus, createLogger } from "@percolator/shared";
+import { config, getConnection, loadKeypair, sendWithRetry, eventBus, createLogger, getErrorMessage } from "@percolator/shared";
 
 const logger = createLogger("keeper:oracle");
 
@@ -328,7 +328,7 @@ export class OracleService {
     } catch (err) {
       logger.error("Failed to push oracle price", {
         slabAddress,
-        error: err instanceof Error ? err.message : String(err),
+        error: getErrorMessage(err),
         stack: err instanceof Error ? err.stack : undefined,
         mint,
         priceE6: priceEntry?.priceE6.toString(),

@@ -1,6 +1,7 @@
 import { Connection, Keypair, Transaction, TransactionInstruction, SendOptions, ComputeBudgetProgram } from "@solana/web3.js";
 import bs58 from "bs58";
 import { acquireToken, getPrimaryConnection, getFallbackConnection, backoffMs } from "./rpc-client.js";
+import { ApiError, toApiError, getErrorMessage } from "../errors.js";
 
 export { getPrimaryConnection as getConnection, getFallbackConnection };
 
@@ -68,7 +69,8 @@ export async function getRecentPriorityFees(connection: Connection): Promise<{
     
     return { priorityFeeMicroLamports: finalFee, computeUnitLimit };
   } catch (err) {
-    console.warn("[getRecentPriorityFees] Failed to fetch priority fees:", err);
+    const msg = getErrorMessage(err);
+    console.warn("[getRecentPriorityFees] Failed to fetch priority fees:", msg);
     return { priorityFeeMicroLamports: 10_000, computeUnitLimit: 400_000 };
   }
 }
@@ -90,6 +92,10 @@ function is429(err: unknown): boolean {
   if (err instanceof Error) {
     const msg = err.message.toLowerCase();
     return msg.includes("429") || msg.includes("too many requests") || msg.includes("rate limit");
+  }
+  // Check if it's an object with a code property (for structured errors)
+  if (typeof err === "object" && err !== null && typeof (err as Record<string, unknown>).code === "number") {
+    return (err as Record<string, unknown>).code === 429;
   }
   return false;
 }

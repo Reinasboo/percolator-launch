@@ -18,7 +18,7 @@ import {
   derivePythPushOraclePDA,
   type DiscoveredMarket,
 } from "@percolator/sdk";
-import { config, getConnection, loadKeypair, sendWithRetry, sendWithRetryKeeper, pollSignatureStatus, getRecentPriorityFees, checkTransactionSize, eventBus, createLogger, sendWarningAlert, acquireToken, getFallbackConnection, backoffMs } from "@percolator/shared";
+import { config, getConnection, loadKeypair, sendWithRetry, sendWithRetryKeeper, pollSignatureStatus, getRecentPriorityFees, checkTransactionSize, eventBus, createLogger, sendWarningAlert, acquireToken, getFallbackConnection, backoffMs, getErrorMessage } from "@percolator/shared";
 import { OracleService } from "./oracle.js";
 
 const logger = createLogger("keeper:liquidation");
@@ -40,7 +40,7 @@ async function fetchSlabWithRetry(
       return await fetchSlab(conn, slabPubkey);
     } catch (err) {
       lastErr = err;
-      const msg = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
+      const msg = getErrorMessage(err).toLowerCase();
       const isRetryable = msg.includes("429") || msg.includes("too many requests")
         || msg.includes("rate limit") || msg.includes("timeout")
         || msg.includes("socket") || msg.includes("econnrefused")
@@ -294,7 +294,7 @@ export class LiquidationService {
     } catch (err) {
       logger.error("Market scan failed", {
         slabAddress,
-        error: err instanceof Error ? err.message : String(err),
+        error: getErrorMessage(err),
         stack: err instanceof Error ? err.stack : undefined,
       });
       return [];
@@ -441,7 +441,7 @@ export class LiquidationService {
       
       return sig;
     } catch (err) {
-      const errMsg = err instanceof Error ? err.message : String(err);
+      const errMsg = getErrorMessage(err);
 
       // PERC-484: InvalidSlabLen (0x4) means the slab has wrong size for the program.
       // These are test/corrupt markets that will never succeed — permanently skip them
