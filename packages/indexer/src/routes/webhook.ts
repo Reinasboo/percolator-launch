@@ -12,13 +12,28 @@ const BASE58_PUBKEY = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
  * Helius Enhanced Transaction webhook receiver.
  * Parses trade instructions from enhanced tx data and stores them.
  */
+// PERC-692: Fail fast if webhook secret is not configured in production
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+if (!config.webhookSecret) {
+  if (IS_PRODUCTION) {
+    logger.error("FATAL: HELIUS_WEBHOOK_SECRET must be set in production — webhook auth would be bypassed");
+    process.exit(1);
+  } else {
+    logger.warn("HELIUS_WEBHOOK_SECRET not set — webhook auth disabled (dev only)");
+  }
+}
+
 export function webhookRoutes(): Hono {
   const app = new Hono();
 
   app.post("/webhook/trades", async (c) => {
-    // Validate auth header
+    // PERC-692: Always validate auth when secret is configured; reject if missing in production
     const authHeader = c.req.header("authorization");
-    if (config.webhookSecret && authHeader !== config.webhookSecret) {
+    if (!config.webhookSecret) {
+      // No secret configured — only allowed in non-production (checked at startup)
+      logger.warn("Webhook request accepted without auth (no secret configured)");
+    } else if (authHeader !== config.webhookSecret) {
+      logger.warn("Webhook auth failed", { hasHeader: !!authHeader });
       return c.json({ error: "Unauthorized" }, 401);
     }
 
