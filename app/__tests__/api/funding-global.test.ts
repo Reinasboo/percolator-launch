@@ -40,7 +40,7 @@ describe("GET /api/funding/global", () => {
 
   it("sanitizes out-of-range funding rates to zero", async () => {
     const rows = [
-      { slab_address: "abc123", funding_rate: 999_999_999, markets: { base_symbol: "BTC" } },
+      { slab_address: "abc123", funding_rate: 999_999_999, markets: { symbol: "BTC" } },
     ];
     mockSelect.mockReturnValue({
       not: vi.fn().mockReturnValue({
@@ -58,9 +58,9 @@ describe("GET /api/funding/global", () => {
 
   it("sorts by absolute funding rate descending", async () => {
     const rows = [
-      { slab_address: "low", funding_rate: 1, markets: { base_symbol: "LOW" } },
-      { slab_address: "neg", funding_rate: -50, markets: { base_symbol: "NEG" } },
-      { slab_address: "high", funding_rate: 100, markets: { base_symbol: "HIGH" } },
+      { slab_address: "low", funding_rate: 1, markets: { symbol: "LOW" } },
+      { slab_address: "neg", funding_rate: -50, markets: { symbol: "NEG" } },
+      { slab_address: "high", funding_rate: 100, markets: { symbol: "HIGH" } },
     ];
     mockSelect.mockReturnValue({
       not: vi.fn().mockReturnValue({
@@ -79,7 +79,7 @@ describe("GET /api/funding/global", () => {
   it("computes hourly and daily rate percent correctly", async () => {
     // 1 bps/slot * 9000 slots/hr / 10000 = 0.9%/hr, 21.6%/day
     const rows = [
-      { slab_address: "slab1", funding_rate: 1, markets: { base_symbol: "SOL" } },
+      { slab_address: "slab1", funding_rate: 1, markets: { symbol: "SOL" } },
     ];
     mockSelect.mockReturnValue({
       not: vi.fn().mockReturnValue({
@@ -96,9 +96,9 @@ describe("GET /api/funding/global", () => {
 
   it("sets direction correctly", async () => {
     const rows = [
-      { slab_address: "pos", funding_rate: 5, markets: { base_symbol: "A" } },
-      { slab_address: "neg", funding_rate: -5, markets: { base_symbol: "B" } },
-      { slab_address: "neu", funding_rate: 0, markets: { base_symbol: "C" } },
+      { slab_address: "pos", funding_rate: 5, markets: { symbol: "A" } },
+      { slab_address: "neg", funding_rate: -5, markets: { symbol: "B" } },
+      { slab_address: "neu", funding_rate: 0, markets: { symbol: "C" } },
     ];
     mockSelect.mockReturnValue({
       not: vi.fn().mockReturnValue({
@@ -120,7 +120,7 @@ describe("GET /api/funding/global", () => {
     const rows = Array.from({ length: 20 }, (_, i) => ({
       slab_address: `slab${i}`,
       funding_rate: i + 1,
-      markets: { base_symbol: `T${i}` },
+      markets: { symbol: `T${i}` },
     }));
     mockSelect.mockReturnValue({
       not: vi.fn().mockReturnValue({
@@ -148,7 +148,7 @@ describe("GET /api/funding/global", () => {
 
   it("handles array-style markets join result", async () => {
     const rows = [
-      { slab_address: "slab99", funding_rate: 10, markets: [{ base_symbol: "ETH" }] },
+      { slab_address: "slab99", funding_rate: 10, markets: [{ symbol: "ETH" }] },
     ];
     mockSelect.mockReturnValue({
       not: vi.fn().mockReturnValue({
