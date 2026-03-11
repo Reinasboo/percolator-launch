@@ -1,3 +1,18 @@
+/**
+ * Format a raw token amount (in smallest units) into a human-readable decimal string.
+ * 
+ * @param raw - The token amount in smallest units (e.g., lamports for SOL). Can be null/undefined.
+ * @param decimals - Number of decimal places the token uses (default: 6 for most SPL tokens)
+ * @param maxDisplayDecimals - Optional limit on displayed decimal places (truncates the fractional part)
+ * @returns Human-readable formatted string, e.g. "100.5" or "0" if input is null/undefined
+ * 
+ * @example
+ * // SOL with 9 decimals
+ * formatTokenAmount(1500000000n, 9) // → "1.5"
+ * formatTokenAmount(100000n, 6) // → "0.1"
+ * formatTokenAmount(null, 6) // → "0"
+ * formatTokenAmount(1500000n, 6, 2) // → "1.5" (truncated to 2 decimals)
+ */
 export function formatTokenAmount(
   raw: bigint | null | undefined,
   decimals: number = 6,
@@ -20,10 +35,32 @@ export function formatTokenAmount(
   return negative ? `-${formatted}` : formatted;
 }
 
+/**
+ * Format an oracle price in E6 format (price * 10^6) into a readable decimal string.
+ * Convenience wrapper around formatTokenAmount for 6-decimal prices.
+ * 
+ * @param priceE6 - Price value with 6 decimal places (E6 format)
+ * @returns Formatted price string (e.g. "0.05" for 50000 E6)
+ * 
+ * @example
+ * formatPriceE6(50000n) // → "0.05"
+ * formatPriceE6(1000000n) // → "1"
+ */
 export function formatPriceE6(priceE6: bigint): string {
   return formatTokenAmount(priceE6, 6);
 }
 
+/**
+ * Format a basis points value (1/100th of a percent) into a percentage string.
+ * 
+ * @param bps - Basis points value. Can be bigint or number.
+ * @returns Percentage string with 2 decimal places (e.g. "0.50%" for 50 basis points)
+ * 
+ * @example
+ * formatBps(50n) // → "0.50%"
+ * formatBps(100) // → "1.00%"
+ * formatBps(10000n) // → "100.00%"
+ */
 export function formatBps(bps: bigint | number): string {
   const n = typeof bps === "bigint" ? Number(bps) : bps;
   return `${(n / 100).toFixed(2)}%`;
@@ -36,6 +73,23 @@ export function formatBps(bps: bigint | number): string {
  */
 export const LIQ_PRICE_UNLIQUIDATABLE = 18446744073709551615n; // max u64
 
+/**
+ * Format a price in E6 format (price * 10^6) into USD notation with validation.
+ * 
+ * Handles edge cases:
+ * - Returns "$—" (dash) for absurd values (>1e15), negative values, or zero (oracle unavailable)
+ * - Returns "$0.00" only when price is null/undefined
+ * - Uses max 6 decimal places for small amounts, min 2 for standard amounts
+ * 
+ * @param priceE6 - Price with 6 decimal places, or null/undefined
+ * @returns Formatted USD string (e.g. "$1.50") or "$—" if invalid/unavailable
+ * 
+ * @example
+ * formatUsd(1500000n) // → "$1.50"
+ * formatUsd(0n) // → "$—" (oracle unavailable)
+ * formatUsd(null) // → "$0.00" (unknown price)
+ * formatUsd(-1000000n) // → "$—" (invalid negative)
+ */
 export function formatUsd(priceE6: bigint | null | undefined): string {
   if (priceE6 == null) return "$0.00";
   // Defense-in-depth: reject absurd values (matches Rust MAX_ORACLE_PRICE = 1e15)
@@ -58,6 +112,18 @@ export function formatLiqPrice(liqPriceE6: bigint | null | undefined): string {
   return formatUsd(liqPriceE6);
 }
 
+/**
+ * Abbreviate a long address (e.g., Solana public key) to first and last N characters.
+ * Useful for display in UI tables and labels where horizontal space is limited.
+ * 
+ * @param address - Full address string
+ * @param chars - Number of leading/trailing characters to keep (default: 4)
+ * @returns Abbreviated address in format "1234...5678"
+ * 
+ * @example
+ * shortenAddress("So11111111111111111111111111111111111111112") // → "So11...1112"
+ * shortenAddress("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", 3) // → "EPj...Dt1v"
+ */
 export function shortenAddress(address: string, chars: number = 4): string {
   return `${address.slice(0, chars)}...${address.slice(-chars)}`;
 }
@@ -119,6 +185,19 @@ export function formatStatValue(
   return n.toFixed(4);
 }
 
+/**
+ * Calculate time elapsed between two Solana slots and format as human-readable duration.
+ * Assumes 2.5 second average block time on Solana.
+ * 
+ * @param currentSlot - Current blockchain slot number (or null/undefined)
+ * @param targetSlot - Reference slot number (or null/undefined)
+ * @returns Human-readable duration (e.g. "30s", "5.2m", "2.1h") or "—" if inputs invalid
+ * 
+ * @example
+ * formatSlotAge(1000n, 995n) // → "1s" (5 slots * 2.5s/slot)
+ * formatSlotAge(1000n, 976n) // → "10.0m" (24 slots * 2.5s/slot)
+ * formatSlotAge(null, 500n) // → "—"
+ */
 export function formatSlotAge(currentSlot: bigint | null | undefined, targetSlot: bigint | null | undefined): string {
   if (currentSlot == null || targetSlot == null) return "—";
   const diff = currentSlot - targetSlot;
@@ -129,6 +208,18 @@ export function formatSlotAge(currentSlot: bigint | null | undefined, targetSlot
   return `${(seconds / 3600).toFixed(1)}h`;
 }
 
+/**
+ * Format a signed 128-bit integer into a whole number string.
+ * Useful for displaying net PnL or balance changes that can be negative.
+ * 
+ * @param raw - Signed i128 value in smallest units
+ * @param decimals - Number of decimal places (default: 6)
+ * @returns Formatted integer string with optional minus sign (e.g. "-100" or "50")
+ * 
+ * @example
+ * formatI128Amount(500000000n, 6) // → "500"
+ * formatI128Amount(-250000000n, 6) // → "-250"
+ */
 export function formatI128Amount(raw: bigint, decimals: number = 6): string {
   const negative = raw < 0n;
   const abs = negative ? -raw : raw;
@@ -138,7 +229,20 @@ export function formatI128Amount(raw: bigint, decimals: number = 6): string {
   return negative ? `-${formatted}` : formatted;
 }
 
-/** Format PnL with full precision and +/- prefix */
+/**
+ * Format a profit/loss amount with signed indicator and full fractional precision.
+ * Returns +/- prefixed value suitable for portfolio/position displays.
+ * 
+ * @param raw - PnL value in smallest units (positive for gains, negative for losses), or null/undefined
+ * @param decimals - Number of decimal places (default: 6)
+ * @returns Formatted PnL string with +/- prefix (e.g. "+42.5" or "-10.25") or "0" if null/undefined
+ * 
+ * @example
+ * formatPnL(4250000n, 6) // → "+42.5"
+ * formatPnL(-100000000n, 6) // → "-100"
+ * formatPnL(0n, 6) // → "0"
+ * formatPnL(null, 6) // → "0"
+ */
 export function formatPnl(raw: bigint | null | undefined, decimals: number = 6): string {
   if (raw == null) return "0";
   const negative = raw < 0n;
