@@ -119,7 +119,8 @@ function VaultDetailInner({ slabAddress }: { slabAddress: string }) {
 
   const symbol = marketInfo?.symbol ?? fallbackSymbol ?? 'UNKNOWN';
   const maxOI = marketInfo?.maxOI ?? 0;
-  const currentOI = marketInfo?.totalOI ?? (totalOI ? Number(totalOI) / 1e6 : 0);
+  const collDivisor = 10 ** collateralDecimals;
+  const currentOI = marketInfo?.totalOI ?? (totalOI ? Number(totalOI) / collDivisor : 0);
   const estimatedApy = marketInfo?.estimatedApyPct ?? 0;
   const collateralScale = Math.pow(10, collateralDecimals);
   const vaultUsd = Number(poolState.vaultBalance) / collateralScale;
@@ -208,7 +209,7 @@ function VaultDetailInner({ slabAddress }: { slabAddress: string }) {
             </StatCell>
             <StatCell label="LP Supply" loading={loading}>
               <span className="text-sm font-mono tabular-nums text-white">
-                {formatCompact(Number(poolState.lpSupply) / 1e6)}
+                {formatCompact(Number(poolState.lpSupply) / collDivisor)}
               </span>
             </StatCell>
             <StatCell label="Open Interest" loading={loading}>
@@ -218,7 +219,7 @@ function VaultDetailInner({ slabAddress }: { slabAddress: string }) {
             </StatCell>
             <StatCell label="Insurance" loading={loading}>
               <span className="text-sm font-mono tabular-nums text-white">
-                ${formatCompact(insuranceFund / 1e6)}
+                ${formatCompact(insuranceFund / collDivisor)}
               </span>
             </StatCell>
             <StatCell label="Max Leverage" loading={loading}>
