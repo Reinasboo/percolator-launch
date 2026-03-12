@@ -98,8 +98,7 @@ export default function Home() {
   const [stats, setStats] = useState({ markets: 0, volume: 0, insurance: 0 });
   const [statsLoaded, setStatsLoaded] = useState(false);
   const [featured, setFeatured] = useState<{ slab_address: string; symbol: string | null; volume_24h: number; last_price: number | null; total_open_interest: number }[]>([]);
-  const [network, setNetwork] = useState<"mainnet" | "devnet">("mainnet");
-  useEffect(() => { setNetwork(getConfig().network as "mainnet" | "devnet"); }, []);
+  const [network] = useState<"mainnet" | "devnet">(() => getConfig().network as "mainnet" | "devnet");
 
   useEffect(() => {
     async function loadStats() {
@@ -241,7 +240,7 @@ export default function Home() {
                     suffix: network !== "mainnet" ? " (devnet)" : undefined,
                     color: "text-[var(--accent)]",
                   },
-                  { label: "Access", value: "Open", color: "text-[var(--long)]" },
+                  { label: "Access", value: "Open", suffix: network !== "mainnet" ? " (devnet)" : undefined, color: "text-[var(--long)]" },
                 ].map((stat) => (
                   <div key={stat.label} className="bg-[var(--panel-bg)] p-4 sm:p-5 transition-colors duration-200 hover:bg-[var(--bg-elevated)]">
                     <p className="mb-2 text-[10px] font-medium uppercase tracking-[0.2em] text-[#9ca3af]">{stat.label}</p>
