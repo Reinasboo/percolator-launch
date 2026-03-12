@@ -128,6 +128,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid creatorWallet" }, { status: 400 });
     }
 
+    // Guard: SPL token accounts require an on-curve (Ed25519) owner.
+    // Passing a PDA (off-curve) as the creator wallet causes
+    // TokenOwnerOffCurveError during getAssociatedTokenAddress.
+    // Reject early with a clear 400 before touching the DB or chain.
+    if (!PublicKey.isOnCurve(creatorPk.toBytes())) {
+      return NextResponse.json(
+        { error: "creatorWallet must be a regular wallet, not a program-derived address (PDA)" },
+        { status: 400 },
+      );
+    }
+
     // Check if we already have a devnet mint for this CA
     const supabase = getServiceClient();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
