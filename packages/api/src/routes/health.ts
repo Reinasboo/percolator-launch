@@ -22,8 +22,12 @@ export function healthRoutes(): Hono {
     }
     
     // Check Supabase connectivity
+    // PERC-693: Supabase client doesn't throw on query errors — check { error } explicitly
     try {
-      await getSupabase().from("markets").select("id", { count: "exact", head: true });
+      const { error: dbError } = await getSupabase().from("markets").select("id", { count: "exact", head: true });
+      if (dbError) {
+        throw new Error(dbError.message ?? "Supabase query failed");
+      }
       checks.db = true;
     } catch (err) {
       logger.error("DB check failed", { error: err instanceof Error ? err.message : err });

@@ -54,8 +54,9 @@ const PROGRAM_ID = new PublicKey(networkConfig.programIds[0]);
 const connection = new Connection(RPC_URL, "confirmed");
 
 // Load sealed signer (private key never exposed)
+// PERC-691: Use signer + crankPublicKey instead of undefined `payer`
 const signer = getSealedSigner();
-const crankPublicKey = getCrankPublicKey();
+const crankPublicKey = new PublicKey(getCrankPublicKey());
 
 console.log(`
 ✅ Crank Service Initialized
@@ -103,7 +104,7 @@ async function crankMarket(market: DiscoveredMarket): Promise<string> {
       priceE6: priceE6.toString(),
       timestamp: ts.toString(),
     });
-    const pushKeys = buildAccountMetas(ACCOUNTS_PUSH_ORACLE_PRICE, [payer.publicKey, slabPk]);
+    const pushKeys = buildAccountMetas(ACCOUNTS_PUSH_ORACLE_PRICE, [crankPublicKey, slabPk]);
     tx.add(buildIx({ programId: PROGRAM_ID, keys: pushKeys, data: pushData }));
 
     oracleAccount = slabPk;
@@ -115,14 +116,14 @@ async function crankMarket(market: DiscoveredMarket): Promise<string> {
 
   const crankData = encodeKeeperCrank({ callerIdx: 65535, allowPanic: false });
   const crankKeys = buildAccountMetas(ACCOUNTS_KEEPER_CRANK, [
-    payer.publicKey,
+    crankPublicKey,
     slabPk,
     SYSVAR_CLOCK_PUBKEY,
     oracleAccount,
   ]);
   tx.add(buildIx({ programId: PROGRAM_ID, keys: crankKeys, data: crankData }));
 
-  return sendAndConfirmTransaction(connection, tx, [payer], {
+  return sendAndConfirmTransaction(connection, tx, [signer], {
     commitment: "confirmed",
   });
 }
@@ -134,11 +135,11 @@ async function crankMarket(market: DiscoveredMarket): Promise<string> {
 async function main() {
   console.log("🔄 Percolator Auto-Crank Service");
   console.log(`   Program:  ${PROGRAM_ID.toBase58()}`);
-  console.log(`   Payer:    ${payer.publicKey.toBase58()}`);
+  console.log(`   Payer:    ${crankPublicKey.toBase58()}`);
   console.log(`   RPC:      ${RPC_URL.slice(0, 50)}…`);
   console.log(`   Interval: ${CRANK_INTERVAL_MS / 1000}s\n`);
 
-  const balance = await connection.getBalance(payer.publicKey);
+  const balance = await connection.getBalance(crankPublicKey);
   console.log(`   Balance:  ${(balance / 1e9).toFixed(4)} SOL\n`);
 
   let markets: DiscoveredMarket[] = [];
