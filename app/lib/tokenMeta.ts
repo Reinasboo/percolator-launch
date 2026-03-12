@@ -59,50 +59,71 @@ function getHeliusRpcUrl(connection: Connection): string | null {
 /**
  * Fetch token metadata via Helius DAS API (getAsset).
  * Uses the same RPC URL we already have — no extra API key needed.
+ * Retries up to maxRetries times on transient failures (429, 503, 504, network errors).
  */
 async function fetchViaHeliusDAS(
   rpcUrl: string,
-  mintAddress: string
+  mintAddress: string,
+  maxRetries = 3
 ): Promise<{ symbol: string; name: string; decimals: number } | null> {
-  try {
-    const res = await fetch(rpcUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: `das-${mintAddress}`,
-        method: "getAsset",
-        params: { id: mintAddress, options: { showFungible: true } },
-      }),
-      signal: AbortSignal.timeout(5000),
-    });
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(rpcUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: `das-${mintAddress}`,
+          method: "getAsset",
+          params: { id: mintAddress, options: { showFungible: true } },
+        }),
+        signal: AbortSignal.timeout(5000),
+      });
 
-    if (!res.ok) return null;
+      // Retry on rate limit or service unavailable
+      if ([429, 503, 504].includes(res.status)) {
+        if (attempt < maxRetries) {
+          const backoffMs = Math.pow(2, attempt - 1) * 100; // 100ms, 200ms, 400ms
+          await new Promise((r) => setTimeout(r, backoffMs));
+          continue;
+        }
+        return null;
+      }
 
-    const json = await res.json();
-    const result = json?.result;
-    if (!result) return null;
+      if (!res.ok) return null;
 
-    // DAS returns content.metadata for NFTs and token_info for fungibles
-    const metadata = result.content?.metadata;
-    const tokenInfo = result.token_info;
+      const json = await res.json();
+      const result = json?.result;
+      if (!result) return null; // Genuinely not found
 
-    const symbol = metadata?.symbol || tokenInfo?.symbol || "";
-    const name = metadata?.name || "";
-    const decimals = tokenInfo?.decimals ?? 6;
+      // DAS returns content.metadata for NFTs and token_info for fungibles
+      const metadata = result.content?.metadata;
+      const tokenInfo = result.token_info;
 
-    if (symbol && name) {
-      return { symbol, name, decimals };
+      const symbol = metadata?.symbol || tokenInfo?.symbol || "";
+      const name = metadata?.name || "";
+      const decimals = tokenInfo?.decimals ?? 6;
+
+      if (symbol && name) {
+        return { symbol, name, decimals };
+      }
+      // Partial match is still useful
+      if (symbol || name) {
+        return { symbol: symbol || shortenMint(mintAddress), name: name || shortenMint(mintAddress), decimals };
+      }
+
+      return null;
+    } catch (err) {
+      const isNetworkError = err instanceof TypeError || (err as Error).name === "AbortError";
+      if (isNetworkError && attempt < maxRetries) {
+        const backoffMs = Math.pow(2, attempt - 1) * 100;
+        await new Promise((r) => setTimeout(r, backoffMs));
+        continue;
+      }
+      return null;
     }
-    // Partial match is still useful
-    if (symbol || name) {
-      return { symbol: symbol || shortenMint(mintAddress), name: name || shortenMint(mintAddress), decimals };
-    }
-
-    return null;
-  } catch {
-    return null;
   }
+  return null;
 }
 
 /**
