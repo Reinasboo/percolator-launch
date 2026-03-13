@@ -19,10 +19,7 @@ export function computeMarkPnl(
 ): bigint {
   if (positionSize === 0n || oraclePrice === 0n) return 0n;
   const absPos = positionSize < 0n ? -positionSize : positionSize;
-  const diff =
-    positionSize > 0n
-      ? oraclePrice - entryPrice
-      : entryPrice - oraclePrice;
+  const diff = positionSize > 0n ? oraclePrice - entryPrice : entryPrice - oraclePrice;
   return (diff * absPos) / oraclePrice;
 }
 
@@ -65,23 +62,20 @@ export function computePreTradeLiqPrice(
   posSize: bigint,
   maintBps: bigint,
   feeBps: bigint,
-  direction: "long" | "short",
+  direction: 'long' | 'short',
 ): bigint {
   if (oracleE6 === 0n || margin === 0n || posSize === 0n) return 0n;
   const absPos = posSize < 0n ? -posSize : posSize;
   const fee = (absPos * feeBps) / 10000n;
   const effectiveCapital = margin > fee ? margin - fee : 0n;
-  const signedPos = direction === "long" ? absPos : -absPos;
+  const signedPos = direction === 'long' ? absPos : -absPos;
   return computeLiqPrice(oracleE6, effectiveCapital, signedPos, maintBps);
 }
 
 /**
  * Compute trading fee from notional value and fee rate in bps.
  */
-export function computeTradingFee(
-  notional: bigint,
-  tradingFeeBps: bigint,
-): bigint {
+export function computeTradingFee(notional: bigint, tradingFeeBps: bigint): bigint {
   return (notional * tradingFeeBps) / 10000n;
 }
 
@@ -111,10 +105,7 @@ export interface FeeTierConfig {
  *
  * If tier2Threshold == 0, tiered fees are disabled (flat baseBps).
  */
-export function computeDynamicFeeBps(
-  notional: bigint,
-  config: FeeTierConfig,
-): bigint {
+export function computeDynamicFeeBps(notional: bigint, config: FeeTierConfig): bigint {
   if (config.tier2Threshold === 0n) return config.baseBps;
   if (config.tier3Threshold > 0n && notional >= config.tier3Threshold) return config.tier3Bps;
   if (notional >= config.tier2Threshold) return config.tier2Bps;
@@ -127,10 +118,7 @@ export function computeDynamicFeeBps(
  * Uses ceiling division to match on-chain behavior (prevents fee evasion
  * via micro-trades).
  */
-export function computeDynamicTradingFee(
-  notional: bigint,
-  config: FeeTierConfig,
-): bigint {
+export function computeDynamicTradingFee(notional: bigint, config: FeeTierConfig): bigint {
   const feeBps = computeDynamicFeeBps(notional, config);
   if (notional <= 0n || feeBps <= 0n) return 0n;
   return (notional * feeBps + 9999n) / 10000n;
@@ -176,10 +164,7 @@ export function computeFeeSplit(
  * incorrect percentages for large positions (e.g., tokens with 9 decimals
  * where capital > ~9M tokens in native units exceeds MAX_SAFE_INTEGER).
  */
-export function computePnlPercent(
-  pnlTokens: bigint,
-  capital: bigint,
-): number {
+export function computePnlPercent(pnlTokens: bigint, capital: bigint): number {
   if (capital === 0n) return 0;
   // Scale by 10000 in BigInt-land (2 extra decimal places), then convert once
   const scaledPct = (pnlTokens * 10_000n) / capital;
@@ -192,19 +177,17 @@ export function computePnlPercent(
 export function computeEstimatedEntryPrice(
   oracleE6: bigint,
   tradingFeeBps: bigint,
-  direction: "long" | "short",
+  direction: 'long' | 'short',
 ): bigint {
   if (oracleE6 === 0n) return 0n;
   const feeImpact = (oracleE6 * tradingFeeBps) / 10000n;
-  return direction === "long" ? oracleE6 + feeImpact : oracleE6 - feeImpact;
+  return direction === 'long' ? oracleE6 + feeImpact : oracleE6 - feeImpact;
 }
 
 /**
  * Convert per-slot funding rate (bps) to annualized percentage.
  */
-export function computeFundingRateAnnualized(
-  fundingRateBpsPerSlot: bigint,
-): number {
+export function computeFundingRateAnnualized(fundingRateBpsPerSlot: bigint): number {
   const bpsPerSlot = Number(fundingRateBpsPerSlot);
   const slotsPerYear = 2.5 * 60 * 60 * 24 * 365; // ~400ms slots
   return (bpsPerSlot * slotsPerYear) / 100;
@@ -213,10 +196,7 @@ export function computeFundingRateAnnualized(
 /**
  * Compute margin required for a given notional and initial margin bps.
  */
-export function computeRequiredMargin(
-  notional: bigint,
-  initialMarginBps: bigint,
-): bigint {
+export function computeRequiredMargin(notional: bigint, initialMarginBps: bigint): bigint {
   return (notional * initialMarginBps) / 10000n;
 }
 

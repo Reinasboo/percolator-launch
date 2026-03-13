@@ -1,18 +1,14 @@
-import { PublicKey } from "@solana/web3.js";
-import {
-  PUMPSWAP_PROGRAM_ID,
-  RAYDIUM_CLMM_PROGRAM_ID,
-  METEORA_DLMM_PROGRAM_ID,
-} from "./pda.js";
+import { PublicKey } from '@solana/web3.js';
+import { PUMPSWAP_PROGRAM_ID, RAYDIUM_CLMM_PROGRAM_ID, METEORA_DLMM_PROGRAM_ID } from './pda.js';
 
-export type DexType = "pumpswap" | "raydium-clmm" | "meteora-dlmm";
+export type DexType = 'pumpswap' | 'raydium-clmm' | 'meteora-dlmm';
 
 export interface DexPoolInfo {
   dexType: DexType;
   poolAddress: PublicKey;
   baseMint: PublicKey;
   quoteMint: PublicKey;
-  baseVault?: PublicKey;  // PumpSwap only
+  baseVault?: PublicKey; // PumpSwap only
   quoteVault?: PublicKey; // PumpSwap only
 }
 
@@ -28,9 +24,9 @@ export interface DexPoolInfo {
  * - Meteora DLMM (discretized liquidity)
  */
 export function detectDexType(ownerProgramId: PublicKey): DexType | null {
-  if (ownerProgramId.equals(PUMPSWAP_PROGRAM_ID)) return "pumpswap";
-  if (ownerProgramId.equals(RAYDIUM_CLMM_PROGRAM_ID)) return "raydium-clmm";
-  if (ownerProgramId.equals(METEORA_DLMM_PROGRAM_ID)) return "meteora-dlmm";
+  if (ownerProgramId.equals(PUMPSWAP_PROGRAM_ID)) return 'pumpswap';
+  if (ownerProgramId.equals(RAYDIUM_CLMM_PROGRAM_ID)) return 'raydium-clmm';
+  if (ownerProgramId.equals(METEORA_DLMM_PROGRAM_ID)) return 'meteora-dlmm';
   return null;
 }
 
@@ -49,11 +45,11 @@ export function parseDexPool(
   data: Uint8Array,
 ): DexPoolInfo {
   switch (dexType) {
-    case "pumpswap":
+    case 'pumpswap':
       return parsePumpSwapPool(poolAddress, data);
-    case "raydium-clmm":
+    case 'raydium-clmm':
       return parseRaydiumClmmPool(poolAddress, data);
-    case "meteora-dlmm":
+    case 'meteora-dlmm':
       return parseMeteoraPool(poolAddress, data);
   }
 }
@@ -77,12 +73,13 @@ export function computeDexSpotPriceE6(
   vaultData?: { base: Uint8Array; quote: Uint8Array },
 ): bigint {
   switch (dexType) {
-    case "pumpswap":
-      if (!vaultData) throw new Error("PumpSwap requires vaultData (base and quote vault accounts)");
+    case 'pumpswap':
+      if (!vaultData)
+        throw new Error('PumpSwap requires vaultData (base and quote vault accounts)');
       return computePumpSwapPriceE6(data, vaultData);
-    case "raydium-clmm":
+    case 'raydium-clmm':
       return computeRaydiumClmmPriceE6(data);
-    case "meteora-dlmm":
+    case 'meteora-dlmm':
       return computeMeteoraDlmmPriceE6(data);
   }
 }
@@ -102,7 +99,7 @@ function parsePumpSwapPool(poolAddress: PublicKey, data: Uint8Array): DexPoolInf
     throw new Error(`PumpSwap pool data too short: ${data.length} < ${PUMPSWAP_MIN_LEN}`);
   }
   return {
-    dexType: "pumpswap",
+    dexType: 'pumpswap',
     poolAddress,
     baseMint: new PublicKey(data.slice(35, 67)),
     quoteMint: new PublicKey(data.slice(67, 99)),
@@ -122,14 +119,26 @@ function computePumpSwapPriceE6(
   vaultData: { base: Uint8Array; quote: Uint8Array },
 ): bigint {
   if (vaultData.base.length < SPL_TOKEN_AMOUNT_MIN_LEN) {
-    throw new Error(`PumpSwap base vault data too short: ${vaultData.base.length} < ${SPL_TOKEN_AMOUNT_MIN_LEN}`);
+    throw new Error(
+      `PumpSwap base vault data too short: ${vaultData.base.length} < ${SPL_TOKEN_AMOUNT_MIN_LEN}`,
+    );
   }
   if (vaultData.quote.length < SPL_TOKEN_AMOUNT_MIN_LEN) {
-    throw new Error(`PumpSwap quote vault data too short: ${vaultData.quote.length} < ${SPL_TOKEN_AMOUNT_MIN_LEN}`);
+    throw new Error(
+      `PumpSwap quote vault data too short: ${vaultData.quote.length} < ${SPL_TOKEN_AMOUNT_MIN_LEN}`,
+    );
   }
 
-  const baseDv = new DataView(vaultData.base.buffer, vaultData.base.byteOffset, vaultData.base.byteLength);
-  const quoteDv = new DataView(vaultData.quote.buffer, vaultData.quote.byteOffset, vaultData.quote.byteLength);
+  const baseDv = new DataView(
+    vaultData.base.buffer,
+    vaultData.base.byteOffset,
+    vaultData.base.byteLength,
+  );
+  const quoteDv = new DataView(
+    vaultData.quote.buffer,
+    vaultData.quote.byteOffset,
+    vaultData.quote.byteLength,
+  );
 
   const baseAmount = readU64LE(baseDv, 64);
   const quoteAmount = readU64LE(quoteDv, 64);
@@ -153,7 +162,7 @@ function parseRaydiumClmmPool(poolAddress: PublicKey, data: Uint8Array): DexPool
     throw new Error(`Raydium CLMM pool data too short: ${data.length} < ${RAYDIUM_CLMM_MIN_LEN}`);
   }
   return {
-    dexType: "raydium-clmm",
+    dexType: 'raydium-clmm',
     poolAddress,
     baseMint: new PublicKey(data.slice(73, 105)),
     quoteMint: new PublicKey(data.slice(105, 137)),
@@ -220,7 +229,7 @@ function parseMeteoraPool(poolAddress: PublicKey, data: Uint8Array): DexPoolInfo
     throw new Error(`Meteora DLMM pool data too short: ${data.length} < ${METEORA_DLMM_MIN_LEN}`);
   }
   return {
-    dexType: "meteora-dlmm",
+    dexType: 'meteora-dlmm',
     poolAddress,
     baseMint: new PublicKey(data.slice(81, 113)),
     quoteMint: new PublicKey(data.slice(113, 145)),

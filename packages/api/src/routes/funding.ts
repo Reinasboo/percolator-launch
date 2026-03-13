@@ -1,6 +1,6 @@
 /**
  * Funding Rate API Routes
- * 
+ *
  * Exposes funding rate data for markets:
  * - Current funding rate (bps/slot)
  * - Annualized/hourly/daily rates
@@ -8,17 +8,17 @@
  * - Funding index (cumulative)
  * - 24h historical funding data
  */
-import { Hono } from "hono";
-import { validateSlab } from "../middleware/validateSlab.js";
-import { cacheMiddleware } from "../middleware/cache.js";
-import { 
-  getFundingHistory, 
+import { Hono } from 'hono';
+import { validateSlab } from '../middleware/validateSlab.js';
+import { cacheMiddleware } from '../middleware/cache.js';
+import {
+  getFundingHistory,
   getFundingHistorySince,
   getSupabase,
   createLogger,
-} from "@percolator/shared";
+} from '@percolator/shared';
 
-const logger = createLogger("api:funding");
+const logger = createLogger('api:funding');
 
 /**
  * Maximum valid funding rate in bps/slot (matches on-chain guard).
@@ -36,15 +36,15 @@ export function fundingRoutes(): Hono {
 
   /**
    * GET /funding/global
-   * 
+   *
    * Returns current funding rates for all markets.
    * NOTE: This must come BEFORE /funding/:slab to avoid :slab matching "global"
    */
-  app.get("/funding/global", async (c) => {
+  app.get('/funding/global', async (c) => {
     try {
       const { data: allStats, error } = await getSupabase()
-        .from("market_stats")
-        .select("slab_address, funding_rate, net_lp_pos");
+        .from('market_stats')
+        .select('slab_address, funding_rate, net_lp_pos');
 
       if (error) throw error;
 
@@ -58,7 +58,7 @@ export function fundingRoutes(): Hono {
           currentRateBpsPerSlot: rateBps,
           hourlyRatePercent: Number(((rateBps / 10000.0) * SLOTS_PER_HOUR).toFixed(6)),
           dailyRatePercent: Number(((rateBps / 10000.0) * SLOTS_PER_DAY).toFixed(4)),
-          netLpPosition: stats.net_lp_pos ?? "0",
+          netLpPosition: stats.net_lp_pos ?? '0',
         };
       });
 
@@ -67,19 +67,24 @@ export function fundingRoutes(): Hono {
         markets,
       });
     } catch (err) {
-      logger.error("Error fetching global funding data", { error: err });
-      return c.json({ 
-        error: "Failed to fetch global funding data",
-        ...(process.env.NODE_ENV !== "production" && { details: err instanceof Error ? err.message : String(err) })
-      }, 500);
+      logger.error('Error fetching global funding data', { error: err });
+      return c.json(
+        {
+          error: 'Failed to fetch global funding data',
+          ...(process.env.NODE_ENV !== 'production' && {
+            details: err instanceof Error ? err.message : String(err),
+          }),
+        },
+        500,
+      );
     }
   });
 
   /**
    * GET /funding/:slab — 30s cache
-   * 
+   *
    * Returns current funding rate data and 24h history for a market.
-   * 
+   *
    * Response format:
    * {
    *   "currentRateBpsPerSlot": 5,
@@ -94,32 +99,35 @@ export function fundingRoutes(): Hono {
    *   ]
    * }
    */
-  app.get("/funding/:slab", cacheMiddleware(30), validateSlab, async (c) => {
-    const slab = c.req.param("slab");
-    if (!slab) return c.json({ error: "slab required" }, 400);
+  app.get('/funding/:slab', cacheMiddleware(30), validateSlab, async (c) => {
+    const slab = c.req.param('slab');
+    if (!slab) return c.json({ error: 'slab required' }, 400);
 
     try {
       // Fetch current funding rate from market_stats
       const { data: stats, error: statsError } = await getSupabase()
-        .from("market_stats")
-        .select("funding_rate, net_lp_pos")
-        .eq("slab_address", slab)
+        .from('market_stats')
+        .select('funding_rate, net_lp_pos')
+        .eq('slab_address', slab)
         .single();
 
-      if (statsError && statsError.code !== "PGRST116") {
+      if (statsError && statsError.code !== 'PGRST116') {
         throw statsError;
       }
 
       if (!stats) {
-        return c.json({ 
-          error: "Market stats not found",
-          hint: "Market may not have been cranked yet or does not exist"
-        }, 404);
+        return c.json(
+          {
+            error: 'Market stats not found',
+            hint: 'Market may not have been cranked yet or does not exist',
+          },
+          404,
+        );
       }
 
       // Parse current funding data
       const currentRateBpsPerSlot = stats.funding_rate ?? 0;
-      const netLpPosition = stats.net_lp_pos ?? "0";
+      const netLpPosition = stats.net_lp_pos ?? '0';
 
       // Calculate rates
       // Solana slots: ~2.5 slots/second = 400ms per slot
@@ -141,7 +149,10 @@ export function fundingRoutes(): Hono {
       try {
         history = await getFundingHistorySince(slab, since24h);
       } catch (histErr) {
-        logger.warn("funding_history unavailable, returning empty history", { slab, error: histErr });
+        logger.warn('funding_history unavailable, returning empty history', {
+          slab,
+          error: histErr,
+        });
         history = [];
       }
 
@@ -166,37 +177,42 @@ export function fundingRoutes(): Hono {
         metadata: {
           dataPoints24h: last24hHistory.length,
           explanation: {
-            rateBpsPerSlot: "Funding rate in basis points per slot (1 bps = 0.01%)",
-            hourly: "Rate * 9,000 slots/hour (assumes 400ms slots)",
-            daily: "Rate * 216,000 slots/day",
-            annualized: "Rate * 78,840,000 slots/year",
-            sign: "Positive = longs pay shorts | Negative = shorts pay longs",
-            inventory: "Driven by net LP position (LP inventory imbalance)",
-          }
-        }
+            rateBpsPerSlot: 'Funding rate in basis points per slot (1 bps = 0.01%)',
+            hourly: 'Rate * 9,000 slots/hour (assumes 400ms slots)',
+            daily: 'Rate * 216,000 slots/day',
+            annualized: 'Rate * 78,840,000 slots/year',
+            sign: 'Positive = longs pay shorts | Negative = shorts pay longs',
+            inventory: 'Driven by net LP position (LP inventory imbalance)',
+          },
+        },
       });
     } catch (err) {
-      logger.error("Error fetching funding data", { slab, error: err });
-      return c.json({ 
-        error: "Failed to fetch funding data",
-        ...(process.env.NODE_ENV !== "production" && { details: err instanceof Error ? err.message : String(err) })
-      }, 500);
+      logger.error('Error fetching funding data', { slab, error: err });
+      return c.json(
+        {
+          error: 'Failed to fetch funding data',
+          ...(process.env.NODE_ENV !== 'production' && {
+            details: err instanceof Error ? err.message : String(err),
+          }),
+        },
+        500,
+      );
     }
   });
 
   /**
    * GET /funding/:slab/history
-   * 
+   *
    * Returns historical funding rate data with optional time range.
    * Query params:
    * - limit: number of records (default 100, max 1000)
    * - since: ISO timestamp (default: 24h ago)
    */
-  app.get("/funding/:slab/history", validateSlab, async (c) => {
-    const slab = c.req.param("slab");
-    if (!slab) return c.json({ error: "slab required" }, 400);
-    const limitParam = c.req.query("limit");
-    const sinceParam = c.req.query("since");
+  app.get('/funding/:slab/history', validateSlab, async (c) => {
+    const slab = c.req.param('slab');
+    if (!slab) return c.json({ error: 'slab required' }, 400);
+    const limitParam = c.req.query('limit');
+    const sinceParam = c.req.query('since');
 
     try {
       let history;
@@ -221,11 +237,16 @@ export function fundingRoutes(): Hono {
         })),
       });
     } catch (err) {
-      logger.error("Error fetching funding history", { slab, error: err });
-      return c.json({ 
-        error: "Failed to fetch funding history",
-        ...(process.env.NODE_ENV !== "production" && { details: err instanceof Error ? err.message : String(err) })
-      }, 500);
+      logger.error('Error fetching funding history', { slab, error: err });
+      return c.json(
+        {
+          error: 'Failed to fetch funding history',
+          ...(process.env.NODE_ENV !== 'production' && {
+            details: err instanceof Error ? err.message : String(err),
+          }),
+        },
+        500,
+      );
     }
   });
 

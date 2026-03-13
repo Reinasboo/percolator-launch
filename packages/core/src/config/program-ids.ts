@@ -1,28 +1,28 @@
-import { PublicKey } from "@solana/web3.js";
+import { PublicKey } from '@solana/web3.js';
 
 /**
  * Centralized PROGRAM_ID configuration
- * 
+ *
  * Default to environment variable, then fall back to network-specific defaults.
  * This prevents hard-coded program IDs scattered across the codebase.
  */
 
 export const PROGRAM_IDS = {
   devnet: {
-    percolator: "FxfD37s1AZTeWfFQps9Zpebi2dNQ9QSSDtfMKdbsfKrD",
-    matcher: "GTRgyTDfrMvBubALAqtHuQwT8tbGyXid7svXZKtWfC9k",
+    percolator: 'FxfD37s1AZTeWfFQps9Zpebi2dNQ9QSSDtfMKdbsfKrD',
+    matcher: 'GTRgyTDfrMvBubALAqtHuQwT8tbGyXid7svXZKtWfC9k',
   },
   mainnet: {
-    percolator: "GM8zjJ8LTBMv9xEsverh6H6wLyevgMHEJXcEzyY3rY24",
-    matcher: "", // TODO: Deploy matcher to mainnet
+    percolator: 'GM8zjJ8LTBMv9xEsverh6H6wLyevgMHEJXcEzyY3rY24',
+    matcher: '', // TODO: Deploy matcher to mainnet
   },
 } as const;
 
-export type Network = "devnet" | "mainnet";
+export type Network = 'devnet' | 'mainnet';
 
 /**
  * Get the Percolator program ID for the current network
- * 
+ *
  * Priority:
  * 1. PROGRAM_ID env var (explicit override)
  * 2. Network-specific default (NETWORK env var)
@@ -77,9 +77,9 @@ export function getMatcherProgramId(network?: Network): PublicKey {
  */
 export function getCurrentNetwork(): Network {
   const network = process.env.NETWORK?.toLowerCase();
-  if (network === "mainnet" || network === "mainnet-beta") {
-    return "mainnet";
+  if (network === 'mainnet' || network === 'mainnet-beta') {
+    return 'mainnet';
   }
   // devnet, testnet, or unset → devnet (fail-open to devnet, not mainnet)
-  return "devnet";
+  return 'devnet';
 }

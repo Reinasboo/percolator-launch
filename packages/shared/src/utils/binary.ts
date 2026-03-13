@@ -1,10 +1,10 @@
 /** Decode base58 string to Uint8Array */
 export function decodeBase58(str: string): Uint8Array | null {
   try {
-    const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
     const BASE = 58;
     let zeros = 0;
-    while (zeros < str.length && str[zeros] === "1") zeros++;
+    while (zeros < str.length && str[zeros] === '1') zeros++;
     const bytes: number[] = [];
     for (let i = zeros; i < str.length; i++) {
       const charIndex = ALPHABET.indexOf(str[i]);
@@ -41,9 +41,12 @@ export function readU128LE(bytes: Uint8Array): bigint {
  * Parse signed i128 size from trade instruction data.
  * Returns { sizeValue, side } where sizeValue is the absolute value.
  */
-export function parseTradeSize(sizeBytes: Uint8Array): { sizeValue: bigint; side: "long" | "short" } {
+export function parseTradeSize(sizeBytes: Uint8Array): {
+  sizeValue: bigint;
+  side: 'long' | 'short';
+} {
   const isNegative = sizeBytes[15] >= 128;
-  const side: "long" | "short" = isNegative ? "short" : "long";
+  const side: 'long' | 'short' = isNegative ? 'short' : 'long';
 
   let sizeValue: bigint;
   if (isNegative) {

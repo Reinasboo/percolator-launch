@@ -7,7 +7,7 @@
  * Usage:
  * ```typescript
  * import { logApiCall, logDbQuery, logOperation } from "@percolator/shared";
- * 
+ *
  * // Log API calls
  * logApiCall(logger, "GET", "/markets", 200, 45);
  *
@@ -19,7 +19,7 @@
  * ```
  */
 
-import type { Logger } from "./logger.js";
+import type { Logger } from './logger.js';
 
 /**
  * Log an API request/response with consistent structure.
@@ -48,7 +48,7 @@ export function logApiCall(
   context?: Record<string, unknown>,
 ): void {
   const isError = statusCode >= 400;
-  const level: "info" | "warn" | "error" = statusCode >= 500 ? "error" : isError ? "warn" : "info";
+  const level: 'info' | 'warn' | 'error' = statusCode >= 500 ? 'error' : isError ? 'warn' : 'info';
 
   logger[level](`API ${method} ${path}`, {
     method,
@@ -82,7 +82,7 @@ export function logDbQuery(
   context?: Record<string, unknown>,
 ): void {
   const isLong = durationMs >= 1000; // Flag queries 1 second or longer as warning
-  const level: "info" | "warn" = isLong ? "warn" : "info";
+  const level: 'info' | 'warn' = isLong ? 'warn' : 'info';
 
   logger[level](`DB: ${queryType}`, {
     query: queryType,
@@ -189,14 +189,17 @@ export function logTransientError(
 ): void {
   const message = error instanceof Error ? error.message : String(error);
 
-  logger.warn(`${operationName}: Attempt ${attempt}/${maxAttempts} failed, retrying in ${nextRetryDelayMs}ms`, {
-    operation: operationName,
-    attempt,
-    maxAttempts,
-    error: message,
-    retryDelayMs: nextRetryDelayMs,
-    ...context,
-  });
+  logger.warn(
+    `${operationName}: Attempt ${attempt}/${maxAttempts} failed, retrying in ${nextRetryDelayMs}ms`,
+    {
+      operation: operationName,
+      attempt,
+      maxAttempts,
+      error: message,
+      retryDelayMs: nextRetryDelayMs,
+      ...context,
+    },
+  );
 }
 
 /**
@@ -214,10 +217,6 @@ export function logTransientError(
  * // Output: {"marker":"cache-stale","cacheAgeMs":45000,"maxAgeMs":30000}
  * ```
  */
-export function logMarker(
-  logger: Logger,
-  marker: string,
-  context?: Record<string, unknown>,
-): void {
+export function logMarker(logger: Logger, marker: string, context?: Record<string, unknown>): void {
   logger.debug(`[${marker}]`, { marker, ...context });
 }

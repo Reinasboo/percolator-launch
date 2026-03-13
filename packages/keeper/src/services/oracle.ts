@@ -1,14 +1,22 @@
-import { PublicKey, SYSVAR_CLOCK_PUBKEY } from "@solana/web3.js";
+import { PublicKey, SYSVAR_CLOCK_PUBKEY } from '@solana/web3.js';
 import {
   encodePushOraclePrice,
   buildAccountMetas,
   buildIx,
   ACCOUNTS_PUSH_ORACLE_PRICE,
   type MarketConfig,
-} from "@percolator/sdk";
-import { config, getConnection, loadKeypair, sendWithRetry, eventBus, createLogger, getErrorMessage } from "@percolator/shared";
+} from '@percolator/sdk';
+import {
+  config,
+  getConnection,
+  loadKeypair,
+  sendWithRetry,
+  eventBus,
+  createLogger,
+  getErrorMessage,
+} from '@percolator/shared';
 
-const logger = createLogger("keeper:oracle");
+const logger = createLogger('keeper:oracle');
 
 interface PriceEntry {
   priceE6: bigint;
@@ -32,7 +40,7 @@ interface DexScreenerResponse {
   pairs?: Array<{ priceUsd?: string; liquidity?: { usd?: number } }>;
 }
 
-function sortPairsByLiquidity(pairs: DexScreenerResponse["pairs"]): DexScreenerResponse["pairs"] {
+function sortPairsByLiquidity(pairs: DexScreenerResponse['pairs']): DexScreenerResponse['pairs'] {
   if (!pairs) return pairs;
   return [...pairs].sort((a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0));
 }
@@ -56,10 +64,10 @@ export class OracleService {
     // BM2: Deduplicate concurrent requests
     const inFlight = this.inFlightRequests.get(`dex:${mint}`);
     if (inFlight) return inFlight;
-    
+
     const promise = this._fetchDexScreenerPriceInternal(mint);
     this.inFlightRequests.set(`dex:${mint}`, promise);
-    
+
     try {
       return await promise;
     } finally {
@@ -72,7 +80,7 @@ export class OracleService {
       // BH7: Atomic cache check — capture timestamp once to avoid race condition
       const now = Date.now();
       const cached = dexScreenerCache.get(mint);
-      
+
       if (cached) {
         const age = now - cached.fetchedAt;
         if (age < DEX_SCREENER_CACHE_TTL_MS) {
@@ -89,13 +97,16 @@ export class OracleService {
       // BM1: Add 10s timeout to prevent hanging requests
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
-      
+
       // Encode mint to prevent URL injection (#783)
-      const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${encodeURIComponent(mint)}`, {
-        signal: controller.signal
-      });
+      const res = await fetch(
+        `https://api.dexscreener.com/latest/dex/tokens/${encodeURIComponent(mint)}`,
+        {
+          signal: controller.signal,
+        },
+      );
       clearTimeout(timeoutId);
-      
+
       const json = (await res.json()) as DexScreenerResponse;
       // BH7: Use captured timestamp for atomicity
       dexScreenerCache.set(mint, { data: json, fetchedAt: now });
@@ -115,10 +126,10 @@ export class OracleService {
     // BM2: Deduplicate concurrent requests
     const inFlight = this.inFlightRequests.get(`jup:${mint}`);
     if (inFlight) return inFlight;
-    
+
     const promise = this._fetchJupiterPriceInternal(mint);
     this.inFlightRequests.set(`jup:${mint}`, promise);
-    
+
     try {
       return await promise;
     } finally {
@@ -131,13 +142,13 @@ export class OracleService {
       // BM1: Add 10s timeout to prevent hanging requests
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
-      
+
       // Encode mint to prevent query param injection (#783)
       const res = await fetch(`https://api.jup.ag/price/v2?ids=${encodeURIComponent(mint)}`, {
-        signal: controller.signal
+        signal: controller.signal,
       });
       clearTimeout(timeoutId);
-      
+
       const json = (await res.json()) as JupiterResponse;
       const priceStr = json.data?.[mint]?.price;
       if (!priceStr) return null;
@@ -170,15 +181,15 @@ export class OracleService {
     if (dexPrice !== null && jupPrice !== null && dexPrice > 0n && jupPrice > 0n) {
       const larger = dexPrice > jupPrice ? dexPrice : jupPrice;
       const smaller = dexPrice > jupPrice ? jupPrice : dexPrice;
-      const divergencePct = Number((larger - smaller) * 100n / smaller);
+      const divergencePct = Number(((larger - smaller) * 100n) / smaller);
 
       if (divergencePct > MAX_CROSS_SOURCE_DEVIATION_PCT) {
-        logger.warn("Cross-source divergence detected", {
+        logger.warn('Cross-source divergence detected', {
           mint,
           divergencePct,
           maxAllowed: MAX_CROSS_SOURCE_DEVIATION_PCT,
           dexPrice: dexPrice.toString(),
-          jupPrice: jupPrice.toString()
+          jupPrice: jupPrice.toString(),
         });
         return null;
       }
@@ -186,10 +197,10 @@ export class OracleService {
 
     // Select best available price (DexScreener preferred)
     let priceE6: bigint | null = dexPrice;
-    let source = "dexscreener";
+    let source = 'dexscreener';
     if (priceE6 === null) {
       priceE6 = jupPrice;
-      source = "jupiter";
+      source = 'jupiter';
     }
 
     if (priceE6 === null) {
@@ -198,14 +209,14 @@ export class OracleService {
         const last = history[history.length - 1];
         // Reject stale cached prices (>60s) to prevent bad liquidations
         if (Date.now() - last.timestamp > CACHED_PRICE_MAX_AGE_MS) {
-          logger.warn("Cached price is stale", {
+          logger.warn('Cached price is stale', {
             mint,
             ageSeconds: Math.round((Date.now() - last.timestamp) / 1000),
-            maxAgeSeconds: CACHED_PRICE_MAX_AGE_MS / 1000
+            maxAgeSeconds: CACHED_PRICE_MAX_AGE_MS / 1000,
           });
           return null;
         }
-        return { ...last, source: "cached" };
+        return { ...last, source: 'cached' };
       }
       return null;
     }
@@ -215,17 +226,18 @@ export class OracleService {
     if (history && history.length > 0) {
       const lastPrice = history[history.length - 1].priceE6;
       if (lastPrice > 0n) {
-        const deviation = priceE6 > lastPrice
-          ? Number((priceE6 - lastPrice) * 100n / lastPrice)
-          : Number((lastPrice - priceE6) * 100n / lastPrice);
+        const deviation =
+          priceE6 > lastPrice
+            ? Number(((priceE6 - lastPrice) * 100n) / lastPrice)
+            : Number(((lastPrice - priceE6) * 100n) / lastPrice);
         if (deviation > 30) {
-          logger.warn("Price deviation exceeds threshold", {
+          logger.warn('Price deviation exceeds threshold', {
             mint,
             deviation,
             threshold: 30,
             lastPrice: lastPrice.toString(),
             newPrice: priceE6.toString(),
-            source
+            source,
           });
           return null;
         }
@@ -264,7 +276,11 @@ export class OracleService {
   }
 
   /** Push oracle price on-chain for admin-oracle market */
-  async pushPrice(slabAddress: string, marketConfig: MarketConfig, marketProgramId?: PublicKey): Promise<boolean> {
+  async pushPrice(
+    slabAddress: string,
+    marketConfig: MarketConfig,
+    marketProgramId?: PublicKey,
+  ): Promise<boolean> {
     const now = Date.now();
     const lastPush = this.lastPushTime.get(slabAddress) ?? 0;
     if (now - lastPush < this.rateLimitMs) return false;
@@ -280,10 +296,10 @@ export class OracleService {
     if (!priceEntry) {
       const onChainPrice = marketConfig.authorityPriceE6;
       if (onChainPrice > 0n) {
-        priceEntry = { priceE6: onChainPrice, source: "on-chain", timestamp: Date.now() };
-        logger.info("Using on-chain price", { mint, onChainPrice: onChainPrice.toString() });
+        priceEntry = { priceE6: onChainPrice, source: 'on-chain', timestamp: Date.now() };
+        logger.info('Using on-chain price', { mint, onChainPrice: onChainPrice.toString() });
       } else {
-        logger.warn("No price source available", { mint });
+        logger.warn('No price source available', { mint });
         return false; // Don't push a guessed price
       }
     }
@@ -299,7 +315,11 @@ export class OracleService {
         // Skip silently for markets we don't control — only log once per market
         if (!this._nonAuthorityLogged.has(slabAddress)) {
           this._nonAuthorityLogged.add(slabAddress);
-          logger.debug("Not oracle authority, skipping", { slabAddress, ourAuthority: keypair.publicKey.toBase58().slice(0, 8), theirAuthority: marketConfig.oracleAuthority.toBase58().slice(0, 8) });
+          logger.debug('Not oracle authority, skipping', {
+            slabAddress,
+            ourAuthority: keypair.publicKey.toBase58().slice(0, 8),
+            theirAuthority: marketConfig.oracleAuthority.toBase58().slice(0, 8),
+          });
         }
         return false;
       }
@@ -309,24 +329,25 @@ export class OracleService {
         timestamp: BigInt(Math.floor(Date.now() / 1000)),
       });
 
-      const keys = buildAccountMetas(ACCOUNTS_PUSH_ORACLE_PRICE, [
-        keypair.publicKey,
-        slabPubkey,
-      ]);
+      const keys = buildAccountMetas(ACCOUNTS_PUSH_ORACLE_PRICE, [keypair.publicKey, slabPubkey]);
 
       const ix = buildIx({ programId, keys, data });
-      logger.debug("Pushing oracle price", { slabAddress, priceE6: priceEntry.priceE6.toString(), programId: programId.toBase58() });
+      logger.debug('Pushing oracle price', {
+        slabAddress,
+        priceE6: priceEntry.priceE6.toString(),
+        programId: programId.toBase58(),
+      });
       const sig = await sendWithRetry(connection, ix, [keypair]);
-      logger.info("Oracle price pushed", { signature: sig });
+      logger.info('Oracle price pushed', { signature: sig });
 
       this.lastPushTime.set(slabAddress, now);
-      eventBus.publish("price.updated", slabAddress, {
+      eventBus.publish('price.updated', slabAddress, {
         priceE6: priceEntry.priceE6.toString(),
         source: priceEntry.source,
       });
       return true;
     } catch (err) {
-      logger.error("Failed to push oracle price", {
+      logger.error('Failed to push oracle price', {
         slabAddress,
         error: getErrorMessage(err),
         stack: err instanceof Error ? err.stack : undefined,
@@ -334,7 +355,7 @@ export class OracleService {
         priceE6: priceEntry?.priceE6.toString(),
         source: priceEntry?.source,
       });
-      
+
       return false;
     }
   }

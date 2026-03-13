@@ -14,9 +14,7 @@ import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 // ═══════════════════════════════════════════════════════════════
 
 /** Percolator Stake program ID (devnet). Update for mainnet. */
-export const STAKE_PROGRAM_ID = new PublicKey(
-  '6aJb1F9CDCVWCNYFwj8aQsVb696YnW6J1FznteHq4Q6k'
-);
+export const STAKE_PROGRAM_ID = new PublicKey('6aJb1F9CDCVWCNYFwj8aQsVb696YnW6J1FznteHq4Q6k');
 
 // ═══════════════════════════════════════════════════════════════
 // Instruction Tags (match src/instruction.rs)
@@ -53,18 +51,12 @@ export const STAKE_IX = {
 
 /** Derive the stake pool PDA for a given slab (market). */
 export function deriveStakePool(slab: PublicKey, programId = STAKE_PROGRAM_ID) {
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from('stake_pool'), slab.toBuffer()],
-    programId,
-  );
+  return PublicKey.findProgramAddressSync([Buffer.from('stake_pool'), slab.toBuffer()], programId);
 }
 
 /** Derive the vault authority PDA (signs CPI, owns LP mint + vault). */
 export function deriveStakeVaultAuth(pool: PublicKey, programId = STAKE_PROGRAM_ID) {
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from('vault_auth'), pool.toBuffer()],
-    programId,
-  );
+  return PublicKey.findProgramAddressSync([Buffer.from('vault_auth'), pool.toBuffer()], programId);
 }
 
 /** Derive the per-user deposit PDA (tracks cooldown, deposit time). */
@@ -88,7 +80,7 @@ function u64Le(v: bigint | number): Buffer {
 function u128Le(v: bigint | number): Buffer {
   const buf = Buffer.alloc(16);
   const big = BigInt(v);
-  buf.writeBigUInt64LE(big & 0xFFFFFFFFFFFFFFFFn, 0);
+  buf.writeBigUInt64LE(big & 0xffffffffffffffffn, 0);
   buf.writeBigUInt64LE(big >> 64n, 8);
   return buf;
 }
@@ -100,12 +92,11 @@ function u16Le(v: number): Buffer {
 }
 
 /** Tag 0: InitPool — create stake pool for a slab. */
-export function encodeStakeInitPool(cooldownSlots: bigint | number, depositCap: bigint | number): Buffer {
-  return Buffer.concat([
-    Buffer.from([STAKE_IX.InitPool]),
-    u64Le(cooldownSlots),
-    u64Le(depositCap),
-  ]);
+export function encodeStakeInitPool(
+  cooldownSlots: bigint | number,
+  depositCap: bigint | number,
+): Buffer {
+  return Buffer.concat([Buffer.from([STAKE_IX.InitPool]), u64Le(cooldownSlots), u64Le(depositCap)]);
 }
 
 /** Tag 1: Deposit — deposit collateral, receive LP tokens. */
@@ -144,26 +135,17 @@ export function encodeStakeTransferAdmin(): Buffer {
 
 /** Tag 6: AdminSetOracleAuthority — forward to wrapper via CPI. */
 export function encodeStakeAdminSetOracleAuthority(newAuthority: PublicKey): Buffer {
-  return Buffer.concat([
-    Buffer.from([STAKE_IX.AdminSetOracleAuthority]),
-    newAuthority.toBuffer(),
-  ]);
+  return Buffer.concat([Buffer.from([STAKE_IX.AdminSetOracleAuthority]), newAuthority.toBuffer()]);
 }
 
 /** Tag 7: AdminSetRiskThreshold — forward to wrapper via CPI. */
 export function encodeStakeAdminSetRiskThreshold(newThreshold: bigint | number): Buffer {
-  return Buffer.concat([
-    Buffer.from([STAKE_IX.AdminSetRiskThreshold]),
-    u128Le(newThreshold),
-  ]);
+  return Buffer.concat([Buffer.from([STAKE_IX.AdminSetRiskThreshold]), u128Le(newThreshold)]);
 }
 
 /** Tag 8: AdminSetMaintenanceFee — forward to wrapper via CPI. */
 export function encodeStakeAdminSetMaintenanceFee(newFee: bigint | number): Buffer {
-  return Buffer.concat([
-    Buffer.from([STAKE_IX.AdminSetMaintenanceFee]),
-    u128Le(newFee),
-  ]);
+  return Buffer.concat([Buffer.from([STAKE_IX.AdminSetMaintenanceFee]), u128Le(newFee)]);
 }
 
 /** Tag 9: AdminResolveMarket — forward to wrapper via CPI. */
@@ -173,10 +155,7 @@ export function encodeStakeAdminResolveMarket(): Buffer {
 
 /** Tag 10: AdminWithdrawInsurance — withdraw insurance after market resolution. */
 export function encodeStakeAdminWithdrawInsurance(amount: bigint | number): Buffer {
-  return Buffer.concat([
-    Buffer.from([STAKE_IX.AdminWithdrawInsurance]),
-    u64Le(amount),
-  ]);
+  return Buffer.concat([Buffer.from([STAKE_IX.AdminWithdrawInsurance]), u64Le(amount)]);
 }
 
 /** Tag 12: AccrueFees — permissionless: accrue trading fees to LP vault. */
@@ -185,7 +164,10 @@ export function encodeStakeAccrueFees(): Buffer {
 }
 
 /** Tag 13: InitTradingPool — create pool in trading LP mode (pool_mode = 1). */
-export function encodeStakeInitTradingPool(cooldownSlots: bigint | number, depositCap: bigint | number): Buffer {
+export function encodeStakeInitTradingPool(
+  cooldownSlots: bigint | number,
+  depositCap: bigint | number,
+): Buffer {
   return Buffer.concat([
     Buffer.from([STAKE_IX.InitTradingPool]),
     u64Le(cooldownSlots),
@@ -194,10 +176,7 @@ export function encodeStakeInitTradingPool(cooldownSlots: bigint | number, depos
 }
 
 /** Tag 14 (PERC-313): AdminSetHwmConfig — enable HWM protection and set floor BPS. */
-export function encodeStakeAdminSetHwmConfig(
-  enabled: boolean,
-  hwmFloorBps: number,
-): Buffer {
+export function encodeStakeAdminSetHwmConfig(enabled: boolean, hwmFloorBps: number): Buffer {
   return Buffer.concat([
     Buffer.from([STAKE_IX.AdminSetHwmConfig]),
     Buffer.from([enabled ? 1 : 0]),
@@ -207,10 +186,7 @@ export function encodeStakeAdminSetHwmConfig(
 
 /** Tag 15 (PERC-303): AdminSetTrancheConfig — enable senior/junior LP tranches. */
 export function encodeStakeAdminSetTrancheConfig(juniorFeeMultBps: number): Buffer {
-  return Buffer.concat([
-    Buffer.from([STAKE_IX.AdminSetTrancheConfig]),
-    u16Le(juniorFeeMultBps),
-  ]);
+  return Buffer.concat([Buffer.from([STAKE_IX.AdminSetTrancheConfig]), u16Le(juniorFeeMultBps)]);
 }
 
 /** Tag 16 (PERC-303): DepositJunior — deposit into first-loss junior tranche. */
@@ -302,33 +278,54 @@ export function decodeStakePool(data: Buffer | Uint8Array): StakePoolState {
   const buf = Buffer.from(data);
   let off = 0;
 
-  const isInitialized = buf[off] === 1; off += 1;
-  const bump = buf[off]; off += 1;
-  const vaultAuthorityBump = buf[off]; off += 1;
-  const adminTransferred = buf[off] === 1; off += 1;
+  const isInitialized = buf[off] === 1;
+  off += 1;
+  const bump = buf[off];
+  off += 1;
+  const vaultAuthorityBump = buf[off];
+  off += 1;
+  const adminTransferred = buf[off] === 1;
+  off += 1;
   off += 4; // _padding
 
-  const slab = new PublicKey(buf.subarray(off, off + 32)); off += 32;
-  const admin = new PublicKey(buf.subarray(off, off + 32)); off += 32;
-  const collateralMint = new PublicKey(buf.subarray(off, off + 32)); off += 32;
-  const lpMint = new PublicKey(buf.subarray(off, off + 32)); off += 32;
-  const vault = new PublicKey(buf.subarray(off, off + 32)); off += 32;
+  const slab = new PublicKey(buf.subarray(off, off + 32));
+  off += 32;
+  const admin = new PublicKey(buf.subarray(off, off + 32));
+  off += 32;
+  const collateralMint = new PublicKey(buf.subarray(off, off + 32));
+  off += 32;
+  const lpMint = new PublicKey(buf.subarray(off, off + 32));
+  off += 32;
+  const vault = new PublicKey(buf.subarray(off, off + 32));
+  off += 32;
 
-  const totalDeposited = buf.readBigUInt64LE(off); off += 8;
-  const totalLpSupply = buf.readBigUInt64LE(off); off += 8;
-  const cooldownSlots = buf.readBigUInt64LE(off); off += 8;
-  const depositCap = buf.readBigUInt64LE(off); off += 8;
-  const totalFlushed = buf.readBigUInt64LE(off); off += 8;
-  const totalReturned = buf.readBigUInt64LE(off); off += 8;
-  const totalWithdrawn = buf.readBigUInt64LE(off); off += 8;
+  const totalDeposited = buf.readBigUInt64LE(off);
+  off += 8;
+  const totalLpSupply = buf.readBigUInt64LE(off);
+  off += 8;
+  const cooldownSlots = buf.readBigUInt64LE(off);
+  off += 8;
+  const depositCap = buf.readBigUInt64LE(off);
+  off += 8;
+  const totalFlushed = buf.readBigUInt64LE(off);
+  off += 8;
+  const totalReturned = buf.readBigUInt64LE(off);
+  off += 8;
+  const totalWithdrawn = buf.readBigUInt64LE(off);
+  off += 8;
 
-  const percolatorProgram = new PublicKey(buf.subarray(off, off + 32)); off += 32;
+  const percolatorProgram = new PublicKey(buf.subarray(off, off + 32));
+  off += 32;
 
   // PERC-272 fields
-  const totalFeesEarned = buf.readBigUInt64LE(off); off += 8;
-  const lastFeeAccrualSlot = buf.readBigUInt64LE(off); off += 8;
-  const lastVaultSnapshot = buf.readBigUInt64LE(off); off += 8;
-  const poolMode = buf[off]; off += 1;
+  const totalFeesEarned = buf.readBigUInt64LE(off);
+  off += 8;
+  const lastFeeAccrualSlot = buf.readBigUInt64LE(off);
+  off += 8;
+  const lastVaultSnapshot = buf.readBigUInt64LE(off);
+  off += 8;
+  const poolMode = buf[off];
+  off += 1;
   off += 7; // _mode_padding
 
   // _reserved (64 bytes) starts at off

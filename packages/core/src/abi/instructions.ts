@@ -1,4 +1,4 @@
-import { PublicKey } from "@solana/web3.js";
+import { PublicKey } from '@solana/web3.js';
 import {
   encU8,
   encU16,
@@ -9,7 +9,7 @@ import {
   encI128,
   encPubkey,
   concatBytes,
-} from "./encode.js";
+} from './encode.js';
 
 /**
  * Instruction tags - exact match to Rust ix::Instruction::decode
@@ -106,12 +106,12 @@ export const IX_TAG = {
 export interface InitMarketArgs {
   admin: PublicKey | string;
   collateralMint: PublicKey | string;
-  indexFeedId: string;           // Pyth feed ID (hex string, 64 chars without 0x prefix). All zeros = Hyperp mode.
-  maxStalenessSecs: bigint | string;  // Max staleness in SECONDS (Pyth Pull uses unix timestamps)
+  indexFeedId: string; // Pyth feed ID (hex string, 64 chars without 0x prefix). All zeros = Hyperp mode.
+  maxStalenessSecs: bigint | string; // Max staleness in SECONDS (Pyth Pull uses unix timestamps)
   confFilterBps: number;
-  invert: number;              // 0 = no inversion, 1 = invert oracle price (USD/SOL -> SOL/USD)
-  unitScale: number;           // Lamports per unit (0 = no scaling, e.g. 1000 = 1 SOL = 1,000,000 units)
-  initialMarkPriceE6: bigint | string;  // Initial mark price (required non-zero for Hyperp mode)
+  invert: number; // 0 = no inversion, 1 = invert oracle price (USD/SOL -> SOL/USD)
+  unitScale: number; // Lamports per unit (0 = no scaling, e.g. 1000 = 1 SOL = 1,000,000 units)
+  initialMarkPriceE6: bigint | string; // Initial mark price (required non-zero for Hyperp mode)
   warmupPeriodSlots: bigint | string;
   maintenanceMarginBps: bigint | string;
   initialMarginBps: bigint | string;
@@ -132,7 +132,7 @@ export interface InitMarketArgs {
  */
 function encodeFeedId(feedId: string): Uint8Array {
   // Remove 0x prefix if present
-  const hex = feedId.startsWith("0x") ? feedId.slice(2) : feedId;
+  const hex = feedId.startsWith('0x') ? feedId.slice(2) : feedId;
   if (hex.length !== 64) {
     throw new Error(`Invalid feed ID length: expected 64 hex chars, got ${hex.length}`);
   }
@@ -151,12 +151,12 @@ export function encodeInitMarket(args: InitMarketArgs): Uint8Array {
     encU8(IX_TAG.InitMarket),
     encPubkey(args.admin),
     encPubkey(args.collateralMint),
-    encodeFeedId(args.indexFeedId),   // index_feed_id (32 bytes) - all zeros for Hyperp mode
-    encU64(args.maxStalenessSecs),    // max_staleness_secs (Pyth Pull uses unix timestamps)
+    encodeFeedId(args.indexFeedId), // index_feed_id (32 bytes) - all zeros for Hyperp mode
+    encU64(args.maxStalenessSecs), // max_staleness_secs (Pyth Pull uses unix timestamps)
     encU16(args.confFilterBps),
     encU8(args.invert),
     encU32(args.unitScale),
-    encU64(args.initialMarkPriceE6),  // initial_mark_price_e6 (required non-zero for Hyperp)
+    encU64(args.initialMarkPriceE6), // initial_mark_price_e6 (required non-zero for Hyperp)
     encU64(args.warmupPeriodSlots),
     encU64(args.maintenanceMarginBps),
     encU64(args.initialMarginBps),
@@ -211,11 +211,7 @@ export interface DepositCollateralArgs {
 }
 
 export function encodeDepositCollateral(args: DepositCollateralArgs): Uint8Array {
-  return concatBytes(
-    encU8(IX_TAG.DepositCollateral),
-    encU16(args.userIdx),
-    encU64(args.amount),
-  );
+  return concatBytes(encU8(IX_TAG.DepositCollateral), encU16(args.userIdx), encU64(args.amount));
 }
 
 /**
@@ -227,11 +223,7 @@ export interface WithdrawCollateralArgs {
 }
 
 export function encodeWithdrawCollateral(args: WithdrawCollateralArgs): Uint8Array {
-  return concatBytes(
-    encU8(IX_TAG.WithdrawCollateral),
-    encU16(args.userIdx),
-    encU64(args.amount),
-  );
+  return concatBytes(encU8(IX_TAG.WithdrawCollateral), encU16(args.userIdx), encU64(args.amount));
 }
 
 /**
@@ -277,10 +269,7 @@ export interface LiquidateAtOracleArgs {
 }
 
 export function encodeLiquidateAtOracle(args: LiquidateAtOracleArgs): Uint8Array {
-  return concatBytes(
-    encU8(IX_TAG.LiquidateAtOracle),
-    encU16(args.targetIdx),
-  );
+  return concatBytes(encU8(IX_TAG.LiquidateAtOracle), encU16(args.targetIdx));
 }
 
 /**
@@ -356,10 +345,7 @@ export interface SetRiskThresholdArgs {
 }
 
 export function encodeSetRiskThreshold(args: SetRiskThresholdArgs): Uint8Array {
-  return concatBytes(
-    encU8(IX_TAG.SetRiskThreshold),
-    encU128(args.newThreshold),
-  );
+  return concatBytes(encU8(IX_TAG.SetRiskThreshold), encU128(args.newThreshold));
 }
 
 /**
@@ -408,8 +394,8 @@ export function encodeUpdateConfig(args: UpdateConfigArgs): Uint8Array {
     encU64(args.fundingHorizonSlots),
     encU64(args.fundingKBps),
     encU128(args.fundingInvScaleNotionalE6),
-    encI64(args.fundingMaxPremiumBps),  // Rust: i64 (can be negative)
-    encI64(args.fundingMaxBpsPerSlot),  // Rust: i64 (can be negative)
+    encI64(args.fundingMaxPremiumBps), // Rust: i64 (can be negative)
+    encI64(args.fundingMaxBpsPerSlot), // Rust: i64 (can be negative)
     encU128(args.threshFloor),
     encU64(args.threshRiskBps),
     encU64(args.threshUpdateIntervalSlots),
@@ -429,10 +415,7 @@ export interface SetMaintenanceFeeArgs {
 }
 
 export function encodeSetMaintenanceFee(args: SetMaintenanceFeeArgs): Uint8Array {
-  return concatBytes(
-    encU8(IX_TAG.SetMaintenanceFee),
-    encU128(args.newFee),
-  );
+  return concatBytes(encU8(IX_TAG.SetMaintenanceFee), encU128(args.newFee));
 }
 
 /**
@@ -444,10 +427,7 @@ export interface SetOracleAuthorityArgs {
 }
 
 export function encodeSetOracleAuthority(args: SetOracleAuthorityArgs): Uint8Array {
-  return concatBytes(
-    encU8(IX_TAG.SetOracleAuthority),
-    encPubkey(args.newAuthority),
-  );
+  return concatBytes(encU8(IX_TAG.SetOracleAuthority), encPubkey(args.newAuthority));
 }
 
 /**
@@ -461,11 +441,7 @@ export interface PushOraclePriceArgs {
 }
 
 export function encodePushOraclePrice(args: PushOraclePriceArgs): Uint8Array {
-  return concatBytes(
-    encU8(IX_TAG.PushOraclePrice),
-    encU64(args.priceE6),
-    encI64(args.timestamp),
-  );
+  return concatBytes(encU8(IX_TAG.PushOraclePrice), encU64(args.priceE6), encI64(args.timestamp));
 }
 
 /**
@@ -478,10 +454,7 @@ export interface SetOraclePriceCapArgs {
 }
 
 export function encodeSetOraclePriceCap(args: SetOraclePriceCapArgs): Uint8Array {
-  return concatBytes(
-    encU8(IX_TAG.SetOraclePriceCap),
-    encU64(args.maxChangeE2bps),
-  );
+  return concatBytes(encU8(IX_TAG.SetOraclePriceCap), encU64(args.maxChangeE2bps));
 }
 
 /**
@@ -510,10 +483,7 @@ export interface AdminForceCloseArgs {
 }
 
 export function encodeAdminForceClose(args: AdminForceCloseArgs): Uint8Array {
-  return concatBytes(
-    encU8(IX_TAG.AdminForceClose),
-    encU16(args.targetIdx),
-  );
+  return concatBytes(encU8(IX_TAG.AdminForceClose), encU16(args.targetIdx));
 }
 
 /**
@@ -795,7 +765,7 @@ export function encodeSetInsuranceIsolation(args: { bps: number }): Uint8Array {
  * Parsed vAMM matcher parameters (from on-chain matcher context account)
  */
 export interface VammMatcherParams {
-  mode: number;                    // 0 = Passive, 1 = vAMM
+  mode: number; // 0 = Passive, 1 = vAMM
   tradingFeeBps: number;
   baseSpreadBps: number;
   maxTotalBps: number;
@@ -873,10 +843,10 @@ export const ORACLE_PHASE_GROWING = 1;
 export const ORACLE_PHASE_MATURE = 2;
 
 /** Phase transition thresholds (must match program constants) */
-export const PHASE1_MIN_SLOTS = 648_000n;         // ~72h at 400ms
-export const PHASE1_VOLUME_MIN_SLOTS = 36_000n;    // ~4h at 400ms
+export const PHASE1_MIN_SLOTS = 648_000n; // ~72h at 400ms
+export const PHASE1_VOLUME_MIN_SLOTS = 36_000n; // ~4h at 400ms
 export const PHASE2_VOLUME_THRESHOLD = 100_000_000_000n; // $100K in e6
-export const PHASE2_MATURITY_SLOTS = 3_024_000n;   // ~14 days at 400ms
+export const PHASE2_MATURITY_SLOTS = 3_024_000n; // ~14 days at 400ms
 
 /**
  * Check if an oracle phase transition is due (TypeScript mirror of on-chain logic).
@@ -895,8 +865,8 @@ export function checkPhaseTransition(
     case 0: {
       const elapsed = currentSlot - (marketCreatedSlot > 0n ? marketCreatedSlot : currentSlot);
       const timeReady = elapsed >= PHASE1_MIN_SLOTS;
-      const volumeReady = elapsed >= PHASE1_VOLUME_MIN_SLOTS
-        && cumulativeVolumeE6 >= PHASE2_VOLUME_THRESHOLD;
+      const volumeReady =
+        elapsed >= PHASE1_VOLUME_MIN_SLOTS && cumulativeVolumeE6 >= PHASE2_VOLUME_THRESHOLD;
       if (timeReady || volumeReady) {
         return [ORACLE_PHASE_GROWING, true];
       }

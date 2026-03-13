@@ -1,7 +1,7 @@
-import type { Context, Next } from "hono";
-import { createLogger } from "@percolator/shared";
+import type { Context, Next } from 'hono';
+import { createLogger } from '@percolator/shared';
 
-const logger = createLogger("api:ip-blocklist");
+const logger = createLogger('api:ip-blocklist');
 
 /**
  * IP Blocklist Middleware
@@ -20,26 +20,26 @@ const logger = createLogger("api:ip-blocklist");
 const PROXY_DEPTH = Math.max(0, Number(process.env.TRUSTED_PROXY_DEPTH ?? 1));
 
 // Parse the env var once at startup
-const RAW_BLOCKLIST = (process.env.IP_BLOCKLIST ?? "")
-  .split(",")
+const RAW_BLOCKLIST = (process.env.IP_BLOCKLIST ?? '')
+  .split(',')
   .map((s) => s.trim())
   .filter(Boolean);
 
 if (RAW_BLOCKLIST.length > 0) {
-  logger.info("IP blocklist loaded", { count: RAW_BLOCKLIST.length, entries: RAW_BLOCKLIST });
+  logger.info('IP blocklist loaded', { count: RAW_BLOCKLIST.length, entries: RAW_BLOCKLIST });
 } else {
-  logger.info("IP blocklist is empty — no IPs will be blocked");
+  logger.info('IP blocklist is empty — no IPs will be blocked');
 }
 
 /** Convert a dotted-decimal IPv4 to a 32-bit integer */
 function ipToInt(ip: string): number {
-  const parts = ip.split(".").map(Number);
+  const parts = ip.split('.').map(Number);
   if (parts.length !== 4 || parts.some((p) => isNaN(p) || p < 0 || p > 255)) return -1;
   return ((parts[0]! << 24) | (parts[1]! << 16) | (parts[2]! << 8) | parts[3]!) >>> 0;
 }
 
 interface ParsedEntry {
-  type: "exact" | "cidr";
+  type: 'exact' | 'cidr';
   raw: string;
   // For exact matches
   ip?: string;
@@ -49,20 +49,20 @@ interface ParsedEntry {
 }
 
 function parseEntry(entry: string): ParsedEntry | null {
-  if (entry.includes("/")) {
-    const [addr, prefixStr] = entry.split("/");
+  if (entry.includes('/')) {
+    const [addr, prefixStr] = entry.split('/');
     const prefix = Number(prefixStr);
     if (!addr || isNaN(prefix) || prefix < 0 || prefix > 32) return null;
     const network = ipToInt(addr);
     if (network === -1) return null;
     const mask = prefix === 0 ? 0 : (~0 << (32 - prefix)) >>> 0;
-    return { type: "cidr", raw: entry, network: (network & mask) >>> 0, mask };
+    return { type: 'cidr', raw: entry, network: (network & mask) >>> 0, mask };
   }
-  return { type: "exact", raw: entry, ip: entry };
+  return { type: 'exact', raw: entry, ip: entry };
 }
 
 const PARSED_BLOCKLIST: ParsedEntry[] = RAW_BLOCKLIST.map(parseEntry).filter(
-  (e): e is ParsedEntry => e !== null
+  (e): e is ParsedEntry => e !== null,
 );
 
 function isBlocked(clientIp: string): boolean {
@@ -71,7 +71,7 @@ function isBlocked(clientIp: string): boolean {
   const clientInt = ipToInt(clientIp);
 
   for (const entry of PARSED_BLOCKLIST) {
-    if (entry.type === "exact") {
+    if (entry.type === 'exact') {
       if (clientIp === entry.ip) return true;
     } else {
       if (clientInt === -1) continue;
@@ -83,18 +83,18 @@ function isBlocked(clientIp: string): boolean {
 
 function getClientIp(c: Context): string {
   if (PROXY_DEPTH === 0) {
-    return c.req.header("x-real-ip") ?? "unknown";
+    return c.req.header('x-real-ip') ?? 'unknown';
   }
-  const forwarded = c.req.header("x-forwarded-for");
+  const forwarded = c.req.header('x-forwarded-for');
   if (forwarded) {
     const ips = forwarded
-      .split(",")
+      .split(',')
       .map((ip) => ip.trim())
       .filter(Boolean);
     const idx = Math.max(0, ips.length - PROXY_DEPTH);
-    return ips[idx] || "unknown";
+    return ips[idx] || 'unknown';
   }
-  return c.req.header("x-real-ip") ?? "unknown";
+  return c.req.header('x-real-ip') ?? 'unknown';
 }
 
 export function ipBlocklist() {
@@ -103,12 +103,12 @@ export function ipBlocklist() {
 
     const ip = getClientIp(c);
     if (isBlocked(ip)) {
-      logger.warn("Blocked request from blocklisted IP", {
+      logger.warn('Blocked request from blocklisted IP', {
         ip,
         path: c.req.path,
         method: c.req.method,
       });
-      return c.json({ error: "Forbidden" }, 403);
+      return c.json({ error: 'Forbidden' }, 403);
     }
 
     return next();

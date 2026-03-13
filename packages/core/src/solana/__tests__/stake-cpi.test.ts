@@ -15,7 +15,13 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { PublicKey, Keypair, SystemProgram, SYSVAR_RENT_PUBKEY, SYSVAR_CLOCK_PUBKEY } from '@solana/web3.js';
+import {
+  PublicKey,
+  Keypair,
+  SystemProgram,
+  SYSVAR_RENT_PUBKEY,
+  SYSVAR_CLOCK_PUBKEY,
+} from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 
 import {
@@ -460,7 +466,10 @@ describe('Stake Instruction Tags — No Gaps or Conflicts', () => {
       [STAKE_IX.AdminSetMaintenanceFee, encodeStakeAdminSetMaintenanceFee(0n)],
       [STAKE_IX.AdminResolveMarket, encodeStakeAdminResolveMarket()],
       [STAKE_IX.AdminWithdrawInsurance, encodeStakeAdminWithdrawInsurance(0n)],
-      [STAKE_IX.AdminSetInsurancePolicy, encodeStakeAdminSetInsurancePolicy(PublicKey.default, 0n, 0, 0n)],
+      [
+        STAKE_IX.AdminSetInsurancePolicy,
+        encodeStakeAdminSetInsurancePolicy(PublicKey.default, 0n, 0, 0n),
+      ],
     ];
 
     for (const [expectedTag, data] of tagMap) {

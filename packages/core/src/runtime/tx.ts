@@ -8,8 +8,8 @@ import {
   Commitment,
   AccountMeta,
   ComputeBudgetProgram,
-} from "@solana/web3.js";
-import { parseErrorFromLogs } from "../abi/errors.js";
+} from '@solana/web3.js';
+import { parseErrorFromLogs } from '../abi/errors.js';
 
 export interface BuildIxParams {
   programId: PublicKey;
@@ -52,10 +52,8 @@ export interface SimulateOrSendParams {
  * Simulate or send a transaction.
  * Returns consistent output for both modes.
  */
-export async function simulateOrSend(
-  params: SimulateOrSendParams
-): Promise<TxResult> {
-  const { connection, ix, signers, simulate, commitment = "confirmed", computeUnitLimit } = params;
+export async function simulateOrSend(params: SimulateOrSendParams): Promise<TxResult> {
+  const { connection, ix, signers, simulate, commitment = 'confirmed', computeUnitLimit } = params;
 
   const tx = new Transaction();
 
@@ -64,7 +62,7 @@ export async function simulateOrSend(
     tx.add(
       ComputeBudgetProgram.setComputeUnitLimit({
         units: computeUnitLimit,
-      })
+      }),
     );
   }
 
@@ -91,7 +89,7 @@ export async function simulateOrSend(
     }
 
     return {
-      signature: "(simulated)",
+      signature: '(simulated)',
       slot: result.context.slot,
       err,
       hint,
@@ -115,12 +113,12 @@ export async function simulateOrSend(
         blockhash: latestBlockhash.blockhash,
         lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
       },
-      commitment
+      commitment,
     );
 
     // Fetch logs
     const txInfo = await connection.getTransaction(signature, {
-      commitment: "confirmed",
+      commitment: 'confirmed',
       maxSupportedTransactionVersion: 0,
     });
 
@@ -148,7 +146,7 @@ export async function simulateOrSend(
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : String(e);
     return {
-      signature: "",
+      signature: '',
       slot: 0,
       err: message,
       logs: [],
@@ -175,7 +173,7 @@ export function formatResult(result: TxResult, jsonMode: boolean): string {
       lines.push(`Compute Units: ${result.unitsConsumed.toLocaleString()}`);
     }
     if (result.logs.length > 0) {
-      lines.push("Logs:");
+      lines.push('Logs:');
       result.logs.forEach((log) => lines.push(`  ${log}`));
     }
   } else {
@@ -184,10 +182,10 @@ export function formatResult(result: TxResult, jsonMode: boolean): string {
     if (result.unitsConsumed !== undefined) {
       lines.push(`Compute Units: ${result.unitsConsumed.toLocaleString()}`);
     }
-    if (result.signature !== "(simulated)") {
+    if (result.signature !== '(simulated)') {
       lines.push(`Explorer: https://explorer.solana.com/tx/${result.signature}`);
     }
   }
 
-  return lines.join("\n");
+  return lines.join('\n');
 }

@@ -1,4 +1,4 @@
-export type LogLevel = "debug" | "info" | "warn" | "error";
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 export interface LogContext {
   [key: string]: unknown;
@@ -19,7 +19,7 @@ interface LogEntry {
   context?: LogContext;
 }
 
-const isProd = process.env.NODE_ENV === "production";
+const isProd = process.env.NODE_ENV === 'production';
 
 /**
  * Serialize a value for JSON logging.
@@ -28,7 +28,7 @@ const isProd = process.env.NODE_ENV === "production";
  * message, name, stack, and cause into a plain object.
  */
 function serializeValue(value: unknown): unknown {
-  if (typeof value === "bigint") {
+  if (typeof value === 'bigint') {
     return value.toString();
   }
   if (value instanceof Error) {
@@ -49,7 +49,7 @@ function serializeValue(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(serializeValue);
   }
-  if (value !== null && typeof value === "object") {
+  if (value !== null && typeof value === 'object') {
     const obj: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value)) {
       obj[k] = serializeValue(v);
@@ -76,8 +76,10 @@ function serializeContext(context: LogContext): LogContext {
 function formatPretty(entry: LogEntry): string {
   const timestamp = new Date(entry.timestamp).toISOString();
   const level = entry.level.toUpperCase().padEnd(5);
-  const contextStr = entry.context ? ` ${JSON.stringify(entry.context, (_key, val) => typeof val === "bigint" ? val.toString() : val)}` : "";
-  
+  const contextStr = entry.context
+    ? ` ${JSON.stringify(entry.context, (_key, val) => (typeof val === 'bigint' ? val.toString() : val))}`
+    : '';
+
   return `[${timestamp}] ${level} [${entry.service}] ${entry.message}${contextStr}`;
 }
 
@@ -96,9 +98,9 @@ export function createLogger(service: string): Logger {
 
     if (isProd) {
       // JSON output in production (BigInt-safe replacer as safety net)
-      console.log(JSON.stringify(entry, (_key, val) =>
-        typeof val === "bigint" ? val.toString() : val
-      ));
+      console.log(
+        JSON.stringify(entry, (_key, val) => (typeof val === 'bigint' ? val.toString() : val)),
+      );
     } else {
       // Pretty output in development
       console.log(formatPretty(entry));
@@ -106,9 +108,9 @@ export function createLogger(service: string): Logger {
   }
 
   return {
-    debug: (message: string, context?: LogContext) => log("debug", message, context),
-    info: (message: string, context?: LogContext) => log("info", message, context),
-    warn: (message: string, context?: LogContext) => log("warn", message, context),
-    error: (message: string, context?: LogContext) => log("error", message, context),
+    debug: (message: string, context?: LogContext) => log('debug', message, context),
+    info: (message: string, context?: LogContext) => log('info', message, context),
+    warn: (message: string, context?: LogContext) => log('warn', message, context),
+    error: (message: string, context?: LogContext) => log('error', message, context),
   };
 }

@@ -1,4 +1,4 @@
-import { Connection, PublicKey } from "@solana/web3.js";
+import { Connection, PublicKey } from '@solana/web3.js';
 import {
   parseHeader,
   parseConfig,
@@ -9,7 +9,7 @@ import {
   type EngineState,
   type RiskParams,
   type SlabLayout,
-} from "./slab.js";
+} from './slab.js';
 
 /** V1 bitmap offset within engine struct (updated for PERC-120/121/122 struct changes) */
 const ENGINE_BITMAP_OFF = 656; // Updated for PERC-299 (608 + 24 emergency OI fields)
@@ -54,16 +54,46 @@ const MAGIC_BYTES = new Uint8Array([0x54, 0x41, 0x4c, 0x4f, 0x43, 0x52, 0x45, 0x
  *          in SLAB_TIERS_V0 for discovery of legacy on-chain accounts.
  */
 export const SLAB_TIERS = {
-  small:  { maxAccounts: 256,  dataSize: 65_352,    label: "Small",  description: "256 slots · ~0.45 SOL" },
-  medium: { maxAccounts: 1024, dataSize: 257_448,   label: "Medium", description: "1,024 slots · ~1.79 SOL" },
-  large:  { maxAccounts: 4096, dataSize: 1_025_832, label: "Large",  description: "4,096 slots · ~7.14 SOL" },
+  small: {
+    maxAccounts: 256,
+    dataSize: 65_352,
+    label: 'Small',
+    description: '256 slots · ~0.45 SOL',
+  },
+  medium: {
+    maxAccounts: 1024,
+    dataSize: 257_448,
+    label: 'Medium',
+    description: '1,024 slots · ~1.79 SOL',
+  },
+  large: {
+    maxAccounts: 4096,
+    dataSize: 1_025_832,
+    label: 'Large',
+    description: '4,096 slots · ~7.14 SOL',
+  },
 } as const;
 
 /** @deprecated V0 slab sizes — kept for backward compatibility with old on-chain slabs */
 export const SLAB_TIERS_V0 = {
-  small:  { maxAccounts: 256,  dataSize: 62_808,    label: "Small",  description: "256 slots · ~0.44 SOL" },
-  medium: { maxAccounts: 1024, dataSize: 248_760,   label: "Medium", description: "1,024 slots · ~1.73 SOL" },
-  large:  { maxAccounts: 4096, dataSize: 992_568,   label: "Large",  description: "4,096 slots · ~6.90 SOL" },
+  small: {
+    maxAccounts: 256,
+    dataSize: 62_808,
+    label: 'Small',
+    description: '256 slots · ~0.44 SOL',
+  },
+  medium: {
+    maxAccounts: 1024,
+    dataSize: 248_760,
+    label: 'Medium',
+    description: '1,024 slots · ~1.73 SOL',
+  },
+  large: {
+    maxAccounts: 4096,
+    dataSize: 992_568,
+    label: 'Large',
+    description: '4,096 slots · ~6.90 SOL',
+  },
 } as const;
 
 /** @deprecated Alias — use SLAB_TIERS (already V1) */
@@ -107,7 +137,7 @@ export function slabDataSize(maxAccounts: number): number {
  * verified on-chain) over this formula for production use.
  */
 export function slabDataSizeV1(maxAccounts: number): number {
-  const ENGINE_OFF_V1 = 640;  // HEADER(104) + CONFIG(536) aligned to 8 on SBF = 640
+  const ENGINE_OFF_V1 = 640; // HEADER(104) + CONFIG(536) aligned to 8 on SBF = 640
   const ENGINE_BITMAP_OFF_V1 = 656;
   const ACCOUNT_SIZE_V1 = 248;
   const bitmapBytes = Math.ceil(maxAccounts / 64) * 8;
@@ -132,8 +162,8 @@ export function validateSlabTierMatch(dataSize: number, programSlabLen: number):
 
 /** All known slab data sizes for discovery (V0 + V1 tiers) */
 const ALL_SLAB_SIZES = [
-  ...Object.values(SLAB_TIERS).map(t => t.dataSize),
-  ...Object.values(SLAB_TIERS_V0).map(t => t.dataSize),
+  ...Object.values(SLAB_TIERS).map((t) => t.dataSize),
+  ...Object.values(SLAB_TIERS_V0).map((t) => t.dataSize),
 ];
 
 /** Legacy constant for backward compat */
@@ -264,7 +294,7 @@ function parseEngineLight(
       isolatedBalance: readU128LE(data, base + 48),
       isolationBps: readU16LE(data, base + 64),
     },
-    currentSlot: readU64LE(data, base + 360),     // PERC-1094: params end at 72+288=360 (was 352)
+    currentSlot: readU64LE(data, base + 360), // PERC-1094: params end at 72+288=360 (was 352)
     fundingIndexQpbE6: readI128LE(data, base + 368),
     lastFundingSlot: readU64LE(data, base + 384),
     fundingRateBpsPerSlotLast: readI64LE(data, base + 392),
@@ -290,7 +320,7 @@ function parseEngineLight(
     emergencyOiMode: data[base + 608] !== 0,
     emergencyStartSlot: readU64LE(data, base + 616),
     lastBreakerSlot: readU64LE(data, base + 624),
-    markPriceE6: readU64LE(data, base + 400),      // PERC-1094: was 392
+    markPriceE6: readU64LE(data, base + 400), // PERC-1094: was 392
     numUsedAccounts: canReadNumUsed ? readU16LE(data, base + numUsedOff) : 0,
     nextAccountId: canReadNextId ? readU64LE(data, base + nextAccountIdOff) : 0n,
   };
@@ -307,30 +337,40 @@ export async function discoverMarkets(
   // Query all known slab sizes in parallel — both V0 (deployed devnet) and V1 (upgraded) tiers.
   // We track the actual dataSize per entry so detectSlabLayout can determine the correct layout,
   // and pass that layout to all parse functions (avoids wrong-version offsets on partial slices).
-  const ALL_TIERS = [
-    ...Object.values(SLAB_TIERS),
-    ...Object.values(SLAB_TIERS_V0),
-  ];
-  type RawEntry = { pubkey: PublicKey; account: { data: Buffer | Uint8Array }; maxAccounts: number; dataSize: number };
+  const ALL_TIERS = [...Object.values(SLAB_TIERS), ...Object.values(SLAB_TIERS_V0)];
+  type RawEntry = {
+    pubkey: PublicKey;
+    account: { data: Buffer | Uint8Array };
+    maxAccounts: number;
+    dataSize: number;
+  };
   let rawAccounts: RawEntry[] = [];
   try {
-    const queries = ALL_TIERS.map(tier =>
-      connection.getProgramAccounts(programId, {
-        filters: [{ dataSize: tier.dataSize }],
-        dataSlice: { offset: 0, length: HEADER_SLICE_LENGTH },
-      }).then(results => results.map(entry => ({ ...entry, maxAccounts: tier.maxAccounts, dataSize: tier.dataSize })))
+    const queries = ALL_TIERS.map((tier) =>
+      connection
+        .getProgramAccounts(programId, {
+          filters: [{ dataSize: tier.dataSize }],
+          dataSlice: { offset: 0, length: HEADER_SLICE_LENGTH },
+        })
+        .then((results) =>
+          results.map((entry) => ({
+            ...entry,
+            maxAccounts: tier.maxAccounts,
+            dataSize: tier.dataSize,
+          })),
+        ),
     );
     const results = await Promise.allSettled(queries);
     let hadRejection = false;
     for (const result of results) {
-      if (result.status === "fulfilled") {
+      if (result.status === 'fulfilled') {
         for (const entry of result.value) {
           rawAccounts.push(entry as RawEntry);
         }
       } else {
         hadRejection = true;
         console.warn(
-          "[discoverMarkets] Tier query rejected:",
+          '[discoverMarkets] Tier query rejected:',
           result.reason instanceof Error ? result.reason.message : result.reason,
         );
       }
@@ -338,24 +378,28 @@ export async function discoverMarkets(
     // NOTE: hadRejection guard removed — dataSize filters silently return 0 when on-chain
     // account size changed; RPC returns no error, so we must fallback on empty results too.
     if (rawAccounts.length === 0) {
-      console.warn("[discoverMarkets] dataSize filters returned 0 markets, falling back to memcmp");
+      console.warn('[discoverMarkets] dataSize filters returned 0 markets, falling back to memcmp');
       const fallback = await connection.getProgramAccounts(programId, {
         filters: [
           {
             memcmp: {
               offset: 0,
-              bytes: "F6P2QNqpQV5", // base58 of TALOCREP (u64 LE magic)
+              bytes: 'F6P2QNqpQV5', // base58 of TALOCREP (u64 LE magic)
             },
           },
         ],
         dataSlice: { offset: 0, length: HEADER_SLICE_LENGTH },
       });
       // Unknown actual size — use large V0 as safe default (maxAccounts=4096)
-      rawAccounts = [...fallback].map(e => ({ ...e, maxAccounts: 4096, dataSize: SLAB_TIERS.large.dataSize })) as RawEntry[];
+      rawAccounts = [...fallback].map((e) => ({
+        ...e,
+        maxAccounts: 4096,
+        dataSize: SLAB_TIERS.large.dataSize,
+      })) as RawEntry[];
     }
   } catch (err) {
     console.warn(
-      "[discoverMarkets] dataSize filters failed, falling back to memcmp:",
+      '[discoverMarkets] dataSize filters failed, falling back to memcmp:',
       err instanceof Error ? err.message : err,
     );
     const fallback = await connection.getProgramAccounts(programId, {
@@ -363,13 +407,17 @@ export async function discoverMarkets(
         {
           memcmp: {
             offset: 0,
-            bytes: "F6P2QNqpQV5", // base58 of TALOCREP (u64 LE magic)
+            bytes: 'F6P2QNqpQV5', // base58 of TALOCREP (u64 LE magic)
           },
         },
       ],
       dataSlice: { offset: 0, length: HEADER_SLICE_LENGTH },
     });
-    rawAccounts = [...fallback].map(e => ({ ...e, maxAccounts: 4096, dataSize: SLAB_TIERS.large.dataSize })) as RawEntry[];
+    rawAccounts = [...fallback].map((e) => ({
+      ...e,
+      maxAccounts: 4096,
+      dataSize: SLAB_TIERS.large.dataSize,
+    })) as RawEntry[];
   }
   const accounts = rawAccounts;
 

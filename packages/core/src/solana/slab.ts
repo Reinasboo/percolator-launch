@@ -1,4 +1,4 @@
-import { Connection, PublicKey } from "@solana/web3.js";
+import { Connection, PublicKey } from '@solana/web3.js';
 
 // =============================================================================
 // Browser-compatible read helpers using DataView
@@ -77,12 +77,12 @@ export interface SlabLayout {
   headerLen: number;
   configOffset: number;
   configLen: number;
-  reservedOff: number;          // offset of _reserved in header
+  reservedOff: number; // offset of _reserved in header
   engineOff: number;
   accountSize: number;
   maxAccounts: number;
   bitmapWords: number;
-  accountsOff: number;          // absolute offset of accounts array in slab
+  accountsOff: number; // absolute offset of accounts array in slab
 
   // Engine field offsets (relative to engineOff)
   engineInsuranceOff: number;
@@ -92,12 +92,12 @@ export interface SlabLayout {
   engineFundingIndexOff: number;
   engineLastFundingSlotOff: number;
   engineFundingRateBpsOff: number;
-  engineMarkPriceOff: number;           // -1 if not present (V0)
+  engineMarkPriceOff: number; // -1 if not present (V0)
   engineLastCrankSlotOff: number;
   engineMaxCrankStalenessOff: number;
   engineTotalOiOff: number;
-  engineLongOiOff: number;              // -1 if not present (V0)
-  engineShortOiOff: number;             // -1 if not present (V0)
+  engineLongOiOff: number; // -1 if not present (V0)
+  engineShortOiOff: number; // -1 if not present (V0)
   engineCTotOff: number;
   enginePnlPosTotOff: number;
   engineLiqCursorOff: number;
@@ -112,23 +112,23 @@ export interface SlabLayout {
   engineLpSumAbsOff: number;
   engineLpMaxAbsOff: number;
   engineLpMaxAbsSweepOff: number;
-  engineEmergencyOiModeOff: number;     // -1 if not present (V0)
-  engineEmergencyStartSlotOff: number;  // -1 if not present (V0)
-  engineLastBreakerSlotOff: number;     // -1 if not present (V0)
-  engineBitmapOff: number;              // relative to engineOff
+  engineEmergencyOiModeOff: number; // -1 if not present (V0)
+  engineEmergencyStartSlotOff: number; // -1 if not present (V0)
+  engineLastBreakerSlotOff: number; // -1 if not present (V0)
+  engineBitmapOff: number; // relative to engineOff
 
   // Insurance fund layout
   hasInsuranceIsolation: boolean;
-  engineInsuranceIsolatedOff: number;   // -1 if not present (V0)
+  engineInsuranceIsolatedOff: number; // -1 if not present (V0)
   engineInsuranceIsolationBpsOff: number; // -1 if not present (V0)
 }
 
 // ---- V0 layout constants (deployed devnet program) ----
 const V0_HEADER_LEN = 72;
 const V0_CONFIG_LEN = 408;
-const V0_ENGINE_OFF = 480;   // align_up(72 + 408, 8) = 480
+const V0_ENGINE_OFF = 480; // align_up(72 + 408, 8) = 480
 const V0_ACCOUNT_SIZE = 240;
-const V0_RESERVED_OFF = 48;  // magic(8)+version(4)+bump(1)+pad(3)+admin(32) = 48
+const V0_RESERVED_OFF = 48; // magic(8)+version(4)+bump(1)+pad(3)+admin(32) = 48
 
 // V0 engine: vault(16) + insurance{balance(16),fee_revenue(16)}=32 → params at 48
 // V0 RiskParams: 56 bytes → runtime state at 104
@@ -162,8 +162,8 @@ const V0_ENGINE_BITMAP_OFF = 320;
 // ENGINE_OFF = align_up(HEADER=104 + CONFIG=496, 8) = 600.
 // Previous value (640) was wrong — it assumed CONFIG_LEN=536 from the native build assertion.
 const V1_HEADER_LEN = 104;
-const V1_CONFIG_LEN = 496;   // BPF (SBF) on-chain value; native test build would be 512
-const V1_ENGINE_OFF = 600;   // align_up(104 + 496, 8) = 600  (was 640 — corrected in PERC-1094)
+const V1_CONFIG_LEN = 496; // BPF (SBF) on-chain value; native test build would be 512
+const V1_ENGINE_OFF = 600; // align_up(104 + 496, 8) = 600  (was 640 — corrected in PERC-1094)
 // Legacy: CONFIG_LEN=536 was used in pre-PERC-1094 SDK. Some orphaned slabs on devnet may use
 // ENGINE_OFF=640 (65352 bytes for small). We add them to V1_SIZES_LEGACY for read-only parsing.
 const V1_ENGINE_OFF_LEGACY = 640;
@@ -235,7 +235,10 @@ const V1_SIZES_LEGACY = new Map<number, number>();
 for (const n of TIERS) {
   V0_SIZES.set(computeSlabSize(V0_ENGINE_OFF, V0_ENGINE_BITMAP_OFF, V0_ACCOUNT_SIZE, n), n);
   V1_SIZES.set(computeSlabSize(V1_ENGINE_OFF, V1_ENGINE_BITMAP_OFF, V1_ACCOUNT_SIZE, n), n);
-  V1_SIZES_LEGACY.set(computeSlabSize(V1_ENGINE_OFF_LEGACY, V1_ENGINE_BITMAP_OFF, V1_ACCOUNT_SIZE, n), n);
+  V1_SIZES_LEGACY.set(
+    computeSlabSize(V1_ENGINE_OFF_LEGACY, V1_ENGINE_BITMAP_OFF, V1_ACCOUNT_SIZE, n),
+    n,
+  );
 }
 
 function buildLayout(version: 0 | 1, maxAccounts: number, engineOffOverride?: number): SlabLayout {
@@ -267,11 +270,15 @@ function buildLayout(version: 0 | 1, maxAccounts: number, engineOffOverride?: nu
     paramsSize: isV0 ? V0_PARAMS_SIZE : V1_PARAMS_SIZE,
     engineCurrentSlotOff: isV0 ? V0_ENGINE_CURRENT_SLOT_OFF : V1_ENGINE_CURRENT_SLOT_OFF,
     engineFundingIndexOff: isV0 ? V0_ENGINE_FUNDING_INDEX_OFF : V1_ENGINE_FUNDING_INDEX_OFF,
-    engineLastFundingSlotOff: isV0 ? V0_ENGINE_LAST_FUNDING_SLOT_OFF : V1_ENGINE_LAST_FUNDING_SLOT_OFF,
+    engineLastFundingSlotOff: isV0
+      ? V0_ENGINE_LAST_FUNDING_SLOT_OFF
+      : V1_ENGINE_LAST_FUNDING_SLOT_OFF,
     engineFundingRateBpsOff: isV0 ? V0_ENGINE_FUNDING_RATE_BPS_OFF : V1_ENGINE_FUNDING_RATE_BPS_OFF,
     engineMarkPriceOff: isV0 ? -1 : V1_ENGINE_MARK_PRICE_OFF,
     engineLastCrankSlotOff: isV0 ? V0_ENGINE_LAST_CRANK_SLOT_OFF : V1_ENGINE_LAST_CRANK_SLOT_OFF,
-    engineMaxCrankStalenessOff: isV0 ? V0_ENGINE_MAX_CRANK_STALENESS_OFF : V1_ENGINE_MAX_CRANK_STALENESS_OFF,
+    engineMaxCrankStalenessOff: isV0
+      ? V0_ENGINE_MAX_CRANK_STALENESS_OFF
+      : V1_ENGINE_MAX_CRANK_STALENESS_OFF,
     engineTotalOiOff: isV0 ? V0_ENGINE_TOTAL_OI_OFF : V1_ENGINE_TOTAL_OI_OFF,
     engineLongOiOff: isV0 ? -1 : V1_ENGINE_LONG_OI_OFF,
     engineShortOiOff: isV0 ? -1 : V1_ENGINE_SHORT_OI_OFF,
@@ -280,11 +287,17 @@ function buildLayout(version: 0 | 1, maxAccounts: number, engineOffOverride?: nu
     engineLiqCursorOff: isV0 ? V0_ENGINE_LIQ_CURSOR_OFF : V1_ENGINE_LIQ_CURSOR_OFF,
     engineGcCursorOff: isV0 ? V0_ENGINE_GC_CURSOR_OFF : V1_ENGINE_GC_CURSOR_OFF,
     engineLastSweepStartOff: isV0 ? V0_ENGINE_LAST_SWEEP_START_OFF : V1_ENGINE_LAST_SWEEP_START_OFF,
-    engineLastSweepCompleteOff: isV0 ? V0_ENGINE_LAST_SWEEP_COMPLETE_OFF : V1_ENGINE_LAST_SWEEP_COMPLETE_OFF,
+    engineLastSweepCompleteOff: isV0
+      ? V0_ENGINE_LAST_SWEEP_COMPLETE_OFF
+      : V1_ENGINE_LAST_SWEEP_COMPLETE_OFF,
     engineCrankCursorOff: isV0 ? V0_ENGINE_CRANK_CURSOR_OFF : V1_ENGINE_CRANK_CURSOR_OFF,
     engineSweepStartIdxOff: isV0 ? V0_ENGINE_SWEEP_START_IDX_OFF : V1_ENGINE_SWEEP_START_IDX_OFF,
-    engineLifetimeLiquidationsOff: isV0 ? V0_ENGINE_LIFETIME_LIQUIDATIONS_OFF : V1_ENGINE_LIFETIME_LIQUIDATIONS_OFF,
-    engineLifetimeForceClosesOff: isV0 ? V0_ENGINE_LIFETIME_FORCE_CLOSES_OFF : V1_ENGINE_LIFETIME_FORCE_CLOSES_OFF,
+    engineLifetimeLiquidationsOff: isV0
+      ? V0_ENGINE_LIFETIME_LIQUIDATIONS_OFF
+      : V1_ENGINE_LIFETIME_LIQUIDATIONS_OFF,
+    engineLifetimeForceClosesOff: isV0
+      ? V0_ENGINE_LIFETIME_FORCE_CLOSES_OFF
+      : V1_ENGINE_LIFETIME_FORCE_CLOSES_OFF,
     engineNetLpPosOff: isV0 ? V0_ENGINE_NET_LP_POS_OFF : V1_ENGINE_NET_LP_POS_OFF,
     engineLpSumAbsOff: isV0 ? V0_ENGINE_LP_SUM_ABS_OFF : V1_ENGINE_LP_SUM_ABS_OFF,
     engineLpMaxAbsOff: isV0 ? V0_ENGINE_LP_MAX_ABS_OFF : V1_ENGINE_LP_MAX_ABS_OFF,
@@ -527,7 +540,7 @@ export interface Account {
 
 export async function fetchSlab(
   connection: Connection,
-  slabPubkey: PublicKey
+  slabPubkey: PublicKey,
 ): Promise<Uint8Array> {
   const info = await connection.getAccountInfo(slabPubkey);
   if (!info) {
@@ -548,9 +561,8 @@ export function computeEffectiveOiCapBps(config: MarketConfig, currentSlot: bigi
   if (target === 0n) return 0n;
   if (config.oiRampSlots === 0n) return target;
   if (target <= RAMP_START_BPS) return target;
-  const elapsed = currentSlot > config.marketCreatedSlot
-    ? currentSlot - config.marketCreatedSlot
-    : 0n;
+  const elapsed =
+    currentSlot > config.marketCreatedSlot ? currentSlot - config.marketCreatedSlot : 0n;
   if (elapsed >= config.oiRampSlots) return target;
   const range = target - RAMP_START_BPS;
   const rampAdd = (range * elapsed) / config.oiRampSlots;
@@ -565,14 +577,14 @@ export function computeEffectiveOiCapBps(config: MarketConfig, currentSlot: bigi
 export function readNonce(data: Uint8Array): bigint {
   const layout = detectSlabLayout(data.length);
   const roff = layout ? layout.reservedOff : V0_RESERVED_OFF;
-  if (data.length < roff + 8) throw new Error("Slab data too short for nonce");
+  if (data.length < roff + 8) throw new Error('Slab data too short for nonce');
   return readU64LE(data, roff);
 }
 
 export function readLastThrUpdateSlot(data: Uint8Array): bigint {
   const layout = detectSlabLayout(data.length);
   const roff = layout ? layout.reservedOff : V0_RESERVED_OFF;
-  if (data.length < roff + 16) throw new Error("Slab data too short for lastThrUpdateSlot");
+  if (data.length < roff + 16) throw new Error('Slab data too short for lastThrUpdateSlot');
   return readU64LE(data, roff + 8);
 }
 
@@ -590,7 +602,9 @@ export function parseHeader(data: Uint8Array): SlabHeader {
 
   const magic = readU64LE(data, 0);
   if (magic !== MAGIC) {
-    throw new Error(`Invalid slab magic: expected ${MAGIC.toString(16)}, got ${magic.toString(16)}`);
+    throw new Error(
+      `Invalid slab magic: expected ${MAGIC.toString(16)}, got ${magic.toString(16)}`,
+    );
   }
 
   const version = readU32LE(data, 8);
@@ -778,7 +792,8 @@ export function parseConfig(data: Uint8Array, layoutHint?: SlabLayout | null): M
       // PERC-622: Read oracle phase fields from _insurance_isolation_padding
       // padding starts at off + 2 (after u16 insuranceIsolationBps)
       // [0..2] = mark_oracle_weight (PERC-118), [2] = oracle_phase, [3..11] = cumulative_volume, [11..14] = phase2_delta
-      if (remaining >= 56) { // 42 + 14 bytes padding
+      if (remaining >= 56) {
+        // 42 + 14 bytes padding
         const padOff = off + 2;
         oraclePhase = Math.min(readU8(data, padOff + 2), 2);
         cumulativeVolumeE6 = readU64LE(data, padOff + 3);
@@ -850,7 +865,7 @@ export function parseParams(data: Uint8Array, layoutHint?: SlabLayout | null): R
   const base = engineOff + paramsOff;
 
   if (data.length < base + Math.min(paramsSize, 56)) {
-    throw new Error("Slab data too short for RiskParams");
+    throw new Error('Slab data too short for RiskParams');
   }
 
   // Basic params present in both V0 and V1
@@ -890,7 +905,9 @@ export function parseParams(data: Uint8Array, layoutHint?: SlabLayout | null): R
 export function parseEngine(data: Uint8Array): EngineState {
   const layout = detectSlabLayout(data.length);
   if (!layout) {
-    throw new Error(`Unrecognized slab data length: ${data.length}. Cannot determine layout version.`);
+    throw new Error(
+      `Unrecognized slab data length: ${data.length}. Cannot determine layout version.`,
+    );
   }
 
   const base = layout.engineOff;
@@ -914,12 +931,8 @@ export function parseEngine(data: Uint8Array): EngineState {
     lastCrankSlot: readU64LE(data, base + layout.engineLastCrankSlotOff),
     maxCrankStalenessSlots: readU64LE(data, base + layout.engineMaxCrankStalenessOff),
     totalOpenInterest: readU128LE(data, base + layout.engineTotalOiOff),
-    longOi: layout.engineLongOiOff >= 0
-      ? readU128LE(data, base + layout.engineLongOiOff)
-      : 0n,
-    shortOi: layout.engineShortOiOff >= 0
-      ? readU128LE(data, base + layout.engineShortOiOff)
-      : 0n,
+    longOi: layout.engineLongOiOff >= 0 ? readU128LE(data, base + layout.engineLongOiOff) : 0n,
+    shortOi: layout.engineShortOiOff >= 0 ? readU128LE(data, base + layout.engineShortOiOff) : 0n,
     cTot: readU128LE(data, base + layout.engineCTotOff),
     pnlPosTot: readU128LE(data, base + layout.enginePnlPosTotOff),
     liqCursor: readU16LE(data, base + layout.engineLiqCursorOff),
@@ -934,18 +947,20 @@ export function parseEngine(data: Uint8Array): EngineState {
     lpSumAbs: readU128LE(data, base + layout.engineLpSumAbsOff),
     lpMaxAbs: readU128LE(data, base + layout.engineLpMaxAbsOff),
     lpMaxAbsSweep: readU128LE(data, base + layout.engineLpMaxAbsSweepOff),
-    emergencyOiMode: layout.engineEmergencyOiModeOff >= 0
-      ? data[base + layout.engineEmergencyOiModeOff] !== 0
-      : false,
-    emergencyStartSlot: layout.engineEmergencyStartSlotOff >= 0
-      ? readU64LE(data, base + layout.engineEmergencyStartSlotOff)
-      : 0n,
-    lastBreakerSlot: layout.engineLastBreakerSlotOff >= 0
-      ? readU64LE(data, base + layout.engineLastBreakerSlotOff)
-      : 0n,
-    markPriceE6: layout.engineMarkPriceOff >= 0
-      ? readU64LE(data, base + layout.engineMarkPriceOff)
-      : 0n,
+    emergencyOiMode:
+      layout.engineEmergencyOiModeOff >= 0
+        ? data[base + layout.engineEmergencyOiModeOff] !== 0
+        : false,
+    emergencyStartSlot:
+      layout.engineEmergencyStartSlotOff >= 0
+        ? readU64LE(data, base + layout.engineEmergencyStartSlotOff)
+        : 0n,
+    lastBreakerSlot:
+      layout.engineLastBreakerSlotOff >= 0
+        ? readU64LE(data, base + layout.engineLastBreakerSlotOff)
+        : 0n,
+    markPriceE6:
+      layout.engineMarkPriceOff >= 0 ? readU64LE(data, base + layout.engineMarkPriceOff) : 0n,
     numUsedAccounts: (() => {
       const bw = layout.bitmapWords;
       return readU16LE(data, base + layout.engineBitmapOff + bw * 8);
@@ -967,7 +982,7 @@ export function parseUsedIndices(data: Uint8Array): number[] {
 
   const base = layout.engineOff + layout.engineBitmapOff;
   if (data.length < base + layout.bitmapWords * 8) {
-    throw new Error("Slab data too short for bitmap");
+    throw new Error('Slab data too short for bitmap');
   }
 
   const used: number[] = [];
@@ -1022,7 +1037,7 @@ export function parseAccount(data: Uint8Array, idx: number): Account {
 
   const base = layout.accountsOff + idx * layout.accountSize;
   if (data.length < base + layout.accountSize) {
-    throw new Error("Slab data too short for account");
+    throw new Error('Slab data too short for account');
   }
 
   const kindByte = readU8(data, base + ACCT_KIND_OFF);
@@ -1039,8 +1054,12 @@ export function parseAccount(data: Uint8Array, idx: number): Account {
     positionSize: readI128LE(data, base + ACCT_POSITION_SIZE_OFF),
     entryPrice: readU64LE(data, base + ACCT_ENTRY_PRICE_OFF),
     fundingIndex: readI128LE(data, base + ACCT_FUNDING_INDEX_OFF),
-    matcherProgram: new PublicKey(data.subarray(base + ACCT_MATCHER_PROGRAM_OFF, base + ACCT_MATCHER_PROGRAM_OFF + 32)),
-    matcherContext: new PublicKey(data.subarray(base + ACCT_MATCHER_CONTEXT_OFF, base + ACCT_MATCHER_CONTEXT_OFF + 32)),
+    matcherProgram: new PublicKey(
+      data.subarray(base + ACCT_MATCHER_PROGRAM_OFF, base + ACCT_MATCHER_PROGRAM_OFF + 32),
+    ),
+    matcherContext: new PublicKey(
+      data.subarray(base + ACCT_MATCHER_CONTEXT_OFF, base + ACCT_MATCHER_CONTEXT_OFF + 32),
+    ),
     owner: new PublicKey(data.subarray(base + ACCT_OWNER_OFF, base + ACCT_OWNER_OFF + 32)),
     feeCredits: readI128LE(data, base + ACCT_FEE_CREDITS_OFF),
     lastFeeSlot: readU64LE(data, base + ACCT_LAST_FEE_SLOT_OFF),
@@ -1053,10 +1072,9 @@ export function parseAccount(data: Uint8Array, idx: number): Account {
 export function parseAllAccounts(data: Uint8Array): { idx: number; account: Account }[] {
   const indices = parseUsedIndices(data);
   const maxIdx = maxAccountIndex(data.length);
-  const validIndices = indices.filter(idx => idx < maxIdx);
-  return validIndices.map(idx => ({
+  const validIndices = indices.filter((idx) => idx < maxIdx);
+  return validIndices.map((idx) => ({
     idx,
     account: parseAccount(data, idx),
   }));
 }
-

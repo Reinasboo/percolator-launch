@@ -1,8 +1,22 @@
-import { Connection, PublicKey, type ParsedTransactionWithMeta } from "@solana/web3.js";
-import { IX_TAG, detectSlabLayout } from "@percolator/sdk";
-import { config, getConnection, insertTrade, tradeExistsBySignature, getMarkets, eventBus, decodeBase58, readU128LE, parseTradeSize, withRetry, createLogger, captureException, addBreadcrumb } from "@percolator/shared";
+import { Connection, PublicKey, type ParsedTransactionWithMeta } from '@solana/web3.js';
+import { IX_TAG, detectSlabLayout } from '@percolator/sdk';
+import {
+  config,
+  getConnection,
+  insertTrade,
+  tradeExistsBySignature,
+  getMarkets,
+  eventBus,
+  decodeBase58,
+  readU128LE,
+  parseTradeSize,
+  withRetry,
+  createLogger,
+  captureException,
+  addBreadcrumb,
+} from '@percolator/shared';
 
-const logger = createLogger("indexer:trade-indexer");
+const logger = createLogger('indexer:trade-indexer');
 
 /** Trade instruction tags we want to index */
 const TRADE_TAGS = new Set<number>([IX_TAG.TradeNoCpi, IX_TAG.TradeCpi]);
@@ -45,7 +59,7 @@ export class TradeIndexerPolling {
       this.pendingSlabs.add(payload.slabAddress);
       this.scheduleProcess();
     };
-    eventBus.on("crank.success", this.crankListener);
+    eventBus.on('crank.success', this.crankListener);
 
     // Initial backfill after short delay to let discovery finish
     setTimeout(() => this.backfill(), 5_000);
@@ -53,13 +67,13 @@ export class TradeIndexerPolling {
     // Start periodic polling (proactive mode)
     this.pollTimer = setInterval(() => this.pollAllMarkets(), POLL_INTERVAL_MS);
 
-    logger.info("TradeIndexerPolling started (backup mode)", { intervalMs: POLL_INTERVAL_MS });
+    logger.info('TradeIndexerPolling started (backup mode)', { intervalMs: POLL_INTERVAL_MS });
   }
 
   stop(): void {
     this._running = false;
     if (this.crankListener) {
-      eventBus.off("crank.success", this.crankListener);
+      eventBus.off('crank.success', this.crankListener);
       this.crankListener = null;
     }
     if (this.processTimer) {
@@ -70,7 +84,7 @@ export class TradeIndexerPolling {
       clearInterval(this.pollTimer);
       this.pollTimer = null;
     }
-    logger.info("TradeIndexer stopped");
+    logger.info('TradeIndexer stopped');
   }
 
   /**
@@ -83,23 +97,23 @@ export class TradeIndexerPolling {
     try {
       const markets = await getMarkets();
       if (markets.length === 0) {
-        logger.info("No markets found for backfill");
+        logger.info('No markets found for backfill');
         return;
       }
 
-      logger.info("Starting trade backfill", { marketCount: markets.length });
+      logger.info('Starting trade backfill', { marketCount: markets.length });
       for (const market of markets) {
         if (!this._running) break;
         try {
           await this.indexTradesForSlab(market.slab_address, BACKFILL_SIGNATURES);
         } catch (err) {
-          logger.error("Backfill error", { 
+          logger.error('Backfill error', {
             slabAddress: market.slab_address.slice(0, 8),
-            error: err instanceof Error ? err.message : err
+            error: err instanceof Error ? err.message : err,
           });
           captureException(err, {
             tags: {
-              context: "trade-indexer-backfill",
+              context: 'trade-indexer-backfill',
               slabAddress: market.slab_address,
             },
           });
@@ -107,9 +121,9 @@ export class TradeIndexerPolling {
         // Small delay between markets to avoid rate limits
         await sleep(1_000);
       }
-      logger.info("Trade backfill complete");
+      logger.info('Trade backfill complete');
     } catch (err) {
-      logger.error("Backfill failed", { error: err instanceof Error ? err.message : err });
+      logger.error('Backfill failed', { error: err instanceof Error ? err.message : err });
     }
   }
 
@@ -126,16 +140,16 @@ export class TradeIndexerPolling {
         try {
           await this.indexTradesForSlab(market.slab_address, MAX_SIGNATURES);
         } catch (err) {
-          logger.error("Poll error", { 
+          logger.error('Poll error', {
             slabAddress: market.slab_address.slice(0, 8),
-            error: err instanceof Error ? err.message : err
+            error: err instanceof Error ? err.message : err,
           });
         }
         // Small delay between markets
         await sleep(500);
       }
     } catch (err) {
-      logger.error("Poll failed", { error: err instanceof Error ? err.message : err });
+      logger.error('Poll failed', { error: err instanceof Error ? err.message : err });
     }
   }
 
@@ -153,7 +167,10 @@ export class TradeIndexerPolling {
         try {
           await this.indexTradesForSlab(slab);
         } catch (err) {
-          logger.error("Error indexing trade", { slabAddress: slab, error: err instanceof Error ? err.message : err });
+          logger.error('Error indexing trade', {
+            slabAddress: slab,
+            error: err instanceof Error ? err.message : err,
+          });
         }
       }
     }, 3_000); // 3s debounce after crank
@@ -171,17 +188,16 @@ export class TradeIndexerPolling {
 
     let signatures;
     try {
-      signatures = await withRetry(
-        () => connection.getSignaturesForAddress(slabPk, opts),
-        { 
-          maxRetries: 3, 
-          baseDelayMs: 1000, 
-          label: `getSignaturesForAddress(${slabAddress.slice(0, 8)})` 
-        }
-      );
+      signatures = await withRetry(() => connection.getSignaturesForAddress(slabPk, opts), {
+        maxRetries: 3,
+        baseDelayMs: 1000,
+        label: `getSignaturesForAddress(${slabAddress.slice(0, 8)})`,
+      });
     } catch (err) {
-      console.warn(`[TradeIndexer] Failed to get signatures for ${slabAddress.slice(0, 8)}... after retries:`,
-        err instanceof Error ? err.message : err);
+      console.warn(
+        `[TradeIndexer] Failed to get signatures for ${slabAddress.slice(0, 8)}... after retries:`,
+        err instanceof Error ? err.message : err,
+      );
       return;
     }
 
@@ -191,7 +207,7 @@ export class TradeIndexerPolling {
     this.lastSignature.set(slabAddress, signatures[0].signature);
 
     // Filter out errored transactions
-    const validSigs = signatures.filter(s => !s.err).map(s => s.signature);
+    const validSigs = signatures.filter((s) => !s.err).map((s) => s.signature);
     if (validSigs.length === 0) return;
 
     let indexed = 0;
@@ -200,19 +216,21 @@ export class TradeIndexerPolling {
     for (let i = 0; i < validSigs.length; i += 5) {
       const batch = validSigs.slice(i, i + 5);
       const txResults = await Promise.allSettled(
-        batch.map(sig => withRetry(
-          () => connection.getParsedTransaction(sig, { maxSupportedTransactionVersion: 0 }),
-          { 
-            maxRetries: 3, 
-            baseDelayMs: 1000, 
-            label: `getParsedTransaction(${sig.slice(0, 12)})` 
-          }
-        ))
+        batch.map((sig) =>
+          withRetry(
+            () => connection.getParsedTransaction(sig, { maxSupportedTransactionVersion: 0 }),
+            {
+              maxRetries: 3,
+              baseDelayMs: 1000,
+              label: `getParsedTransaction(${sig.slice(0, 12)})`,
+            },
+          ),
+        ),
       );
 
       for (let j = 0; j < txResults.length; j++) {
         const result = txResults[j];
-        if (result.status !== "fulfilled" || !result.value) continue;
+        if (result.status !== 'fulfilled' || !result.value) continue;
 
         const tx = result.value;
         const sig = batch[j];
@@ -222,7 +240,10 @@ export class TradeIndexerPolling {
           if (didIndex) indexed++;
         } catch (err) {
           // Non-fatal: skip this tx, continue with others
-          console.warn(`[TradeIndexer] Failed to process tx ${sig.slice(0, 12)}...:`, err instanceof Error ? err.message : err);
+          console.warn(
+            `[TradeIndexer] Failed to process tx ${sig.slice(0, 12)}...:`,
+            err instanceof Error ? err.message : err,
+          );
         }
       }
     }
@@ -244,7 +265,7 @@ export class TradeIndexerPolling {
 
     for (const ix of message.instructions) {
       // Skip parsed instructions (system, token, etc.)
-      if ("parsed" in ix) continue;
+      if ('parsed' in ix) continue;
 
       // Check if this instruction is for one of our programs
       const programId = ix.programId.toBase58();
@@ -283,17 +304,21 @@ export class TradeIndexerPolling {
       // Validate inputs
       const base58PubkeyRegex = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
       const base58SigRegex = /^[1-9A-HJ-NP-Za-km-z]{64,88}$/;
-      
+
       if (!base58PubkeyRegex.test(trader)) {
-        console.warn(`[TradeIndexer] Invalid trader pubkey format: ${trader.slice(0, 12)}... - skipping`);
+        console.warn(
+          `[TradeIndexer] Invalid trader pubkey format: ${trader.slice(0, 12)}... - skipping`,
+        );
         return false;
       }
-      
+
       if (!base58SigRegex.test(signature)) {
-        console.warn(`[TradeIndexer] Invalid signature format: ${signature.slice(0, 12)}... - skipping`);
+        console.warn(
+          `[TradeIndexer] Invalid signature format: ${signature.slice(0, 12)}... - skipping`,
+        );
         return false;
       }
-      
+
       // Validate size is within i128 range
       const i128Max = (1n << 127n) - 1n;
       if (sizeValue > i128Max) {
@@ -311,7 +336,12 @@ export class TradeIndexerPolling {
         tx_signature: signature,
       });
 
-      eventBus.publish("trade.executed", slabAddress, { signature, trader, side, size: sizeValue.toString() });
+      eventBus.publish('trade.executed', slabAddress, {
+        signature,
+        trader,
+        side,
+        size: sizeValue.toString(),
+      });
       return true;
     }
 
@@ -328,16 +358,14 @@ export class TradeIndexerPolling {
     const valuePattern = /0x[0-9a-fA-F]+|\d+/g;
 
     for (const log of tx.meta.logMessages) {
-      if (!log.startsWith("Program log: ")) continue;
-      const payload = log.slice("Program log: ".length).trim();
+      if (!log.startsWith('Program log: ')) continue;
+      const payload = log.slice('Program log: '.length).trim();
       if (!/^[\d, a-fA-Fx]+$/.test(payload)) continue;
 
       const matches = payload.match(valuePattern);
       if (!matches || matches.length < 2) continue;
 
-      const values = matches.map((v) =>
-        v.startsWith("0x") ? parseInt(v, 16) : Number(v),
-      );
+      const values = matches.map((v) => (v.startsWith('0x') ? parseInt(v, 16) : Number(v)));
 
       for (const v of values) {
         // Reasonable price_e6 range: $0.001 to $1,000,000
@@ -354,7 +382,10 @@ export class TradeIndexerPolling {
    * Fallback: read mark_price_e6 from the slab account's on-chain state.
    * This gives the current mark price (close to execution price for recent trades).
    */
-  private async readMarkPriceFromSlab(connection: Connection, slabAddress: string): Promise<number> {
+  private async readMarkPriceFromSlab(
+    connection: Connection,
+    slabAddress: string,
+  ): Promise<number> {
     try {
       const info = await connection.getAccountInfo(new PublicKey(slabAddress));
       if (!info?.data) return 0;
@@ -375,7 +406,7 @@ export class TradeIndexerPolling {
         return Number(markPriceE6) / 1_000_000;
       }
     } catch (err) {
-      logger.warn("Failed to read mark price from slab", {
+      logger.warn('Failed to read mark price from slab', {
         slabAddress: slabAddress.slice(0, 8),
         error: err instanceof Error ? err.message : err,
       });
@@ -385,5 +416,5 @@ export class TradeIndexerPolling {
 }
 
 function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

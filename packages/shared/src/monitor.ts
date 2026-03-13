@@ -1,7 +1,7 @@
-import { createLogger } from "./logger.js";
-import { sendCriticalAlert, sendWarningAlert } from "./alerts.js";
+import { createLogger } from './logger.js';
+import { sendCriticalAlert, sendWarningAlert } from './alerts.js';
 
-const logger = createLogger("monitor");
+const logger = createLogger('monitor');
 
 interface MonitorThresholds {
   /** Max consecutive failures before alerting */
@@ -34,7 +34,7 @@ const ALERT_COOLDOWN_MS = 300_000;
 
 /**
  * Service health monitor with automatic Discord alerting.
- * 
+ *
  * Tracks consecutive failures, staleness, and error rates.
  * Sends Discord alerts when thresholds are exceeded.
  * Auto-recovers and sends resolution alerts.
@@ -45,11 +45,7 @@ export class ServiceMonitor {
   private serviceName: string;
   private checkName: string;
 
-  constructor(
-    serviceName: string,
-    checkName: string,
-    thresholds?: Partial<MonitorThresholds>
-  ) {
+  constructor(serviceName: string, checkName: string, thresholds?: Partial<MonitorThresholds>) {
     this.serviceName = serviceName;
     this.checkName = checkName;
     this.thresholds = { ...DEFAULT_THRESHOLDS, ...thresholds };
@@ -74,18 +70,15 @@ export class ServiceMonitor {
     // Send recovery alert if we were previously alerting
     if (wasAlerting) {
       this.state.alertSent = false;
-      logger.info("Service recovered", {
+      logger.info('Service recovered', {
         service: this.serviceName,
         check: this.checkName,
       });
-      await sendWarningAlert(
-        `✅ ${this.serviceName} — ${this.checkName} recovered`,
-        [
-          { name: "Service", value: this.serviceName, inline: true },
-          { name: "Check", value: this.checkName, inline: true },
-          { name: "Error Rate", value: `${(this.getErrorRate() * 100).toFixed(1)}%`, inline: true },
-        ]
-      );
+      await sendWarningAlert(`✅ ${this.serviceName} — ${this.checkName} recovered`, [
+        { name: 'Service', value: this.serviceName, inline: true },
+        { name: 'Check', value: this.checkName, inline: true },
+        { name: 'Error Rate', value: `${(this.getErrorRate() * 100).toFixed(1)}%`, inline: true },
+      ]);
     }
   }
 
@@ -108,18 +101,22 @@ export class ServiceMonitor {
       this.state.lastAlertTime = Date.now();
 
       const fields = [
-        { name: "Service", value: this.serviceName, inline: true },
-        { name: "Check", value: this.checkName, inline: true },
-        { name: "Consecutive Failures", value: this.state.consecutiveFailures.toString(), inline: true },
-        { name: "Error Rate", value: `${(errorRate * 100).toFixed(1)}%`, inline: true },
-        { name: "Time Since Success", value: formatDuration(timeSinceSuccess), inline: true },
+        { name: 'Service', value: this.serviceName, inline: true },
+        { name: 'Check', value: this.checkName, inline: true },
+        {
+          name: 'Consecutive Failures',
+          value: this.state.consecutiveFailures.toString(),
+          inline: true,
+        },
+        { name: 'Error Rate', value: `${(errorRate * 100).toFixed(1)}%`, inline: true },
+        { name: 'Time Since Success', value: formatDuration(timeSinceSuccess), inline: true },
       ];
 
       if (error) {
-        fields.push({ name: "Last Error", value: error.slice(0, 200), inline: false });
+        fields.push({ name: 'Last Error', value: error.slice(0, 200), inline: false });
       }
 
-      logger.error("Monitor threshold exceeded", {
+      logger.error('Monitor threshold exceeded', {
         service: this.serviceName,
         check: this.checkName,
         consecutiveFailures: this.state.consecutiveFailures,
@@ -127,10 +124,7 @@ export class ServiceMonitor {
         timeSinceSuccessMs: timeSinceSuccess,
       });
 
-      await sendCriticalAlert(
-        `${this.serviceName} — ${this.checkName} failing`,
-        fields
-      );
+      await sendCriticalAlert(`${this.serviceName} — ${this.checkName} failing`, fields);
     }
   }
 
@@ -179,21 +173,21 @@ export class ServiceMonitor {
  */
 export function createServiceMonitors(serviceName: string) {
   return {
-    rpc: new ServiceMonitor(serviceName, "RPC Connectivity", {
+    rpc: new ServiceMonitor(serviceName, 'RPC Connectivity', {
       maxConsecutiveFailures: 3,
       maxStalenessMs: 120_000, // 2 min
       maxErrorRate: 0.1,
     }),
-    scan: new ServiceMonitor(serviceName, "Market Scan", {
+    scan: new ServiceMonitor(serviceName, 'Market Scan', {
       maxConsecutiveFailures: 3,
       maxStalenessMs: 300_000, // 5 min
     }),
-    oracle: new ServiceMonitor(serviceName, "Oracle Price", {
+    oracle: new ServiceMonitor(serviceName, 'Oracle Price', {
       maxConsecutiveFailures: 5,
       maxStalenessMs: 30_000, // 30s — oracle staleness is critical
       maxErrorRate: 0.2,
     }),
-    db: new ServiceMonitor(serviceName, "Database", {
+    db: new ServiceMonitor(serviceName, 'Database', {
       maxConsecutiveFailures: 2,
       maxStalenessMs: 60_000, // 1 min
     }),

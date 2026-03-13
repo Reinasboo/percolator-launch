@@ -1,13 +1,13 @@
-import { z } from "zod";
+import { z } from 'zod';
 
 /**
  * Base58 address schema (32-44 chars, base58 charset only)
  */
 export const slabAddressSchema = z
   .string()
-  .min(32, "Slab address must be at least 32 characters")
-  .max(44, "Slab address must be at most 44 characters")
-  .regex(/^[1-9A-HJ-NP-Za-km-z]+$/, "Invalid base58 address");
+  .min(32, 'Slab address must be at least 32 characters')
+  .max(44, 'Slab address must be at most 44 characters')
+  .regex(/^[1-9A-HJ-NP-Za-km-z]+$/, 'Invalid base58 address');
 
 /**
  * Market registration schema for POST /markets
@@ -31,7 +31,7 @@ export const paginationSchema = z.object({
  * Required in production, optional with defaults in dev
  */
 const envSchemaBase = z.object({
-  NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   RPC_URL: z.string().url().optional(),
   FALLBACK_RPC_URL: z.string().url().optional(),
   HELIUS_API_KEY: z.string().optional(), // legacy fallback — prefer HELIUS_DEVNET/MAINNET_API_KEY
@@ -57,34 +57,34 @@ export type EnvSchema = z.infer<typeof envSchemaBase>;
  * Production refinement: require critical env vars
  */
 const envSchema = envSchemaBase.superRefine((data, ctx) => {
-  if (data.NODE_ENV === "production") {
+  if (data.NODE_ENV === 'production') {
     // Critical production requirements
     if (!data.RPC_URL) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "RPC_URL is required in production",
-        path: ["RPC_URL"],
+        message: 'RPC_URL is required in production',
+        path: ['RPC_URL'],
       });
     }
     if (!data.SUPABASE_URL) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "SUPABASE_URL is required in production",
-        path: ["SUPABASE_URL"],
+        message: 'SUPABASE_URL is required in production',
+        path: ['SUPABASE_URL'],
       });
     }
     if (!data.SUPABASE_KEY) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "SUPABASE_KEY is required in production",
-        path: ["SUPABASE_KEY"],
+        message: 'SUPABASE_KEY is required in production',
+        path: ['SUPABASE_KEY'],
       });
     }
     if (!data.SUPABASE_SERVICE_ROLE_KEY) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "SUPABASE_SERVICE_ROLE_KEY is required in production",
-        path: ["SUPABASE_SERVICE_ROLE_KEY"],
+        message: 'SUPABASE_SERVICE_ROLE_KEY is required in production',
+        path: ['SUPABASE_SERVICE_ROLE_KEY'],
       });
     }
   }
@@ -99,9 +99,9 @@ export function validateEnv(): EnvSchema {
 
   if (!result.success) {
     const errors = result.error.issues
-      .map((err: z.ZodIssue) => `  - ${err.path.join(".")}: ${err.message}`)
-      .join("\n");
-    
+      .map((err: z.ZodIssue) => `  - ${err.path.join('.')}: ${err.message}`)
+      .join('\n');
+
     throw new Error(`Environment validation failed:\n${errors}`);
   }
 

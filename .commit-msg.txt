@@ -1,0 +1,8 @@
+fix(N6): remove dead ORACLE_BRIDGE_URL import from airdrop/route.ts
+
+ORACLE_BRIDGE_URL was declared but never used in app/app/api/airdrop/route.ts.
+A code comment indicated it was removed in favor of the markets_with_stats
+Supabase view. The dead constant misleads code readers about the price data
+source and should be removed.
+
+Closes: audit finding N6 (Informational)

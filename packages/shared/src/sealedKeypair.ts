@@ -1,15 +1,15 @@
 /**
  * Sealed Keypair Module
- * 
+ *
  * Provides a signer interface that seals the private key and never exposes it.
  * The private key is loaded once on app startup and only used for signing.
  * Raw key material is never stored in config or logged.
  */
 
-import { Keypair, Transaction, VersionedTransaction } from "@solana/web3.js";
+import { Keypair, Transaction, VersionedTransaction } from '@solana/web3.js';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-import _bs58 from "bs58";
-import nacl from "tweetnacl";
+import _bs58 from 'bs58';
+import nacl from 'tweetnacl';
 
 // bs58 v6 types vary across module-resolution strategies; cast to avoid CI breakage
 const bs58: { encode(buf: Uint8Array): string; decode(str: string): Uint8Array } = _bs58 as any;
@@ -21,10 +21,10 @@ const bs58: { encode(buf: Uint8Array): string; decode(str: string): Uint8Array }
 export interface SealedSigner {
   /** Public key of the signer */
   publicKey(): string;
-  
+
   /** Sign a transaction (sealed key never exposed) */
   signTransaction(tx: Transaction | VersionedTransaction): Transaction | VersionedTransaction;
-  
+
   /** Sign a message */
   signMessage(message: Uint8Array): Uint8Array;
 }
@@ -32,7 +32,7 @@ export interface SealedSigner {
 /**
  * Load and seal a keypair from environment variable.
  * The private key is never stored in config or exposed.
- * 
+ *
  * @throws Error if CRANK_KEYPAIR is not set or invalid
  */
 export function loadSealedKeypair(env: NodeJS.ProcessEnv): SealedSigner {
@@ -41,10 +41,10 @@ export function loadSealedKeypair(env: NodeJS.ProcessEnv): SealedSigner {
   // 1. Validate key is set
   if (!rawKey) {
     throw new Error(
-      "❌ CRANK_KEYPAIR env var is required.\n" +
-      "Set it to a base58-encoded or JSON-array-encoded Solana secret key.\n" +
-      "Never commit private keys to version control.\n" +
-      "Use a secrets manager (1Password, Vault, etc.) for production."
+      '❌ CRANK_KEYPAIR env var is required.\n' +
+        'Set it to a base58-encoded or JSON-array-encoded Solana secret key.\n' +
+        'Never commit private keys to version control.\n' +
+        'Use a secrets manager (1Password, Vault, etc.) for production.',
     );
   }
 
@@ -53,15 +53,15 @@ export function loadSealedKeypair(env: NodeJS.ProcessEnv): SealedSigner {
   try {
     // Try base58 format
     const decoded = bs58.decode(rawKey);
-    
+
     // Validate length (Solana keypair must be 64 bytes)
     if (decoded.length !== 64) {
       throw new Error(
         `Invalid key length: expected 64 bytes, got ${decoded.length}. ` +
-        `Did you paste only the public key instead of the full keypair?`
+          `Did you paste only the public key instead of the full keypair?`,
       );
     }
-    
+
     keypair = Keypair.fromSecretKey(decoded);
   } catch (e) {
     // Try JSON array format
@@ -74,17 +74,18 @@ export function loadSealedKeypair(env: NodeJS.ProcessEnv): SealedSigner {
       keypair = Keypair.fromSecretKey(decoded);
     } catch (jsonError) {
       throw new Error(
-        "❌ Invalid CRANK_KEYPAIR format.\n" +
-        "Must be either:\n" +
-        "  1. Base58-encoded secret key (44-88 characters)\n" +
-        "  2. JSON array of 64 bytes: [1, 2, 3, ..., 64]\n" +
-        "Got: " + (rawKey.length > 50 ? rawKey.substring(0, 50) + "..." : rawKey)
+        '❌ Invalid CRANK_KEYPAIR format.\n' +
+          'Must be either:\n' +
+          '  1. Base58-encoded secret key (44-88 characters)\n' +
+          '  2. JSON array of 64 bytes: [1, 2, 3, ..., 64]\n' +
+          'Got: ' +
+          (rawKey.length > 50 ? rawKey.substring(0, 50) + '...' : rawKey),
       );
     }
   }
 
   // 3. Return sealed signer (key is sealed in closure, never exposed)
-  return createSealedSigner(keypair, env.AUDIT_SIGNING_LOG === "1");
+  return createSealedSigner(keypair, env.AUDIT_SIGNING_LOG === '1');
 }
 
 /**
@@ -116,9 +117,7 @@ function createSealedSigner(keypair: Keypair, auditEnabled: boolean): SealedSign
 
     signMessage(message: Uint8Array): Uint8Array {
       if (auditEnabled) {
-        console.log(
-          `[AUDIT] Signing message (${message.length} bytes)`
-        );
+        console.log(`[AUDIT] Signing message (${message.length} bytes)`);
       }
 
       return nacl.sign.detached(message, keypair.secretKey);
@@ -130,17 +129,14 @@ function createSealedSigner(keypair: Keypair, auditEnabled: boolean): SealedSign
  * Validate that a sealed signer is properly configured.
  * @throws Error if public key doesn't match expected address
  */
-export function validateSigner(
-  signer: SealedSigner,
-  expectedPublicKey?: string
-): void {
+export function validateSigner(signer: SealedSigner, expectedPublicKey?: string): void {
   const publicKey = signer.publicKey();
 
   // Basic validation: public key looks like a Solana address
   if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(publicKey)) {
     throw new Error(
       `❌ Invalid public key from signer: ${publicKey}. ` +
-      `Expected base58-encoded Solana address.`
+        `Expected base58-encoded Solana address.`,
     );
   }
 
@@ -148,9 +144,9 @@ export function validateSigner(
   if (expectedPublicKey && publicKey !== expectedPublicKey) {
     throw new Error(
       `❌ Signer public key mismatch.\n` +
-      `Expected: ${expectedPublicKey}\n` +
-      `Got: ${publicKey}\n` +
-      `Check that CRANK_KEYPAIR matches the intended signer.`
+        `Expected: ${expectedPublicKey}\n` +
+        `Got: ${publicKey}\n` +
+        `Check that CRANK_KEYPAIR matches the intended signer.`,
     );
   }
 

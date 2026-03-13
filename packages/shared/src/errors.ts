@@ -1,6 +1,6 @@
 /**
  * Type-safe error handling utilities for Percolator services.
- * 
+ *
  * Provides structured error types and type guards to replace generic `unknown` error typing
  * throughout the codebase. Enables better error handling with compile-time type safety.
  */
@@ -49,10 +49,10 @@ export interface RpcError {
 
 /**
  * Type guard to check if error is an ApiError.
- * 
+ *
  * @param e - Unknown error value to check
  * @returns True if error has ApiError structure (status, code, message)
- * 
+ *
  * @example
  * try {
  *   await risky();
@@ -64,57 +64,57 @@ export interface RpcError {
  */
 export function isApiError(e: unknown): e is ApiError {
   return (
-    typeof e === "object" &&
+    typeof e === 'object' &&
     e !== null &&
-    typeof (e as Partial<ApiError>).status === "number" &&
-    typeof (e as Partial<ApiError>).code === "string" &&
-    typeof (e as Partial<ApiError>).message === "string"
+    typeof (e as Partial<ApiError>).status === 'number' &&
+    typeof (e as Partial<ApiError>).code === 'string' &&
+    typeof (e as Partial<ApiError>).message === 'string'
   );
 }
 
 /**
  * Type guard to check if error is a ValidationError.
- * 
+ *
  * @param e - Unknown error value to check
  * @returns True if error has ValidationError structure (code, message)
  */
 export function isValidationError(e: unknown): e is ValidationError {
   return (
-    typeof e === "object" &&
+    typeof e === 'object' &&
     e !== null &&
-    typeof (e as Partial<ValidationError>).code === "string" &&
-    typeof (e as Partial<ValidationError>).message === "string"
+    typeof (e as Partial<ValidationError>).code === 'string' &&
+    typeof (e as Partial<ValidationError>).message === 'string'
   );
 }
 
 /**
  * Type guard to check if error is an RpcError.
- * 
+ *
  * @param e - Unknown error value to check
  * @returns True if error has RpcError structure (code, message)
  */
 export function isRpcError(e: unknown): e is RpcError {
   return (
-    typeof e === "object" &&
+    typeof e === 'object' &&
     e !== null &&
-    typeof (e as Partial<RpcError>).code === "number" &&
-    typeof (e as Partial<RpcError>).message === "string"
+    typeof (e as Partial<RpcError>).code === 'number' &&
+    typeof (e as Partial<RpcError>).message === 'string'
   );
 }
 
 /**
  * Extract a safe error message from any error type.
- * 
+ *
  * Handles:
  * - ApiError: returns message
  * - ValidationError: returns message
  * - Error: returns message
  * - Objects with message property: returns message
  * - Fallback: returns "Unknown error"
- * 
+ *
  * @param e - Unknown error value
  * @returns Safe, non-empty error message string
- * 
+ *
  * @example
  * const msg = getErrorMessage(err);
  * logger.error(msg);  // Always safe to use
@@ -123,26 +123,26 @@ export function getErrorMessage(e: unknown): string {
   if (isApiError(e)) return e.message;
   if (isValidationError(e)) return e.message;
   if (e instanceof Error) return e.message;
-  if (typeof e === "object" && e !== null) {
+  if (typeof e === 'object' && e !== null) {
     const msg = (e as Record<string, unknown>).message;
-    if (typeof msg === "string") return msg;
+    if (typeof msg === 'string') return msg;
   }
-  if (typeof e === "string") return e;
-  return "Unknown error";
+  if (typeof e === 'string') return e;
+  return 'Unknown error';
 }
 
 /**
  * Extract error code from any error type.
- * 
+ *
  * Handles:
  * - ApiError: returns code
  * - ValidationError: returns code
  * - RpcError: returns code
  * - Fallback: returns "UNKNOWN"
- * 
+ *
  * @param e - Unknown error value
  * @returns Error code string for tracking/metrics
- * 
+ *
  * @example
  * const code = getErrorCode(err);
  * metrics.increment(`error.${code}`);
@@ -151,20 +151,20 @@ export function getErrorCode(e: unknown): string {
   if (isApiError(e)) return e.code;
   if (isValidationError(e)) return e.code;
   if (isRpcError(e)) return `RPC_${e.code}`;
-  return "UNKNOWN";
+  return 'UNKNOWN';
 }
 
 /**
  * Create a structured ApiError from various error types.
- * 
+ *
  * Converts any error into a consistent ApiError structure suitable
  * for API responses and logging.
- * 
+ *
  * @param input - Error value to convert
  * @param defaultStatus - Default HTTP status if not determinable (default: 500)
  * @param context - Additional context to include in error
  * @returns Structured ApiError
- * 
+ *
  * @example
  * try {
  *   await risky();
@@ -176,7 +176,7 @@ export function getErrorCode(e: unknown): string {
 export function toApiError(
   input: unknown,
   defaultStatus: number = 500,
-  context?: Record<string, unknown>
+  context?: Record<string, unknown>,
 ): ApiError {
   if (isApiError(input)) {
     return { ...input, context: { ...input.context, ...context } };
@@ -194,7 +194,7 @@ export function toApiError(
   if (input instanceof Error) {
     return {
       status: defaultStatus,
-      code: input.name || "ERROR",
+      code: input.name || 'ERROR',
       message: input.message,
       context,
       cause: input,
@@ -203,7 +203,7 @@ export function toApiError(
 
   return {
     status: defaultStatus,
-    code: "UNKNOWN",
+    code: 'UNKNOWN',
     message: getErrorMessage(input),
     context,
   };
@@ -211,13 +211,13 @@ export function toApiError(
 
 /**
  * Create a structured ValidationError.
- * 
+ *
  * @param code - Error code for this validation class
  * @param message - Main validation error message
  * @param fields - Optional field-level errors keyed by field name
  * @param context - Additional context
  * @returns ValidationError
- * 
+ *
  * @example
  * throw createValidationError(
  *   "INVALID_AMOUNT",
@@ -229,7 +229,7 @@ export function createValidationError(
   code: string,
   message: string,
   fields?: Record<string, string>,
-  context?: Record<string, unknown>
+  context?: Record<string, unknown>,
 ): ValidationError {
   return { code, message, fields, context };
 }

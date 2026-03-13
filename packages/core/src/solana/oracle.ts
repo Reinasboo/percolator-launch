@@ -67,22 +67,18 @@ function readBigInt64LE(data: Uint8Array, off: number): bigint {
 export function parseChainlinkPrice(data: Uint8Array): OraclePrice {
   if (data.length < CHAINLINK_MIN_SIZE) {
     throw new Error(
-      `Oracle account data too small: ${data.length} bytes (need at least ${CHAINLINK_MIN_SIZE})`
+      `Oracle account data too small: ${data.length} bytes (need at least ${CHAINLINK_MIN_SIZE})`,
     );
   }
 
   const decimals = readU8(data, CHAINLINK_DECIMALS_OFFSET);
   if (decimals > MAX_DECIMALS) {
-    throw new Error(
-      `Oracle decimals out of range: ${decimals} (max ${MAX_DECIMALS})`
-    );
+    throw new Error(`Oracle decimals out of range: ${decimals} (max ${MAX_DECIMALS})`);
   }
 
   const price = readBigInt64LE(data, CHAINLINK_ANSWER_OFFSET);
   if (price <= 0n) {
-    throw new Error(
-      `Oracle price is non-positive: ${price}`
-    );
+    throw new Error(`Oracle price is non-positive: ${price}`);
   }
 
   return { price, decimals };

@@ -1,4 +1,4 @@
-import { PublicKey, SYSVAR_CLOCK_PUBKEY, ComputeBudgetProgram } from "@solana/web3.js";
+import { PublicKey, SYSVAR_CLOCK_PUBKEY, ComputeBudgetProgram } from '@solana/web3.js';
 import {
   fetchSlab,
   parseConfig,
@@ -17,21 +17,34 @@ import {
   ACCOUNTS_PUSH_ORACLE_PRICE,
   derivePythPushOraclePDA,
   type DiscoveredMarket,
-} from "@percolator/sdk";
-import { config, getConnection, loadKeypair, sendWithRetry, sendWithRetryKeeper, pollSignatureStatus, getRecentPriorityFees, checkTransactionSize, eventBus, createLogger, sendWarningAlert, acquireToken, getFallbackConnection, backoffMs, getErrorMessage } from "@percolator/shared";
-import { OracleService } from "./oracle.js";
+} from '@percolator/sdk';
+import {
+  config,
+  getConnection,
+  loadKeypair,
+  sendWithRetry,
+  sendWithRetryKeeper,
+  pollSignatureStatus,
+  getRecentPriorityFees,
+  checkTransactionSize,
+  eventBus,
+  createLogger,
+  sendWarningAlert,
+  acquireToken,
+  getFallbackConnection,
+  backoffMs,
+  getErrorMessage,
+} from '@percolator/shared';
+import { OracleService } from './oracle.js';
 
-const logger = createLogger("keeper:liquidation");
+const logger = createLogger('keeper:liquidation');
 
 /**
  * Rate-limited fetchSlab with automatic fallback to secondary RPC.
  * Retries up to 3 times with exponential backoff on rate-limit (429) or
  * transient network errors, falling back to the secondary RPC on 429.
  */
-async function fetchSlabWithRetry(
-  slabPubkey: PublicKey,
-  maxRetries = 3,
-): Promise<Uint8Array> {
+async function fetchSlabWithRetry(slabPubkey: PublicKey, maxRetries = 3): Promise<Uint8Array> {
   let lastErr: unknown;
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     const conn = attempt === 0 ? getConnection() : getFallbackConnection();
@@ -41,13 +54,18 @@ async function fetchSlabWithRetry(
     } catch (err) {
       lastErr = err;
       const msg = getErrorMessage(err).toLowerCase();
-      const isRetryable = msg.includes("429") || msg.includes("too many requests")
-        || msg.includes("rate limit") || msg.includes("timeout")
-        || msg.includes("socket") || msg.includes("econnrefused")
-        || msg.includes("502") || msg.includes("503");
+      const isRetryable =
+        msg.includes('429') ||
+        msg.includes('too many requests') ||
+        msg.includes('rate limit') ||
+        msg.includes('timeout') ||
+        msg.includes('socket') ||
+        msg.includes('econnrefused') ||
+        msg.includes('502') ||
+        msg.includes('503');
       if (!isRetryable || attempt >= maxRetries - 1) break;
       const delay = backoffMs(attempt, 500, 8_000);
-      logger.warn("fetchSlab retrying", {
+      logger.warn('fetchSlab retrying', {
         slabAddress: slabPubkey.toBase58(),
         attempt: attempt + 1,
         delayMs: Math.round(delay),
@@ -72,7 +90,7 @@ const BPS_MULTIPLIER = 10_000n; // Basis points multiplier (100% = 10000 bps)
  * - 'admin': oracle_authority != [0;32] && index_feed_id != [0;32]
  *   → off-chain authority pushes prices; needs staleness check
  */
-type OracleMode = "pyth-pinned" | "hyperp" | "admin";
+type OracleMode = 'pyth-pinned' | 'hyperp' | 'admin';
 
 /**
  * Detect oracle mode from market config keys.
@@ -81,9 +99,9 @@ type OracleMode = "pyth-pinned" | "hyperp" | "admin";
 function detectOracleMode(cfg: { oracleAuthority: PublicKey; indexFeedId: PublicKey }): OracleMode {
   const zeroKey = new PublicKey(new Uint8Array(32));
   const isHyperp = cfg.indexFeedId.equals(zeroKey);
-  if (isHyperp) return "hyperp";
-  if (cfg.oracleAuthority.equals(zeroKey)) return "pyth-pinned";
-  return "admin";
+  if (isHyperp) return 'hyperp';
+  if (cfg.oracleAuthority.equals(zeroKey)) return 'pyth-pinned';
+  return 'admin';
 }
 
 /**
@@ -103,10 +121,10 @@ function resolveMarketPrice(
   },
   mode: OracleMode,
 ): { price: bigint; stale: boolean } {
-  if (mode === "pyth-pinned") {
+  if (mode === 'pyth-pinned') {
     return { price: cfg.lastEffectivePriceE6, stale: false };
   }
-  if (mode === "hyperp") {
+  if (mode === 'hyperp') {
     return { price: cfg.lastEffectivePriceE6, stale: false };
   }
   // Admin oracle: try authorityPriceE6 with off-chain staleness check
@@ -128,7 +146,7 @@ interface LiquidationCandidate {
   positionSize: bigint;
   capital: bigint;
   pnl: bigint;
-  marginRatio: number;  // as percentage
+  marginRatio: number; // as percentage
   maintenanceMarginBps: bigint;
 }
 
@@ -178,17 +196,17 @@ export class LiquidationService {
       const { price: resolvedPrice, stale } = resolveMarketPrice(cfg, oracleMode);
 
       let price: bigint;
-      if (oracleMode === "pyth-pinned") {
+      if (oracleMode === 'pyth-pinned') {
         price = resolvedPrice;
         if (price === 0n) return []; // No price resolved yet
-      } else if (oracleMode === "hyperp") {
+      } else if (oracleMode === 'hyperp') {
         price = resolvedPrice;
         if (price === 0n) return []; // Market not bootstrapped yet
 
         // Sanity check: mark price should also be non-zero in a healthy Hyperp market
         if (cfg.authorityPriceE6 === 0n) {
           if (engine.totalOpenInterest > 0n) {
-            logger.warn("Hyperp market has zero mark price, skipping", { slabAddress });
+            logger.warn('Hyperp market has zero mark price, skipping', { slabAddress });
           }
           return [];
         }
@@ -197,7 +215,7 @@ export class LiquidationService {
         price = resolvedPrice;
         if (price === 0n) {
           if (engine.totalOpenInterest > 0n) {
-            logger.warn("No valid price (authority stale, no effective price), skipping", {
+            logger.warn('No valid price (authority stale, no effective price), skipping', {
               slabAddress,
               authorityTimestamp: Number(cfg.authorityTimestamp),
             });
@@ -205,7 +223,7 @@ export class LiquidationService {
           return [];
         }
         if (stale) {
-          logger.debug("Authority price stale, using lastEffectivePriceE6", {
+          logger.debug('Authority price stale, using lastEffectivePriceE6', {
             slabAddress,
             lastEffectivePriceE6: price.toString(),
           });
@@ -221,32 +239,33 @@ export class LiquidationService {
           const account = parseAccount(data, i);
 
           // Skip LP accounts (kind=1) and empty accounts
-          if (account.kind !== 0) continue;  // 0 = User
-          if (account.positionSize === 0n) continue;  // No position
+          if (account.kind !== 0) continue; // 0 = User
+          if (account.positionSize === 0n) continue; // No position
 
           // Calculate margin health using mark-to-market PnL (not stale on-chain pnl)
           // On-chain pnl is only updated during cranks; between cranks it can be stale
-          const notional = absBI(account.positionSize) * price / PRICE_E6_DIVISOR;
+          const notional = (absBI(account.positionSize) * price) / PRICE_E6_DIVISOR;
           if (notional === 0n) continue;
 
           // Compute mark PnL from live price instead of stale on-chain pnl
           const entryPrice = account.entryPrice;
           let markPnl = 0n;
           if (entryPrice > 0n && price > 0n) {
-            const diff = account.positionSize > 0n
-              ? price - entryPrice    // long: profit when price goes up
-              : entryPrice - price;   // short: profit when price goes down
-            
+            const diff =
+              account.positionSize > 0n
+                ? price - entryPrice // long: profit when price goes up
+                : entryPrice - price; // short: profit when price goes down
+
             // BH5: Overflow protection - check bounds before multiplication
             const MAX_SAFE_BIGINT = 9007199254740991n; // Number.MAX_SAFE_INTEGER
             const absPosSize = absBI(account.positionSize);
-            
+
             // Check if multiplication would overflow
             if (diff > 0n && absPosSize > MAX_SAFE_BIGINT / diff) {
-              logger.warn("PnL calculation overflow", { accountIndex: i, slabAddress });
+              logger.warn('PnL calculation overflow', { accountIndex: i, slabAddress });
               markPnl = diff > 0n ? MAX_SAFE_BIGINT : -MAX_SAFE_BIGINT;
             } else if (diff < 0n && absPosSize > MAX_SAFE_BIGINT / -diff) {
-              logger.warn("PnL calculation overflow", { accountIndex: i, slabAddress });
+              logger.warn('PnL calculation overflow', { accountIndex: i, slabAddress });
               markPnl = -MAX_SAFE_BIGINT;
             } else {
               markPnl = (diff * absPosSize) / price;
@@ -269,7 +288,7 @@ export class LiquidationService {
             continue;
           }
 
-          const marginRatioBps = equity * BPS_MULTIPLIER / notional;
+          const marginRatioBps = (equity * BPS_MULTIPLIER) / notional;
 
           // If margin ratio < maintenance margin, this account is liquidatable
           if (marginRatioBps < maintenanceMarginBps) {
@@ -292,7 +311,7 @@ export class LiquidationService {
 
       return candidates;
     } catch (err) {
-      logger.error("Market scan failed", {
+      logger.error('Market scan failed', {
         slabAddress,
         error: getErrorMessage(err),
         stack: err instanceof Error ? err.stack : undefined,
@@ -305,10 +324,7 @@ export class LiquidationService {
    * Execute liquidation for an undercollateralized account.
    * Prepends oracle price push + crank (to ensure fresh state) then liquidates.
    */
-  async liquidate(
-    market: DiscoveredMarket,
-    accountIdx: number,
-  ): Promise<string | null> {
+  async liquidate(market: DiscoveredMarket, accountIdx: number): Promise<string | null> {
     const slabAddress = market.slabAddress;
     const isAdminOracle = !market.config.oracleAuthority.equals(PublicKey.default);
 
@@ -322,8 +338,10 @@ export class LiquidationService {
 
       // Determine oracle account for crank/liquidate
       const feedIdBytes = market.config.indexFeedId.toBytes();
-      const feedHex = Array.from(feedIdBytes).map(b => b.toString(16).padStart(2, "0")).join("");
-      const isAllZeros = feedHex === "0".repeat(64);
+      const feedHex = Array.from(feedIdBytes)
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+      const isAllZeros = feedHex === '0'.repeat(64);
       const oracleAccount = isAllZeros ? slabAddress : derivePythPushOraclePDA(feedHex)[0];
 
       // 1. Push oracle price only if crank wallet IS the oracle authority
@@ -337,7 +355,8 @@ export class LiquidationService {
             timestamp: BigInt(Math.floor(Date.now() / 1000)),
           });
           const pushKeys = buildAccountMetas(ACCOUNTS_PUSH_ORACLE_PRICE, [
-            keypair.publicKey, slabAddress,
+            keypair.publicKey,
+            slabAddress,
           ]);
           instructions.push(buildIx({ programId, keys: pushKeys, data: pushData }));
         }
@@ -346,14 +365,20 @@ export class LiquidationService {
       // 2. Crank (make sure engine state is fresh)
       const crankData = encodeKeeperCrank({ callerIdx: 65535, allowPanic: false });
       const crankKeys = buildAccountMetas(ACCOUNTS_KEEPER_CRANK, [
-        keypair.publicKey, slabAddress, SYSVAR_CLOCK_PUBKEY, oracleAccount,
+        keypair.publicKey,
+        slabAddress,
+        SYSVAR_CLOCK_PUBKEY,
+        oracleAccount,
       ]);
       instructions.push(buildIx({ programId, keys: crankKeys, data: crankData }));
 
       // 3. Liquidate
       const liqData = encodeLiquidateAtOracle({ targetIdx: accountIdx });
       const liqKeys = buildAccountMetas(ACCOUNTS_LIQUIDATE_AT_ORACLE, [
-        keypair.publicKey, slabAddress, SYSVAR_CLOCK_PUBKEY, oracleAccount,
+        keypair.publicKey,
+        slabAddress,
+        SYSVAR_CLOCK_PUBKEY,
+        oracleAccount,
       ]);
       instructions.push(buildIx({ programId, keys: liqKeys, data: liqData }));
 
@@ -367,7 +392,10 @@ export class LiquidationService {
         // Use bitmap to verify account is still active (not sequential numUsedAccounts)
         const freshUsed = parseUsedIndices(freshData);
         if (!freshUsed.includes(accountIdx)) {
-          logger.warn("Race condition: account not in bitmap", { accountIndex: accountIdx, slabAddress: slabAddress.toBase58() });
+          logger.warn('Race condition: account not in bitmap', {
+            accountIndex: accountIdx,
+            slabAddress: slabAddress.toBase58(),
+          });
           return null;
         }
 
@@ -376,7 +404,10 @@ export class LiquidationService {
 
         // Verify still undercollateralized
         if (freshAccount.kind !== 0 || freshAccount.positionSize === 0n) {
-          logger.warn("Race condition: account no longer active", { accountIndex: accountIdx, slabAddress: slabAddress.toBase58() });
+          logger.warn('Race condition: account no longer active', {
+            accountIndex: accountIdx,
+            slabAddress: slabAddress.toBase58(),
+          });
           return null;
         }
 
@@ -385,22 +416,25 @@ export class LiquidationService {
         const freshMode = detectOracleMode(freshCfg);
         const { price: freshPrice } = resolveMarketPrice(freshCfg, freshMode);
         if (freshPrice > 0n) {
-          const notional = absBI(freshAccount.positionSize) * freshPrice / PRICE_E6_DIVISOR;
+          const notional = (absBI(freshAccount.positionSize) * freshPrice) / PRICE_E6_DIVISOR;
           if (notional > 0n) {
             // Use mark-to-market PnL for re-verification
             const freshEntry = freshAccount.entryPrice;
             let freshMarkPnl = 0n;
             if (freshEntry > 0n && freshPrice > 0n) {
-              const diff = freshAccount.positionSize > 0n
-                ? freshPrice - freshEntry
-                : freshEntry - freshPrice;
+              const diff =
+                freshAccount.positionSize > 0n ? freshPrice - freshEntry : freshEntry - freshPrice;
               freshMarkPnl = (diff * absBI(freshAccount.positionSize)) / freshPrice;
             }
             const equity = freshAccount.capital + freshMarkPnl;
             if (equity > 0n) {
-              const marginRatioBps = equity * BPS_MULTIPLIER / notional;
+              const marginRatioBps = (equity * BPS_MULTIPLIER) / notional;
               if (marginRatioBps >= freshParams.maintenanceMarginBps) {
-                logger.warn("Race condition: account no longer undercollateralized", { accountIndex: accountIdx, slabAddress: slabAddress.toBase58(), marginRatioBps: Number(marginRatioBps) });
+                logger.warn('Race condition: account no longer undercollateralized', {
+                  accountIndex: accountIdx,
+                  slabAddress: slabAddress.toBase58(),
+                  marginRatioBps: Number(marginRatioBps),
+                });
                 return null;
               }
             }
@@ -426,19 +460,23 @@ export class LiquidationService {
       }
 
       this.liquidationCount++;
-      eventBus.publish("liquidation.success", slabAddress.toBase58(), {
+      eventBus.publish('liquidation.success', slabAddress.toBase58(), {
         accountIdx,
         signature: sig,
       });
-      logger.info("Account liquidated", { accountIndex: accountIdx, slabAddress: slabAddress.toBase58(), signature: sig });
-      
+      logger.info('Account liquidated', {
+        accountIndex: accountIdx,
+        slabAddress: slabAddress.toBase58(),
+        signature: sig,
+      });
+
       // Send Discord alert for liquidation execution
-      await sendWarningAlert("Liquidation executed", [
-        { name: "Market", value: slabAddress.toBase58().slice(0, 8), inline: true },
-        { name: "Account Index", value: accountIdx.toString(), inline: true },
-        { name: "Signature", value: sig.slice(0, 12), inline: true },
+      await sendWarningAlert('Liquidation executed', [
+        { name: 'Market', value: slabAddress.toBase58().slice(0, 8), inline: true },
+        { name: 'Account Index', value: accountIdx.toString(), inline: true },
+        { name: 'Signature', value: sig.slice(0, 12), inline: true },
       ]);
-      
+
       return sig;
     } catch (err) {
       const errMsg = getErrorMessage(err);
@@ -446,11 +484,11 @@ export class LiquidationService {
       // PERC-484: InvalidSlabLen (0x4) means the slab has wrong size for the program.
       // These are test/corrupt markets that will never succeed — permanently skip them
       // so the liquidation service stops retrying every 60 seconds.
-      if (errMsg.includes("custom program error: 0x4")) {
+      if (errMsg.includes('custom program error: 0x4')) {
         this.permanentlySkipped.add(slabAddress.toBase58());
         logger.warn(
-          "Market slab size mismatch (0x4 InvalidSlabLen) — permanently skipping for liquidation. " +
-          "Fix: run `npx tsx scripts/reinit-slab.ts --slab <ADDRESS>` to recreate with correct size.",
+          'Market slab size mismatch (0x4 InvalidSlabLen) — permanently skipping for liquidation. ' +
+            'Fix: run `npx tsx scripts/reinit-slab.ts --slab <ADDRESS>` to recreate with correct size.',
           {
             slabAddress: slabAddress.toBase58(),
             accountIdx,
@@ -460,7 +498,7 @@ export class LiquidationService {
         return null;
       }
 
-      logger.error("Liquidation failed", {
+      logger.error('Liquidation failed', {
         error: errMsg,
         stack: err instanceof Error ? err.stack : undefined,
         slabAddress: slabAddress.toBase58(),
@@ -468,8 +506,8 @@ export class LiquidationService {
         market: slabAddress.toBase58(),
         programId: market.programId.toBase58(),
       });
-      
-      eventBus.publish("liquidation.failure", slabAddress.toBase58(), {
+
+      eventBus.publish('liquidation.failure', slabAddress.toBase58(), {
         accountIdx,
         error: errMsg,
       });
@@ -501,7 +539,7 @@ export class LiquidationService {
       const filteredBatch = batch.filter((state) => {
         const addr = state.market.slabAddress.toBase58();
         if (this.permanentlySkipped.has(addr)) {
-          logger.debug("Skipping permanently-skipped market", { slabAddress: addr });
+          logger.debug('Skipping permanently-skipped market', { slabAddress: addr });
           return false;
         }
         return true;
@@ -513,8 +551,8 @@ export class LiquidationService {
       for (let j = 0; j < batchResults.length; j++) {
         scanned++;
         const result = batchResults[j]!;
-        if (result.status === "rejected") {
-          logger.error("Market scan rejected", { error: result.reason });
+        if (result.status === 'rejected') {
+          logger.error('Market scan rejected', { error: result.reason });
           continue;
         }
         const candidates = result.value;
@@ -540,7 +578,7 @@ export class LiquidationService {
 
   start(getMarkets: () => Map<string, { market: DiscoveredMarket }>): void {
     if (this.timer) return;
-    logger.info("Liquidation service starting", { intervalMs: this.intervalMs });
+    logger.info('Liquidation service starting', { intervalMs: this.intervalMs });
 
     const runCycle = async () => {
       // Overlap guard: skip if previous cycle is still running
@@ -551,10 +589,10 @@ export class LiquidationService {
         const result = await this.scanAndLiquidateAll(marketsSnapshot);
         this.consecutiveFailures = 0; // Reset on success
         if (result.candidates > 0) {
-          logger.info("Liquidation scan complete", { 
-            scanned: result.scanned, 
-            candidates: result.candidates, 
-            liquidated: result.liquidated 
+          logger.info('Liquidation scan complete', {
+            scanned: result.scanned,
+            candidates: result.candidates,
+            liquidated: result.liquidated,
           });
         }
       } catch (err) {
@@ -563,7 +601,7 @@ export class LiquidationService {
           this.intervalMs * Math.pow(2, this.consecutiveFailures - 1),
           this.maxBackoffMs,
         );
-        logger.error("Liquidation cycle failed", {
+        logger.error('Liquidation cycle failed', {
           error: err instanceof Error ? err.message : String(err),
           consecutiveFailures: this.consecutiveFailures,
           nextRetryMs: Math.round(backoff),
@@ -583,7 +621,7 @@ export class LiquidationService {
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
-      logger.info("Liquidation service stopped");
+      logger.info('Liquidation service stopped');
     }
   }
 

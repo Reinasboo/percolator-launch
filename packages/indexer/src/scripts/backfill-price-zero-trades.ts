@@ -21,9 +21,9 @@
  * Dry-run mode prints what would be updated without writing to DB.
  */
 
-import { getSupabase } from "@percolator/shared";
-import { config } from "@percolator/shared";
-import { detectSlabLayout } from "@percolator/sdk";
+import { getSupabase } from '@percolator/shared';
+import { config } from '@percolator/shared';
+import { detectSlabLayout } from '@percolator/sdk';
 
 // Helius Parse Transactions batch limit
 const HELIUS_BATCH_SIZE = 100;
@@ -31,25 +31,25 @@ const HELIUS_BATCH_SIZE = 100;
 // Max concurrent Helius batches in-flight
 const HELIUS_CONCURRENCY = 3;
 
-const isDryRun = process.argv.includes("--dry-run");
+const isDryRun = process.argv.includes('--dry-run');
 
 // ─── Helius helpers ──────────────────────────────────────────────────────────
 
 function getHeliusParseUrl(): string {
-  const isDevnet = config.rpcUrl.includes("devnet");
-  const host = isDevnet ? "api-devnet.helius-rpc.com" : "api-mainnet.helius-rpc.com";
+  const isDevnet = config.rpcUrl.includes('devnet');
+  const host = isDevnet ? 'api-devnet.helius-rpc.com' : 'api-mainnet.helius-rpc.com';
   return `https://${host}/v0/transactions?api-key=${config.heliusApiKey}`;
 }
 
 async function fetchEnhancedTxs(signatures: string[]): Promise<any[]> {
   const url = getHeliusParseUrl();
   const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ transactions: signatures }),
   });
   if (!res.ok) {
-    const text = await res.text().catch(() => "(no body)");
+    const text = await res.text().catch(() => '(no body)');
     throw new Error(`Helius ${res.status}: ${text}`);
   }
   return (await res.json()) as any[];
@@ -78,14 +78,18 @@ function extractPriceFromAccountData(tx: any, slabAddress: string): number {
     if (acc.account !== slabAddress) continue;
 
     let raw: Uint8Array | null = null;
-    if (typeof acc.data === "string") {
+    if (typeof acc.data === 'string') {
       try {
-        raw = Uint8Array.from(Buffer.from(acc.data, "base64"));
-      } catch { /* skip */ }
-    } else if (Array.isArray(acc.data) && typeof acc.data[0] === "string") {
+        raw = Uint8Array.from(Buffer.from(acc.data, 'base64'));
+      } catch {
+        /* skip */
+      }
+    } else if (Array.isArray(acc.data) && typeof acc.data[0] === 'string') {
       try {
-        raw = Uint8Array.from(Buffer.from(acc.data[0], "base64"));
-      } catch { /* skip */ }
+        raw = Uint8Array.from(Buffer.from(acc.data[0], 'base64'));
+      } catch {
+        /* skip */
+      }
     }
     if (!raw) continue;
 
@@ -119,16 +123,14 @@ function extractPriceFromLogs(tx: any): number {
   const valuePattern = /0x[0-9a-fA-F]+|\d+/g;
 
   for (const log of logs) {
-    if (!log.startsWith("Program log: ")) continue;
-    const payload = log.slice("Program log: ".length).trim();
+    if (!log.startsWith('Program log: ')) continue;
+    const payload = log.slice('Program log: '.length).trim();
     if (!/^[\d, a-fA-Fx]+$/.test(payload)) continue;
 
     const matches = payload.match(valuePattern);
     if (!matches || matches.length < 2) continue;
 
-    const values = matches.map((v) =>
-      v.startsWith("0x") ? parseInt(v, 16) : Number(v),
-    );
+    const values = matches.map((v) => (v.startsWith('0x') ? parseInt(v, 16) : Number(v)));
 
     for (const v of values) {
       // Reasonable price_e6 range: $0.001 to $1,000,000
@@ -143,22 +145,22 @@ function extractPriceFromLogs(tx: any): number {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
-  console.log(`\n🔧  PERC-423 backfill — price=0 trades${isDryRun ? " [DRY RUN]" : ""}\n`);
+  console.log(`\n🔧  PERC-423 backfill — price=0 trades${isDryRun ? ' [DRY RUN]' : ''}\n`);
 
   if (!config.heliusApiKey) {
-    throw new Error("HELIUS_API_KEY is required");
+    throw new Error('HELIUS_API_KEY is required');
   }
 
   const supabase = getSupabase();
 
   // 1. Fetch all price=0 trades with a tx signature
-  console.log("Fetching price=0 trades from DB…");
+  console.log('Fetching price=0 trades from DB…');
   const { data: zeroPricedTrades, error: fetchErr } = await supabase
-    .from("trades")
-    .select("id, slab_address, tx_signature, price")
-    .eq("price", 0)
-    .not("tx_signature", "is", null)
-    .order("created_at", { ascending: true });
+    .from('trades')
+    .select('id, slab_address, tx_signature, price')
+    .eq('price', 0)
+    .not('tx_signature', 'is', null)
+    .order('created_at', { ascending: true });
 
   if (fetchErr) throw fetchErr;
 
@@ -172,7 +174,7 @@ async function main() {
   console.log(`Found ${trades.length} price=0 trade(s) with tx signatures.\n`);
 
   if (trades.length === 0) {
-    console.log("✅  Nothing to backfill.");
+    console.log('✅  Nothing to backfill.');
     return;
   }
 
@@ -199,11 +201,13 @@ async function main() {
   for (let ci = 0; ci < sigChunks.length; ci += HELIUS_CONCURRENCY) {
     const concurrentBatches = sigChunks.slice(ci, ci + HELIUS_CONCURRENCY);
     const results = await Promise.allSettled(
-      concurrentBatches.map((chunk) => fetchEnhancedTxs(chunk))
+      concurrentBatches.map((chunk) => fetchEnhancedTxs(chunk)),
     );
     for (const result of results) {
-      if (result.status === "rejected") {
-        console.error(`  ⚠️  Helius batch fetch failed: ${result.reason?.message ?? result.reason}`);
+      if (result.status === 'rejected') {
+        console.error(
+          `  ⚠️  Helius batch fetch failed: ${result.reason?.message ?? result.reason}`,
+        );
         fetchFailures++;
         continue;
       }
@@ -238,9 +242,13 @@ async function main() {
       const price = extractPrice(tx, trade.slab_address);
       if (price > 0) {
         updates.push({ id: trade.id, price });
-        console.log(`  ✓  trade ${trade.id} | slab ${trade.slab_address.slice(0, 8)}… → $${price.toFixed(6)}`);
+        console.log(
+          `  ✓  trade ${trade.id} | slab ${trade.slab_address.slice(0, 8)}… → $${price.toFixed(6)}`,
+        );
       } else {
-        console.warn(`  ⚠️  Could not extract price for trade ${trade.id} (sig ${sig.slice(0, 12)}…)`);
+        console.warn(
+          `  ⚠️  Could not extract price for trade ${trade.id} (sig ${sig.slice(0, 12)}…)`,
+        );
         skipped++;
       }
     }
@@ -249,12 +257,12 @@ async function main() {
   console.log(`\nSummary: ${updates.length} to update, ${skipped} skipped.\n`);
 
   if (isDryRun) {
-    console.log("DRY RUN — no DB writes performed.");
+    console.log('DRY RUN — no DB writes performed.');
     return;
   }
 
   if (updates.length === 0) {
-    console.log("Nothing to update.");
+    console.log('Nothing to update.');
     return;
   }
 
@@ -266,16 +274,12 @@ async function main() {
   for (let i = 0; i < updates.length; i += UPDATE_BATCH) {
     const batch = updates.slice(i, i + UPDATE_BATCH);
     const results = await Promise.allSettled(
-      batch.map(({ id, price }) =>
-        supabase
-          .from("trades")
-          .update({ price })
-          .eq("id", id)
-          .eq("price", 0) // guard: only overwrite if still 0
-      )
+      batch.map(
+        ({ id, price }) => supabase.from('trades').update({ price }).eq('id', id).eq('price', 0), // guard: only overwrite if still 0
+      ),
     );
     for (const r of results) {
-      if (r.status === "rejected") {
+      if (r.status === 'rejected') {
         console.error(`  DB update failed: ${r.reason?.message ?? r.reason}`);
         dbErrors++;
       } else if (r.value.error) {
@@ -289,9 +293,9 @@ async function main() {
 
   // 5. Verify: count remaining price=0 rows
   const { count: remaining, error: countErr } = await supabase
-    .from("trades")
-    .select("id", { count: "exact", head: true })
-    .eq("price", 0);
+    .from('trades')
+    .select('id', { count: 'exact', head: true })
+    .eq('price', 0);
 
   if (countErr) {
     console.warn(`Could not verify remaining zeros: ${countErr.message}`);
@@ -301,12 +305,14 @@ async function main() {
   if (remaining !== null) {
     console.log(`Remaining price=0 rows in DB: ${remaining}`);
     if (remaining > 0) {
-      console.log("  (Some rows may lack tx_signature — those require manual recovery or re-indexing.)");
+      console.log(
+        '  (Some rows may lack tx_signature — those require manual recovery or re-indexing.)',
+      );
     }
   }
 }
 
 main().catch((err) => {
-  console.error("Fatal:", err);
+  console.error('Fatal:', err);
   process.exit(1);
 });

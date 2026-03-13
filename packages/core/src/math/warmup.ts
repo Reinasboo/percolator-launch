@@ -6,7 +6,7 @@
  * and maximum position size available to traders.
  */
 
-import { computeMaxLeverage } from "./trading.js";
+import { computeMaxLeverage } from './trading.js';
 
 // =============================================================================
 // Warmup leverage cap utilities
@@ -35,9 +35,7 @@ export function computeWarmupUnlockedCapital(
   if (warmupPeriodSlots === 0n || warmupStartSlot === 0n) return totalCapital;
   if (totalCapital <= 0n) return 0n;
 
-  const elapsed = currentSlot > warmupStartSlot
-    ? currentSlot - warmupStartSlot
-    : 0n;
+  const elapsed = currentSlot > warmupStartSlot ? currentSlot - warmupStartSlot : 0n;
 
   // Warmup complete
   if (elapsed >= warmupPeriodSlots) return totalCapital;

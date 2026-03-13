@@ -1,7 +1,7 @@
-import { Hono } from "hono";
-import { readFileSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { Hono } from 'hono';
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -10,7 +10,7 @@ export function docsRoutes(): Hono {
   const app = new Hono();
 
   // Serve Swagger UI at /docs
-  app.get("/docs", (c) => {
+  app.get('/docs', (c) => {
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -54,21 +54,21 @@ export function docsRoutes(): Hono {
   </script>
 </body>
 </html>`;
-    
+
     return c.html(html);
   });
 
   // Serve the OpenAPI YAML spec
-  app.get("/docs/openapi.yaml", (c) => {
+  app.get('/docs/openapi.yaml', (c) => {
     try {
       // Read the openapi.yaml file from the package root
-      const openapiPath = join(__dirname, "..", "..", "openapi.yaml");
-      const yaml = readFileSync(openapiPath, "utf-8");
-      
-      c.header("Content-Type", "text/yaml");
+      const openapiPath = join(__dirname, '..', '..', 'openapi.yaml');
+      const yaml = readFileSync(openapiPath, 'utf-8');
+
+      c.header('Content-Type', 'text/yaml');
       return c.body(yaml);
     } catch (err) {
-      return c.json({ error: "Failed to load OpenAPI specification" }, 500);
+      return c.json({ error: 'Failed to load OpenAPI specification' }, 500);
     }
   });
 

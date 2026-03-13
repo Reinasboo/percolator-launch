@@ -1,8 +1,8 @@
-import { createLogger } from "./logger.js";
+import { createLogger } from './logger.js';
 
-const logger = createLogger("alerts");
+const logger = createLogger('alerts');
 
-type AlertSeverity = "critical" | "warning" | "info";
+type AlertSeverity = 'critical' | 'warning' | 'info';
 
 interface DiscordEmbed {
   title?: string;
@@ -25,9 +25,9 @@ const SEVERITY_COLORS: Record<AlertSeverity, number> = {
 };
 
 const SEVERITY_EMOJI: Record<AlertSeverity, string> = {
-  critical: "🚨",
-  warning: "⚠️",
-  info: "ℹ️",
+  critical: '🚨',
+  warning: '⚠️',
+  info: 'ℹ️',
 };
 
 /**
@@ -39,12 +39,12 @@ const SEVERITY_EMOJI: Record<AlertSeverity, string> = {
 export async function sendAlert(
   message: string,
   severity: AlertSeverity,
-  fields?: Array<{ name: string; value: string; inline?: boolean }>
+  fields?: Array<{ name: string; value: string; inline?: boolean }>,
 ): Promise<void> {
   const webhookUrl = process.env.DISCORD_ALERT_WEBHOOK;
-  
+
   if (!webhookUrl) {
-    logger.debug("Discord webhook not configured, skipping alert", { message, severity });
+    logger.debug('Discord webhook not configured, skipping alert', { message, severity });
     return;
   }
 
@@ -62,26 +62,26 @@ export async function sendAlert(
     };
 
     const response = await fetch(webhookUrl, {
-      method: "POST",
+      method: 'POST',
       headers: {
-        "Content-Type": "application/json",
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      logger.error("Failed to send Discord alert", {
+      logger.error('Failed to send Discord alert', {
         status: response.status,
         error: errorText,
         message,
         severity,
       });
     } else {
-      logger.debug("Alert sent to Discord", { message, severity });
+      logger.debug('Alert sent to Discord', { message, severity });
     }
   } catch (err) {
-    logger.error("Error sending Discord alert", {
+    logger.error('Error sending Discord alert', {
       error: err instanceof Error ? err.message : String(err),
       message,
       severity,
@@ -94,9 +94,9 @@ export async function sendAlert(
  */
 export async function sendCriticalAlert(
   message: string,
-  fields?: Array<{ name: string; value: string; inline?: boolean }>
+  fields?: Array<{ name: string; value: string; inline?: boolean }>,
 ): Promise<void> {
-  await sendAlert(message, "critical", fields);
+  await sendAlert(message, 'critical', fields);
 }
 
 /**
@@ -104,9 +104,9 @@ export async function sendCriticalAlert(
  */
 export async function sendWarningAlert(
   message: string,
-  fields?: Array<{ name: string; value: string; inline?: boolean }>
+  fields?: Array<{ name: string; value: string; inline?: boolean }>,
 ): Promise<void> {
-  await sendAlert(message, "warning", fields);
+  await sendAlert(message, 'warning', fields);
 }
 
 /**
@@ -114,7 +114,7 @@ export async function sendWarningAlert(
  */
 export async function sendInfoAlert(
   message: string,
-  fields?: Array<{ name: string; value: string; inline?: boolean }>
+  fields?: Array<{ name: string; value: string; inline?: boolean }>,
 ): Promise<void> {
-  await sendAlert(message, "info", fields);
+  await sendAlert(message, 'info', fields);
 }

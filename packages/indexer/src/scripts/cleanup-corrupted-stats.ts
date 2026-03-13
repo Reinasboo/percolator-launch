@@ -12,7 +12,7 @@
  *
  * Run: npx tsx packages/indexer/src/scripts/cleanup-corrupted-stats.ts
  */
-import { getSupabase } from "@percolator/shared";
+import { getSupabase } from '@percolator/shared';
 
 const MAX_SANE_VALUE = 1e18;
 const MAX_VALID_DECIMALS = 18;
@@ -22,29 +22,31 @@ async function main() {
 
   // Fix corrupted decimals in markets table
   const { data: markets, error: marketsErr } = await supabase
-    .from("markets")
-    .select("slab_address, decimals, mint_address")
+    .from('markets')
+    .select('slab_address, decimals, mint_address')
     .or(`decimals.gt.${MAX_VALID_DECIMALS},decimals.lt.0`);
-  
+
   if (marketsErr) throw marketsErr;
 
   console.log(`Found ${markets?.length ?? 0} markets with invalid decimals`);
-  
+
   for (const m of markets ?? []) {
     console.log(`  Fixing ${m.slab_address} (mint=${m.mint_address}): decimals ${m.decimals} → 6`);
     const { error } = await supabase
-      .from("markets")
+      .from('markets')
       .update({ decimals: 6 })
-      .eq("slab_address", m.slab_address);
+      .eq('slab_address', m.slab_address);
     if (error) console.error(`  ERROR: ${error.message}`);
   }
 
   // Reset corrupted stats values to null
   // Identify corrupted rows: total_open_interest > 1e18 or insurance_balance > 1e18
   const { data: corruptedStats, error: statsErr } = await supabase
-    .from("markets")
-    .select("slab_address, total_open_interest, insurance_balance, c_tot")
-    .or(`total_open_interest.gt.${MAX_SANE_VALUE},insurance_balance.gt.${MAX_SANE_VALUE},c_tot.gt.${MAX_SANE_VALUE}`);
+    .from('markets')
+    .select('slab_address, total_open_interest, insurance_balance, c_tot')
+    .or(
+      `total_open_interest.gt.${MAX_SANE_VALUE},insurance_balance.gt.${MAX_SANE_VALUE},c_tot.gt.${MAX_SANE_VALUE}`,
+    );
 
   if (statsErr) throw statsErr;
 
@@ -53,7 +55,7 @@ async function main() {
   for (const s of corruptedStats ?? []) {
     console.log(`  Resetting stats for ${s.slab_address}`);
     const { error } = await supabase
-      .from("markets")
+      .from('markets')
       .update({
         total_open_interest: 0,
         open_interest_long: 0,
@@ -64,18 +66,18 @@ async function main() {
         vault_balance: 0,
         c_tot: 0,
         pnl_pos_tot: 0,
-        net_lp_pos: "0",
+        net_lp_pos: '0',
         lp_sum_abs: 0,
         lp_max_abs: 0,
         total_accounts: 0,
         lifetime_liquidations: 0,
         lifetime_force_closes: 0,
       })
-      .eq("slab_address", s.slab_address);
+      .eq('slab_address', s.slab_address);
     if (error) console.error(`  ERROR: ${error.message}`);
   }
 
-  console.log("\nCleanup complete!");
+  console.log('\nCleanup complete!');
 }
 
 main().catch(console.error);

@@ -1,4 +1,4 @@
-import { PublicKey, SYSVAR_CLOCK_PUBKEY } from "@solana/web3.js";
+import { PublicKey, SYSVAR_CLOCK_PUBKEY } from '@solana/web3.js';
 import {
   discoverMarkets,
   encodeKeeperCrank,
@@ -14,11 +14,22 @@ import {
   parseEngine,
   parseParams,
   type DiscoveredMarket,
-} from "@percolator/sdk";
-import { config, getConnection, getFallbackConnection, loadKeypair, sendWithRetry, sendWithRetryKeeper, rateLimitedCall, eventBus, createLogger, sendCriticalAlert } from "@percolator/shared";
-import { OracleService } from "./oracle.js";
+} from '@percolator/sdk';
+import {
+  config,
+  getConnection,
+  getFallbackConnection,
+  loadKeypair,
+  sendWithRetry,
+  sendWithRetryKeeper,
+  rateLimitedCall,
+  eventBus,
+  createLogger,
+  sendCriticalAlert,
+} from '@percolator/shared';
+import { OracleService } from './oracle.js';
 
-const logger = createLogger("keeper:crank");
+const logger = createLogger('keeper:crank');
 
 interface MarketCrankState {
   market: DiscoveredMarket;
@@ -59,18 +70,20 @@ async function processBatched<T>(
 
   for (let i = 0; i < items.length; i += batchSize) {
     const batch = items.slice(i, i + batchSize);
-    await Promise.all(batch.map(async (item) => {
-      try {
-        await fn(item);
-        succeeded++;
-      } catch (err) {
-        failed++;
-        const itemKey = String(item);
-        const errorObj = err instanceof Error ? err : new Error(String(err));
-        errors.set(itemKey, errorObj);
-        logger.error("Batch item failed", { item: itemKey, error: errorObj.message });
-      }
-    }));
+    await Promise.all(
+      batch.map(async (item) => {
+        try {
+          await fn(item);
+          succeeded++;
+        } catch (err) {
+          failed++;
+          const itemKey = String(item);
+          const errorObj = err instanceof Error ? err : new Error(String(err));
+          errors.set(itemKey, errorObj);
+          logger.error('Batch item failed', { item: itemKey, error: errorObj.message });
+        }
+      }),
+    );
     if (i + batchSize < items.length) {
       await new Promise((r) => setTimeout(r, delayMs));
     }
@@ -107,7 +120,7 @@ export class CrankService {
 
   async discover(): Promise<DiscoveredMarket[]> {
     const programIds = config.allProgramIds;
-    logger.info("Discovering markets", { programCount: programIds.length });
+    logger.info('Discovering markets', { programCount: programIds.length });
     // Use fallback RPC for discovery (Helius rate-limits getProgramAccounts)
     // Sequential calls with delay to avoid 429 from public RPC
     const discoveryConn = getFallbackConnection();
@@ -115,10 +128,10 @@ export class CrankService {
     for (const id of programIds) {
       try {
         const found = await discoverMarkets(discoveryConn, new PublicKey(id));
-        logger.debug("Program scan complete", { programId: id, marketCount: found.length });
+        logger.debug('Program scan complete', { programId: id, marketCount: found.length });
         allFound.push(...found);
       } catch (e) {
-        logger.warn("Program scan failed", { programId: id, error: e });
+        logger.warn('Program scan failed', { programId: id, error: e });
       }
       // 2s delay between programs to avoid rate limits
       if (programIds.indexOf(id) < programIds.length - 1) {
@@ -127,7 +140,7 @@ export class CrankService {
     }
     const discovered = allFound;
     this.lastDiscoveryTime = Date.now();
-    logger.info("Market discovery complete", { totalMarkets: discovered.length });
+    logger.info('Market discovery complete', { totalMarkets: discovered.length });
 
     const discoveredKeys = new Set<string>();
     for (const market of discovered) {
@@ -157,14 +170,14 @@ export class CrankService {
           if (elapsed >= cooldownMs) {
             state.permanentlySkipped = false;
             state.consecutiveFailures = 0;
-            logger.info("Re-enabling permanently skipped market after cooldown", {
+            logger.info('Re-enabling permanently skipped market after cooldown', {
               slabAddress: key,
               cooldownMs,
               skipCount,
               elapsedMs: elapsed,
             });
           } else {
-            logger.debug("Permanently skipped market still in cooldown", {
+            logger.debug('Permanently skipped market still in cooldown', {
               slabAddress: key,
               remainingMs: cooldownMs - elapsed,
               skipCount,
@@ -179,7 +192,10 @@ export class CrankService {
       if (!discoveredKeys.has(key)) {
         state.missingDiscoveryCount++;
         if (state.missingDiscoveryCount >= 3) {
-          logger.warn("Removing dead market", { slabAddress: key, missingCount: state.missingDiscoveryCount });
+          logger.warn('Removing dead market', {
+            slabAddress: key,
+            missingCount: state.missingDiscoveryCount,
+          });
           this.markets.delete(key);
         }
       }
@@ -201,7 +217,7 @@ export class CrankService {
   async crankMarket(slabAddress: string): Promise<boolean> {
     const state = this.markets.get(slabAddress);
     if (!state) {
-      logger.warn("Market not found", { slabAddress });
+      logger.warn('Market not found', { slabAddress });
       return false;
     }
 
@@ -229,13 +245,17 @@ export class CrankService {
               timestamp: BigInt(Math.floor(Date.now() / 1000)),
             });
             const pushKeys = buildAccountMetas(ACCOUNTS_PUSH_ORACLE_PRICE, [
-              keypair.publicKey, market.slabAddress,
+              keypair.publicKey,
+              market.slabAddress,
             ]);
             instructions.push(buildIx({ programId, keys: pushKeys, data: pushData }));
           }
         } catch (priceErr) {
           // Non-fatal: price fetch failed, crank will still run with existing on-chain price
-          logger.warn("Price push skipped (bundled)", { slabAddress, error: priceErr instanceof Error ? priceErr.message : String(priceErr) });
+          logger.warn('Price push skipped (bundled)', {
+            slabAddress,
+            error: priceErr instanceof Error ? priceErr.message : String(priceErr),
+          });
         }
       }
 
@@ -247,7 +267,8 @@ export class CrankService {
         oracleKey = market.slabAddress;
       } else {
         const feedHex = Array.from(market.config.indexFeedId.toBytes())
-          .map(b => b.toString(16).padStart(2, "0")).join("");
+          .map((b) => b.toString(16).padStart(2, '0'))
+          .join('');
         oracleKey = derivePythPushOraclePDA(feedHex)[0];
       }
 
@@ -278,7 +299,7 @@ export class CrankService {
       state.isActive = true;
       if (state.failureCount > 0) state.failureCount = 0;
 
-      eventBus.publish("crank.success", slabAddress, { signature: sig });
+      eventBus.publish('crank.success', slabAddress, { signature: sig });
       return true;
     } catch (err) {
       state.failureCount++;
@@ -287,17 +308,20 @@ export class CrankService {
       // Detect NotInitialized (error 0x4) — permanently skip these markets
       // PERC-381: Track skip count and timestamp for exponential cooldown on rediscovery
       const errMsg = err instanceof Error ? err.message : String(err);
-      if (errMsg.includes("custom program error: 0x4")) {
+      if (errMsg.includes('custom program error: 0x4')) {
         state.permanentlySkipped = true;
         state.permanentlySkippedAt = Date.now();
         state.skipCount = (state.skipCount ?? 0) + 1;
         state.isActive = false;
-        logger.warn("Market slab size mismatch (0x4 InvalidSlabLen) — permanently skipping. " +
-          "Fix: run `npx tsx scripts/reinit-slab.ts --slab <ADDRESS>` to recreate with correct size.", {
-          slabAddress,
-          programId: market.programId.toBase58(),
-          skipCount: state.skipCount,
-        });
+        logger.warn(
+          'Market slab size mismatch (0x4 InvalidSlabLen) — permanently skipping. ' +
+            'Fix: run `npx tsx scripts/reinit-slab.ts --slab <ADDRESS>` to recreate with correct size.',
+          {
+            slabAddress,
+            programId: market.programId.toBase58(),
+            skipCount: state.skipCount,
+          },
+        );
         return false;
       }
 
@@ -305,8 +329,8 @@ export class CrankService {
       if (state.consecutiveFailures >= 10) {
         state.isActive = false;
       }
-      
-      logger.error("Crank failed", {
+
+      logger.error('Crank failed', {
         slabAddress,
         error: err instanceof Error ? err.message : String(err),
         stack: err instanceof Error ? err.stack : undefined,
@@ -314,17 +338,25 @@ export class CrankService {
         market: market.slabAddress.toBase58(),
         programId: market.programId.toBase58(),
       });
-      
+
       // Alert on 5+ consecutive failures
       if (state.consecutiveFailures === 5) {
-        await sendCriticalAlert("Crank experiencing consecutive failures", [
-          { name: "Market", value: slabAddress.slice(0, 12), inline: true },
-          { name: "Consecutive Failures", value: state.consecutiveFailures.toString(), inline: true },
-          { name: "Error", value: (err instanceof Error ? err.message : String(err)).slice(0, 100), inline: false },
+        await sendCriticalAlert('Crank experiencing consecutive failures', [
+          { name: 'Market', value: slabAddress.slice(0, 12), inline: true },
+          {
+            name: 'Consecutive Failures',
+            value: state.consecutiveFailures.toString(),
+            inline: true,
+          },
+          {
+            name: 'Error',
+            value: (err instanceof Error ? err.message : String(err)).slice(0, 100),
+            inline: false,
+          },
         ]);
       }
-      
-      eventBus.publish("crank.failure", slabAddress, {
+
+      eventBus.publish('crank.failure', slabAddress, {
         error: err instanceof Error ? err.message : String(err),
       });
       return false;
@@ -332,49 +364,49 @@ export class CrankService {
   }
 
   async crankAll(): Promise<{ success: number; failed: number; skipped: number }> {
-  let success = 0;
-  let failed = 0;
+    let success = 0;
+    let failed = 0;
 
-  // NEW: split skipped into categories
-  let skippedPermanent = 0;
-  let skippedFailures = 0;
-  let skippedNotDue = 0;
+    // NEW: split skipped into categories
+    let skippedPermanent = 0;
+    let skippedFailures = 0;
+    let skippedNotDue = 0;
 
-  const MAX_CONSECUTIVE_FAILURES = 10;
+    const MAX_CONSECUTIVE_FAILURES = 10;
 
-  const toCrank: string[] = [];
+    const toCrank: string[] = [];
 
-  for (const [slabAddress, state] of this.markets) {
-    if (state.permanentlySkipped) {
-      skippedPermanent++;
-      continue;
+    for (const [slabAddress, state] of this.markets) {
+      if (state.permanentlySkipped) {
+        skippedPermanent++;
+        continue;
+      }
+      if (state.consecutiveFailures > MAX_CONSECUTIVE_FAILURES) {
+        skippedFailures++;
+        continue;
+      }
+      if (!this.isDue(state)) {
+        skippedNotDue++;
+        continue;
+      }
+      toCrank.push(slabAddress);
     }
-    if (state.consecutiveFailures > MAX_CONSECUTIVE_FAILURES) {
-      skippedFailures++;
-      continue;
-    }
-    if (!this.isDue(state)) {
-      skippedNotDue++;
-      continue;
-    }
-    toCrank.push(slabAddress);
-  }
 
-  // NEW: meaningful accounting check
-  const skipped = skippedPermanent + skippedFailures + skippedNotDue;
-  const total = this.markets.size;
-  const accounted = toCrank.length + skipped;
+    // NEW: meaningful accounting check
+    const skipped = skippedPermanent + skippedFailures + skippedNotDue;
+    const total = this.markets.size;
+    const accounted = toCrank.length + skipped;
 
-  if (accounted !== total) {
-    logger.warn("Crank accounting mismatch", {
-      totalMarkets: total,
-      toCrank: toCrank.length,
-      skipped,
-      skippedPermanent,
-      skippedFailures,
-      skippedNotDue,
-    });
-  }
+    if (accounted !== total) {
+      logger.warn('Crank accounting mismatch', {
+        totalMarkets: total,
+        toCrank: toCrank.length,
+        skipped,
+        skippedPermanent,
+        skippedFailures,
+        skippedNotDue,
+      });
+    }
 
     // PERC-204: Full parallel fan-out — all market cranks are independent transactions,
     // submit them all simultaneously instead of in sequential batches.
@@ -383,21 +415,26 @@ export class CrankService {
     const PARALLEL_CONCURRENCY = 10; // Cap concurrency to avoid rate limit storms
 
     // Process in parallel batches (larger batches, no delay between)
-    const batchResult = await processBatched(toCrank, PARALLEL_CONCURRENCY, 500, async (slabAddress) => {
-      const ok = await this.crankMarket(slabAddress);
-      if (ok) success++;
-      else failed++;
-    });
+    const batchResult = await processBatched(
+      toCrank,
+      PARALLEL_CONCURRENCY,
+      500,
+      async (slabAddress) => {
+        const ok = await this.crankMarket(slabAddress);
+        if (ok) success++;
+        else failed++;
+      },
+    );
 
     // BM7: Log detailed error summary if any failed
     if (batchResult.failed > 0) {
-      logger.error("Parallel crank batch completed with errors", { 
+      logger.error('Parallel crank batch completed with errors', {
         failedCount: batchResult.failed,
         successCount: success,
         parallelism: PARALLEL_CONCURRENCY,
       });
       for (const [slab, error] of batchResult.errors) {
-        logger.error("Batch error detail", { slabAddress: slab, error: error.message });
+        logger.error('Batch error detail', { slabAddress: slab, error: error.message });
       }
     }
 
@@ -415,15 +452,18 @@ export class CrankService {
    *
    * Called by the /register HTTP endpoint when the frontend creates a new market.
    */
-  async registerMarket(slabAddress: string, mainnetCA?: string): Promise<{ success: boolean; message: string }> {
+  async registerMarket(
+    slabAddress: string,
+    mainnetCA?: string,
+  ): Promise<{ success: boolean; message: string }> {
     if (this.markets.has(slabAddress)) {
       // Update mainnetCA even if already tracked (registration may have been partial)
       if (mainnetCA) {
         const existing = this.markets.get(slabAddress)!;
         existing.mainnetCA = mainnetCA;
       }
-      logger.info("Market already tracked, skipping hot-register", { slabAddress });
-      return { success: true, message: "Market already tracked" };
+      logger.info('Market already tracked, skipping hot-register', { slabAddress });
+      return { success: true, message: 'Market already tracked' };
     }
 
     const connection = getConnection();
@@ -451,7 +491,14 @@ export class CrankService {
       const engine = parseEngine(data);
       const params = parseParams(data);
 
-      const market: DiscoveredMarket = { slabAddress: slabPubkey, programId, header, config: marketConfig, engine, params };
+      const market: DiscoveredMarket = {
+        slabAddress: slabPubkey,
+        programId,
+        header,
+        config: marketConfig,
+        engine,
+        params,
+      };
 
       this.markets.set(slabAddress, {
         market,
@@ -464,12 +511,12 @@ export class CrankService {
         mainnetCA,
       });
 
-      logger.info("Hot-registered new market", { slabAddress, programId: programId.toBase58() });
+      logger.info('Hot-registered new market', { slabAddress, programId: programId.toBase58() });
 
       // Trigger immediate oracle push + crank so price is live within seconds
       await this.crankMarket(slabAddress);
 
-      return { success: true, message: "Market registered and initial crank triggered" };
+      return { success: true, message: 'Market registered and initial crank triggered' };
     } catch (err) {
       const msg = `Failed to parse slab: ${err instanceof Error ? err.message : String(err)}`;
       logger.error(msg, { slabAddress });
@@ -480,32 +527,45 @@ export class CrankService {
   start(): void {
     if (this.timer) return;
     this._isRunning = true;
-    logger.info("Crank service starting", { intervalMs: this.intervalMs, inactiveIntervalMs: this.inactiveIntervalMs });
-
-    this.discover().then(markets => {
-      logger.info("Initial discovery complete", { marketCount: markets.length });
-    }).catch(err => {
-      logger.error("Initial discovery failed", { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined });
+    logger.info('Crank service starting', {
+      intervalMs: this.intervalMs,
+      inactiveIntervalMs: this.inactiveIntervalMs,
     });
+
+    this.discover()
+      .then((markets) => {
+        logger.info('Initial discovery complete', { marketCount: markets.length });
+      })
+      .catch((err) => {
+        logger.error('Initial discovery failed', {
+          error: err instanceof Error ? err.message : String(err),
+          stack: err instanceof Error ? err.stack : undefined,
+        });
+      });
 
     this.timer = setInterval(async () => {
       if (this._cycling) return; // Prevent overlapping cycles
       this._cycling = true;
       try {
         // Only rediscover periodically (default 5min) to avoid RPC rate limits
-        const needsDiscovery = this.markets.size === 0 ||
-          (Date.now() - this.lastDiscoveryTime >= this.discoveryIntervalMs);
+        const needsDiscovery =
+          this.markets.size === 0 ||
+          Date.now() - this.lastDiscoveryTime >= this.discoveryIntervalMs;
         if (needsDiscovery) {
           await this.discover();
         }
         if (this.markets.size > 0) {
           const result = await this.crankAll();
           if (result.failed > 0) {
-            logger.info("Crank cycle complete", { success: result.success, failed: result.failed, skipped: result.skipped });
+            logger.info('Crank cycle complete', {
+              success: result.success,
+              failed: result.failed,
+              skipped: result.skipped,
+            });
           }
         }
       } catch (err) {
-        logger.error("Crank cycle failed", { error: err });
+        logger.error('Crank cycle failed', { error: err });
       } finally {
         this._cycling = false;
       }
@@ -517,12 +577,18 @@ export class CrankService {
       clearInterval(this.timer);
       this.timer = null;
       this._isRunning = false;
-      logger.info("Crank service stopped");
+      logger.info('Crank service stopped');
     }
   }
 
-  getStatus(): Record<string, { lastCrankTime: number; successCount: number; failureCount: number; isActive: boolean }> {
-    const status: Record<string, { lastCrankTime: number; successCount: number; failureCount: number; isActive: boolean }> = {};
+  getStatus(): Record<
+    string,
+    { lastCrankTime: number; successCount: number; failureCount: number; isActive: boolean }
+  > {
+    const status: Record<
+      string,
+      { lastCrankTime: number; successCount: number; failureCount: number; isActive: boolean }
+    > = {};
     for (const [key, state] of this.markets) {
       status[key] = {
         lastCrankTime: state.lastCrankTime,

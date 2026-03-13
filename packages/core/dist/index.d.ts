@@ -1280,7 +1280,7 @@ declare function validateSlabTierMatch(dataSize: number, programSlabLen: number)
  */
 declare function discoverMarkets(connection: Connection, programId: PublicKey): Promise<DiscoveredMarket[]>;
 
-type DexType = "pumpswap" | "raydium-clmm" | "meteora-dlmm";
+type DexType = 'pumpswap' | 'raydium-clmm' | 'meteora-dlmm';
 interface DexPoolInfo {
     dexType: DexType;
     poolAddress: PublicKey;
@@ -1643,7 +1643,7 @@ declare function computeLiqPrice(entryPrice: bigint, capital: bigint, positionSi
  * Compute estimated liquidation price BEFORE opening a trade.
  * Accounts for trading fees reducing effective capital.
  */
-declare function computePreTradeLiqPrice(oracleE6: bigint, margin: bigint, posSize: bigint, maintBps: bigint, feeBps: bigint, direction: "long" | "short"): bigint;
+declare function computePreTradeLiqPrice(oracleE6: bigint, margin: bigint, posSize: bigint, maintBps: bigint, feeBps: bigint, direction: 'long' | 'short'): bigint;
 /**
  * Compute trading fee from notional value and fee rate in bps.
  */
@@ -1712,7 +1712,7 @@ declare function computePnlPercent(pnlTokens: bigint, capital: bigint): number;
 /**
  * Estimate entry price including fee impact (slippage approximation).
  */
-declare function computeEstimatedEntryPrice(oracleE6: bigint, tradingFeeBps: bigint, direction: "long" | "short"): bigint;
+declare function computeEstimatedEntryPrice(oracleE6: bigint, tradingFeeBps: bigint, direction: 'long' | 'short'): bigint;
 /**
  * Convert per-slot funding rate (bps) to annualized percentage.
  */
@@ -1834,7 +1834,7 @@ declare function validateU16(value: string, field: string): number;
  * Given a token mint, discovers all available price sources (DexScreener, Pyth, Jupiter),
  * ranks them by liquidity/reliability, and returns the best oracle config.
  */
-type PriceSourceType = "pyth" | "dex" | "jupiter";
+type PriceSourceType = 'pyth' | 'dex' | 'jupiter';
 interface PriceSource {
     type: PriceSourceType;
     /** Pool address (dex), Pyth feed ID (pyth), or mint (jupiter) */
@@ -1879,7 +1879,7 @@ declare const PROGRAM_IDS: {
         readonly matcher: "";
     };
 };
-type Network = "devnet" | "mainnet";
+type Network = 'devnet' | 'mainnet';
 /**
  * Get the Percolator program ID for the current network
  *

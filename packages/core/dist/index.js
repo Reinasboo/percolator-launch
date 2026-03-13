@@ -210,18 +210,10 @@ function encodeInitLP(args) {
   );
 }
 function encodeDepositCollateral(args) {
-  return concatBytes(
-    encU8(IX_TAG.DepositCollateral),
-    encU16(args.userIdx),
-    encU64(args.amount)
-  );
+  return concatBytes(encU8(IX_TAG.DepositCollateral), encU16(args.userIdx), encU64(args.amount));
 }
 function encodeWithdrawCollateral(args) {
-  return concatBytes(
-    encU8(IX_TAG.WithdrawCollateral),
-    encU16(args.userIdx),
-    encU64(args.amount)
-  );
+  return concatBytes(encU8(IX_TAG.WithdrawCollateral), encU16(args.userIdx), encU64(args.amount));
 }
 function encodeKeeperCrank(args) {
   return concatBytes(
@@ -239,10 +231,7 @@ function encodeTradeNoCpi(args) {
   );
 }
 function encodeLiquidateAtOracle(args) {
-  return concatBytes(
-    encU8(IX_TAG.LiquidateAtOracle),
-    encU16(args.targetIdx)
-  );
+  return concatBytes(encU8(IX_TAG.LiquidateAtOracle), encU16(args.targetIdx));
 }
 function encodeCloseAccount(args) {
   return concatBytes(encU8(IX_TAG.CloseAccount), encU16(args.userIdx));
@@ -268,10 +257,7 @@ function encodeTradeCpiV2(args) {
   );
 }
 function encodeSetRiskThreshold(args) {
-  return concatBytes(
-    encU8(IX_TAG.SetRiskThreshold),
-    encU128(args.newThreshold)
-  );
+  return concatBytes(encU8(IX_TAG.SetRiskThreshold), encU128(args.newThreshold));
 }
 function encodeUpdateAdmin(args) {
   return concatBytes(encU8(IX_TAG.UpdateAdmin), encPubkey(args.newAdmin));
@@ -300,29 +286,16 @@ function encodeUpdateConfig(args) {
   );
 }
 function encodeSetMaintenanceFee(args) {
-  return concatBytes(
-    encU8(IX_TAG.SetMaintenanceFee),
-    encU128(args.newFee)
-  );
+  return concatBytes(encU8(IX_TAG.SetMaintenanceFee), encU128(args.newFee));
 }
 function encodeSetOracleAuthority(args) {
-  return concatBytes(
-    encU8(IX_TAG.SetOracleAuthority),
-    encPubkey(args.newAuthority)
-  );
+  return concatBytes(encU8(IX_TAG.SetOracleAuthority), encPubkey(args.newAuthority));
 }
 function encodePushOraclePrice(args) {
-  return concatBytes(
-    encU8(IX_TAG.PushOraclePrice),
-    encU64(args.priceE6),
-    encI64(args.timestamp)
-  );
+  return concatBytes(encU8(IX_TAG.PushOraclePrice), encU64(args.priceE6), encI64(args.timestamp));
 }
 function encodeSetOraclePriceCap(args) {
-  return concatBytes(
-    encU8(IX_TAG.SetOraclePriceCap),
-    encU64(args.maxChangeE2bps)
-  );
+  return concatBytes(encU8(IX_TAG.SetOraclePriceCap), encU64(args.maxChangeE2bps));
 }
 function encodeResolveMarket() {
   return encU8(IX_TAG.ResolveMarket);
@@ -331,10 +304,7 @@ function encodeWithdrawInsurance() {
   return encU8(IX_TAG.WithdrawInsurance);
 }
 function encodeAdminForceClose(args) {
-  return concatBytes(
-    encU8(IX_TAG.AdminForceClose),
-    encU16(args.targetIdx)
-  );
+  return concatBytes(encU8(IX_TAG.AdminForceClose), encU16(args.targetIdx));
 }
 function encodeUpdateRiskParams(args) {
   const parts = [
@@ -670,9 +640,7 @@ function buildAccountMetas(spec, keys) {
     });
   }
   if (keysArray.length !== spec.length) {
-    throw new Error(
-      `Account count mismatch: expected ${spec.length}, got ${keysArray.length}`
-    );
+    throw new Error(`Account count mismatch: expected ${spec.length}, got ${keysArray.length}`);
   }
   return spec.map((s, i) => ({
     pubkey: keysArray[i],
@@ -1069,7 +1037,10 @@ var V1_SIZES_LEGACY = /* @__PURE__ */ new Map();
 for (const n of TIERS) {
   V0_SIZES.set(computeSlabSize(V0_ENGINE_OFF, V0_ENGINE_BITMAP_OFF, V0_ACCOUNT_SIZE, n), n);
   V1_SIZES.set(computeSlabSize(V1_ENGINE_OFF, V1_ENGINE_BITMAP_OFF, V1_ACCOUNT_SIZE, n), n);
-  V1_SIZES_LEGACY.set(computeSlabSize(V1_ENGINE_OFF_LEGACY, V1_ENGINE_BITMAP_OFF, V1_ACCOUNT_SIZE, n), n);
+  V1_SIZES_LEGACY.set(
+    computeSlabSize(V1_ENGINE_OFF_LEGACY, V1_ENGINE_BITMAP_OFF, V1_ACCOUNT_SIZE, n),
+    n
+  );
 }
 function buildLayout(version, maxAccounts, engineOffOverride) {
   const isV0 = version === 0;
@@ -1220,7 +1191,9 @@ function parseHeader(data) {
   }
   const magic = readU64LE(data, 0);
   if (magic !== MAGIC) {
-    throw new Error(`Invalid slab magic: expected ${MAGIC.toString(16)}, got ${magic.toString(16)}`);
+    throw new Error(
+      `Invalid slab magic: expected ${MAGIC.toString(16)}, got ${magic.toString(16)}`
+    );
   }
   const version = readU32LE(data, 8);
   const bump = readU8(data, 12);
@@ -1436,7 +1409,9 @@ function parseParams(data, layoutHint) {
 function parseEngine(data) {
   const layout = detectSlabLayout(data.length);
   if (!layout) {
-    throw new Error(`Unrecognized slab data length: ${data.length}. Cannot determine layout version.`);
+    throw new Error(
+      `Unrecognized slab data length: ${data.length}. Cannot determine layout version.`
+    );
   }
   const base = layout.engineOff;
   return {
@@ -1545,8 +1520,12 @@ function parseAccount(data, idx) {
     positionSize: readI128LE(data, base + ACCT_POSITION_SIZE_OFF),
     entryPrice: readU64LE(data, base + ACCT_ENTRY_PRICE_OFF),
     fundingIndex: readI128LE(data, base + ACCT_FUNDING_INDEX_OFF),
-    matcherProgram: new PublicKey3(data.subarray(base + ACCT_MATCHER_PROGRAM_OFF, base + ACCT_MATCHER_PROGRAM_OFF + 32)),
-    matcherContext: new PublicKey3(data.subarray(base + ACCT_MATCHER_CONTEXT_OFF, base + ACCT_MATCHER_CONTEXT_OFF + 32)),
+    matcherProgram: new PublicKey3(
+      data.subarray(base + ACCT_MATCHER_PROGRAM_OFF, base + ACCT_MATCHER_PROGRAM_OFF + 32)
+    ),
+    matcherContext: new PublicKey3(
+      data.subarray(base + ACCT_MATCHER_CONTEXT_OFF, base + ACCT_MATCHER_CONTEXT_OFF + 32)
+    ),
     owner: new PublicKey3(data.subarray(base + ACCT_OWNER_OFF, base + ACCT_OWNER_OFF + 32)),
     feeCredits: readI128LE(data, base + ACCT_FEE_CREDITS_OFF),
     lastFeeSlot: readU64LE(data, base + ACCT_LAST_FEE_SLOT_OFF)
@@ -1566,10 +1545,7 @@ function parseAllAccounts(data) {
 import { PublicKey as PublicKey4 } from "@solana/web3.js";
 var textEncoder = new TextEncoder();
 function deriveVaultAuthority(programId, slab) {
-  return PublicKey4.findProgramAddressSync(
-    [textEncoder.encode("vault"), slab.toBytes()],
-    programId
-  );
+  return PublicKey4.findProgramAddressSync([textEncoder.encode("vault"), slab.toBytes()], programId);
 }
 function deriveInsuranceLpMint(programId, slab) {
   return PublicKey4.findProgramAddressSync(
@@ -1591,15 +1567,11 @@ function deriveKeeperFund(programId, slab) {
     programId
   );
 }
-var PUMPSWAP_PROGRAM_ID = new PublicKey4(
-  "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA"
-);
+var PUMPSWAP_PROGRAM_ID = new PublicKey4("pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA");
 var RAYDIUM_CLMM_PROGRAM_ID = new PublicKey4(
   "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK"
 );
-var METEORA_DLMM_PROGRAM_ID = new PublicKey4(
-  "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo"
-);
+var METEORA_DLMM_PROGRAM_ID = new PublicKey4("LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo");
 var PYTH_PUSH_ORACLE_PROGRAM_ID = new PublicKey4(
   "pythWSnswVUd12oZpeFP8e9CVaEqJg25g1Vtc2biRsT"
 );
@@ -1609,10 +1581,7 @@ function derivePythPushOraclePDA(feedIdHex) {
     feedId[i] = parseInt(feedIdHex.substring(i * 2, i * 2 + 2), 16);
   }
   const shardBuf = new Uint8Array(2);
-  return PublicKey4.findProgramAddressSync(
-    [shardBuf, feedId],
-    PYTH_PUSH_ORACLE_PROGRAM_ID
-  );
+  return PublicKey4.findProgramAddressSync([shardBuf, feedId], PYTH_PUSH_ORACLE_PROGRAM_ID);
 }
 
 // src/solana/ata.ts
@@ -1636,14 +1605,44 @@ async function fetchTokenAccount(connection, address, tokenProgramId = TOKEN_PRO
 var ENGINE_BITMAP_OFF_V0 = 320;
 var MAGIC_BYTES = new Uint8Array([84, 65, 76, 79, 67, 82, 69, 80]);
 var SLAB_TIERS = {
-  small: { maxAccounts: 256, dataSize: 65352, label: "Small", description: "256 slots \xB7 ~0.45 SOL" },
-  medium: { maxAccounts: 1024, dataSize: 257448, label: "Medium", description: "1,024 slots \xB7 ~1.79 SOL" },
-  large: { maxAccounts: 4096, dataSize: 1025832, label: "Large", description: "4,096 slots \xB7 ~7.14 SOL" }
+  small: {
+    maxAccounts: 256,
+    dataSize: 65352,
+    label: "Small",
+    description: "256 slots \xB7 ~0.45 SOL"
+  },
+  medium: {
+    maxAccounts: 1024,
+    dataSize: 257448,
+    label: "Medium",
+    description: "1,024 slots \xB7 ~1.79 SOL"
+  },
+  large: {
+    maxAccounts: 4096,
+    dataSize: 1025832,
+    label: "Large",
+    description: "4,096 slots \xB7 ~7.14 SOL"
+  }
 };
 var SLAB_TIERS_V0 = {
-  small: { maxAccounts: 256, dataSize: 62808, label: "Small", description: "256 slots \xB7 ~0.44 SOL" },
-  medium: { maxAccounts: 1024, dataSize: 248760, label: "Medium", description: "1,024 slots \xB7 ~1.73 SOL" },
-  large: { maxAccounts: 4096, dataSize: 992568, label: "Large", description: "4,096 slots \xB7 ~6.90 SOL" }
+  small: {
+    maxAccounts: 256,
+    dataSize: 62808,
+    label: "Small",
+    description: "256 slots \xB7 ~0.44 SOL"
+  },
+  medium: {
+    maxAccounts: 1024,
+    dataSize: 248760,
+    label: "Medium",
+    description: "1,024 slots \xB7 ~1.73 SOL"
+  },
+  large: {
+    maxAccounts: 4096,
+    dataSize: 992568,
+    label: "Large",
+    description: "4,096 slots \xB7 ~6.90 SOL"
+  }
 };
 var SLAB_TIERS_V1 = SLAB_TIERS;
 function slabDataSize(maxAccounts) {
@@ -1798,17 +1797,20 @@ function parseEngineLight(data, layout, maxAccounts = 4096) {
   };
 }
 async function discoverMarkets(connection, programId) {
-  const ALL_TIERS = [
-    ...Object.values(SLAB_TIERS),
-    ...Object.values(SLAB_TIERS_V0)
-  ];
+  const ALL_TIERS = [...Object.values(SLAB_TIERS), ...Object.values(SLAB_TIERS_V0)];
   let rawAccounts = [];
   try {
     const queries = ALL_TIERS.map(
       (tier) => connection.getProgramAccounts(programId, {
         filters: [{ dataSize: tier.dataSize }],
         dataSlice: { offset: 0, length: HEADER_SLICE_LENGTH }
-      }).then((results2) => results2.map((entry) => ({ ...entry, maxAccounts: tier.maxAccounts, dataSize: tier.dataSize })))
+      }).then(
+        (results2) => results2.map((entry) => ({
+          ...entry,
+          maxAccounts: tier.maxAccounts,
+          dataSize: tier.dataSize
+        }))
+      )
     );
     const results = await Promise.allSettled(queries);
     let hadRejection = false;
@@ -1839,7 +1841,11 @@ async function discoverMarkets(connection, programId) {
         ],
         dataSlice: { offset: 0, length: HEADER_SLICE_LENGTH }
       });
-      rawAccounts = [...fallback].map((e) => ({ ...e, maxAccounts: 4096, dataSize: SLAB_TIERS.large.dataSize }));
+      rawAccounts = [...fallback].map((e) => ({
+        ...e,
+        maxAccounts: 4096,
+        dataSize: SLAB_TIERS.large.dataSize
+      }));
     }
   } catch (err) {
     console.warn(
@@ -1858,7 +1864,11 @@ async function discoverMarkets(connection, programId) {
       ],
       dataSlice: { offset: 0, length: HEADER_SLICE_LENGTH }
     });
-    rawAccounts = [...fallback].map((e) => ({ ...e, maxAccounts: 4096, dataSize: SLAB_TIERS.large.dataSize }));
+    rawAccounts = [...fallback].map((e) => ({
+      ...e,
+      maxAccounts: 4096,
+      dataSize: SLAB_TIERS.large.dataSize
+    }));
   }
   const accounts = rawAccounts;
   const markets = [];
@@ -1914,7 +1924,8 @@ function parseDexPool(dexType, poolAddress, data) {
 function computeDexSpotPriceE6(dexType, data, vaultData) {
   switch (dexType) {
     case "pumpswap":
-      if (!vaultData) throw new Error("PumpSwap requires vaultData (base and quote vault accounts)");
+      if (!vaultData)
+        throw new Error("PumpSwap requires vaultData (base and quote vault accounts)");
       return computePumpSwapPriceE6(data, vaultData);
     case "raydium-clmm":
       return computeRaydiumClmmPriceE6(data);
@@ -1939,13 +1950,25 @@ function parsePumpSwapPool(poolAddress, data) {
 var SPL_TOKEN_AMOUNT_MIN_LEN = 72;
 function computePumpSwapPriceE6(_poolData, vaultData) {
   if (vaultData.base.length < SPL_TOKEN_AMOUNT_MIN_LEN) {
-    throw new Error(`PumpSwap base vault data too short: ${vaultData.base.length} < ${SPL_TOKEN_AMOUNT_MIN_LEN}`);
+    throw new Error(
+      `PumpSwap base vault data too short: ${vaultData.base.length} < ${SPL_TOKEN_AMOUNT_MIN_LEN}`
+    );
   }
   if (vaultData.quote.length < SPL_TOKEN_AMOUNT_MIN_LEN) {
-    throw new Error(`PumpSwap quote vault data too short: ${vaultData.quote.length} < ${SPL_TOKEN_AMOUNT_MIN_LEN}`);
+    throw new Error(
+      `PumpSwap quote vault data too short: ${vaultData.quote.length} < ${SPL_TOKEN_AMOUNT_MIN_LEN}`
+    );
   }
-  const baseDv = new DataView(vaultData.base.buffer, vaultData.base.byteOffset, vaultData.base.byteLength);
-  const quoteDv = new DataView(vaultData.quote.buffer, vaultData.quote.byteOffset, vaultData.quote.byteLength);
+  const baseDv = new DataView(
+    vaultData.base.buffer,
+    vaultData.base.byteOffset,
+    vaultData.base.byteLength
+  );
+  const quoteDv = new DataView(
+    vaultData.quote.buffer,
+    vaultData.quote.byteOffset,
+    vaultData.quote.byteLength
+  );
   const baseAmount = readU64LE3(baseDv, 64);
   const quoteAmount = readU64LE3(quoteDv, 64);
   if (baseAmount === 0n) return 0n;
@@ -2057,15 +2080,11 @@ function parseChainlinkPrice(data) {
   }
   const decimals = readU82(data, CHAINLINK_DECIMALS_OFFSET);
   if (decimals > MAX_DECIMALS) {
-    throw new Error(
-      `Oracle decimals out of range: ${decimals} (max ${MAX_DECIMALS})`
-    );
+    throw new Error(`Oracle decimals out of range: ${decimals} (max ${MAX_DECIMALS})`);
   }
   const price = readBigInt64LE(data, CHAINLINK_ANSWER_OFFSET);
   if (price <= 0n) {
-    throw new Error(
-      `Oracle price is non-positive: ${price}`
-    );
+    throw new Error(`Oracle price is non-positive: ${price}`);
   }
   return { price, decimals };
 }
@@ -2081,9 +2100,7 @@ function isValidChainlinkOracle(data) {
 // src/solana/token-program.ts
 import { PublicKey as PublicKey6 } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID as TOKEN_PROGRAM_ID3 } from "@solana/spl-token";
-var TOKEN_2022_PROGRAM_ID = new PublicKey6(
-  "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
-);
+var TOKEN_2022_PROGRAM_ID = new PublicKey6("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 async function detectTokenProgram(connection, mint) {
   const info = await connection.getAccountInfo(mint);
   if (!info) throw new Error(`Mint account not found: ${mint.toBase58()}`);
@@ -2099,9 +2116,7 @@ function isStandardToken(tokenProgramId) {
 // src/solana/stake.ts
 import { PublicKey as PublicKey7, SystemProgram as SystemProgram2, SYSVAR_RENT_PUBKEY as SYSVAR_RENT_PUBKEY2, SYSVAR_CLOCK_PUBKEY as SYSVAR_CLOCK_PUBKEY2 } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID as TOKEN_PROGRAM_ID4 } from "@solana/spl-token";
-var STAKE_PROGRAM_ID = new PublicKey7(
-  "6aJb1F9CDCVWCNYFwj8aQsVb696YnW6J1FznteHq4Q6k"
-);
+var STAKE_PROGRAM_ID = new PublicKey7("6aJb1F9CDCVWCNYFwj8aQsVb696YnW6J1FznteHq4Q6k");
 var STAKE_IX = {
   InitPool: 0,
   Deposit: 1,
@@ -2127,16 +2142,10 @@ var STAKE_IX = {
   DepositJunior: 16
 };
 function deriveStakePool(slab, programId = STAKE_PROGRAM_ID) {
-  return PublicKey7.findProgramAddressSync(
-    [Buffer.from("stake_pool"), slab.toBuffer()],
-    programId
-  );
+  return PublicKey7.findProgramAddressSync([Buffer.from("stake_pool"), slab.toBuffer()], programId);
 }
 function deriveStakeVaultAuth(pool, programId = STAKE_PROGRAM_ID) {
-  return PublicKey7.findProgramAddressSync(
-    [Buffer.from("vault_auth"), pool.toBuffer()],
-    programId
-  );
+  return PublicKey7.findProgramAddressSync([Buffer.from("vault_auth"), pool.toBuffer()], programId);
 }
 function deriveDepositPda(pool, user, programId = STAKE_PROGRAM_ID) {
   return PublicKey7.findProgramAddressSync(
@@ -2152,7 +2161,7 @@ function u64Le(v) {
 function u128Le(v) {
   const buf = Buffer.alloc(16);
   const big = BigInt(v);
-  buf.writeBigUInt64LE(big & 0xFFFFFFFFFFFFFFFFn, 0);
+  buf.writeBigUInt64LE(big & 0xffffffffffffffffn, 0);
   buf.writeBigUInt64LE(big >> 64n, 8);
   return buf;
 }
@@ -2162,11 +2171,7 @@ function u16Le(v) {
   return buf;
 }
 function encodeStakeInitPool(cooldownSlots, depositCap) {
-  return Buffer.concat([
-    Buffer.from([STAKE_IX.InitPool]),
-    u64Le(cooldownSlots),
-    u64Le(depositCap)
-  ]);
+  return Buffer.concat([Buffer.from([STAKE_IX.InitPool]), u64Le(cooldownSlots), u64Le(depositCap)]);
 }
 function encodeStakeDeposit(amount) {
   return Buffer.concat([Buffer.from([STAKE_IX.Deposit]), u64Le(amount)]);
@@ -2190,31 +2195,19 @@ function encodeStakeTransferAdmin() {
   return Buffer.from([STAKE_IX.TransferAdmin]);
 }
 function encodeStakeAdminSetOracleAuthority(newAuthority) {
-  return Buffer.concat([
-    Buffer.from([STAKE_IX.AdminSetOracleAuthority]),
-    newAuthority.toBuffer()
-  ]);
+  return Buffer.concat([Buffer.from([STAKE_IX.AdminSetOracleAuthority]), newAuthority.toBuffer()]);
 }
 function encodeStakeAdminSetRiskThreshold(newThreshold) {
-  return Buffer.concat([
-    Buffer.from([STAKE_IX.AdminSetRiskThreshold]),
-    u128Le(newThreshold)
-  ]);
+  return Buffer.concat([Buffer.from([STAKE_IX.AdminSetRiskThreshold]), u128Le(newThreshold)]);
 }
 function encodeStakeAdminSetMaintenanceFee(newFee) {
-  return Buffer.concat([
-    Buffer.from([STAKE_IX.AdminSetMaintenanceFee]),
-    u128Le(newFee)
-  ]);
+  return Buffer.concat([Buffer.from([STAKE_IX.AdminSetMaintenanceFee]), u128Le(newFee)]);
 }
 function encodeStakeAdminResolveMarket() {
   return Buffer.from([STAKE_IX.AdminResolveMarket]);
 }
 function encodeStakeAdminWithdrawInsurance(amount) {
-  return Buffer.concat([
-    Buffer.from([STAKE_IX.AdminWithdrawInsurance]),
-    u64Le(amount)
-  ]);
+  return Buffer.concat([Buffer.from([STAKE_IX.AdminWithdrawInsurance]), u64Le(amount)]);
 }
 function encodeStakeAccrueFees() {
   return Buffer.from([STAKE_IX.AccrueFees]);
@@ -2234,10 +2227,7 @@ function encodeStakeAdminSetHwmConfig(enabled, hwmFloorBps) {
   ]);
 }
 function encodeStakeAdminSetTrancheConfig(juniorFeeMultBps) {
-  return Buffer.concat([
-    Buffer.from([STAKE_IX.AdminSetTrancheConfig]),
-    u16Le(juniorFeeMultBps)
-  ]);
+  return Buffer.concat([Buffer.from([STAKE_IX.AdminSetTrancheConfig]), u16Le(juniorFeeMultBps)]);
 }
 function encodeStakeDepositJunior(amount) {
   return Buffer.concat([Buffer.from([STAKE_IX.DepositJunior]), u64Le(amount)]);
@@ -2673,10 +2663,7 @@ function validateIndex(value, field) {
     throw new ValidationError(field, `must be non-negative, got ${num}`);
   }
   if (num > U16_MAX) {
-    throw new ValidationError(
-      field,
-      `must be <= ${U16_MAX} (u16 max), got ${num}`
-    );
+    throw new ValidationError(field, `must be <= ${U16_MAX} (u16 max), got ${num}`);
   }
   return num;
 }
@@ -2685,19 +2672,13 @@ function validateAmount(value, field) {
   try {
     num = BigInt(value);
   } catch {
-    throw new ValidationError(
-      field,
-      `"${value}" is not a valid number. Use decimal digits only.`
-    );
+    throw new ValidationError(field, `"${value}" is not a valid number. Use decimal digits only.`);
   }
   if (num < 0n) {
     throw new ValidationError(field, `must be non-negative, got ${num}`);
   }
   if (num > U64_MAX) {
-    throw new ValidationError(
-      field,
-      `must be <= ${U64_MAX} (u64 max), got ${num}`
-    );
+    throw new ValidationError(field, `must be <= ${U64_MAX} (u64 max), got ${num}`);
   }
   return num;
 }
@@ -2706,19 +2687,13 @@ function validateU128(value, field) {
   try {
     num = BigInt(value);
   } catch {
-    throw new ValidationError(
-      field,
-      `"${value}" is not a valid number. Use decimal digits only.`
-    );
+    throw new ValidationError(field, `"${value}" is not a valid number. Use decimal digits only.`);
   }
   if (num < 0n) {
     throw new ValidationError(field, `must be non-negative, got ${num}`);
   }
   if (num > U128_MAX) {
-    throw new ValidationError(
-      field,
-      `must be <= ${U128_MAX} (u128 max), got ${num}`
-    );
+    throw new ValidationError(field, `must be <= ${U128_MAX} (u128 max), got ${num}`);
   }
   return num;
 }
@@ -2733,16 +2708,10 @@ function validateI64(value, field) {
     );
   }
   if (num < I64_MIN) {
-    throw new ValidationError(
-      field,
-      `must be >= ${I64_MIN} (i64 min), got ${num}`
-    );
+    throw new ValidationError(field, `must be >= ${I64_MIN} (i64 min), got ${num}`);
   }
   if (num > I64_MAX) {
-    throw new ValidationError(
-      field,
-      `must be <= ${I64_MAX} (i64 max), got ${num}`
-    );
+    throw new ValidationError(field, `must be <= ${I64_MAX} (i64 max), got ${num}`);
   }
   return num;
 }
@@ -2757,16 +2726,10 @@ function validateI128(value, field) {
     );
   }
   if (num < I128_MIN) {
-    throw new ValidationError(
-      field,
-      `must be >= ${I128_MIN} (i128 min), got ${num}`
-    );
+    throw new ValidationError(field, `must be >= ${I128_MIN} (i128 min), got ${num}`);
   }
   if (num > I128_MAX) {
-    throw new ValidationError(
-      field,
-      `must be <= ${I128_MAX} (i128 max), got ${num}`
-    );
+    throw new ValidationError(field, `must be <= ${I128_MAX} (i128 max), got ${num}`);
   }
   return num;
 }
@@ -2779,10 +2742,7 @@ function validateBps(value, field) {
     throw new ValidationError(field, `must be non-negative, got ${num}`);
   }
   if (num > 1e4) {
-    throw new ValidationError(
-      field,
-      `must be <= 10000 (100%), got ${num}`
-    );
+    throw new ValidationError(field, `must be <= 10000 (100%), got ${num}`);
   }
   return num;
 }
@@ -2798,10 +2758,7 @@ function validateU16(value, field) {
     throw new ValidationError(field, `must be non-negative, got ${num}`);
   }
   if (num > U16_MAX) {
-    throw new ValidationError(
-      field,
-      `must be <= ${U16_MAX} (u16 max), got ${num}`
-    );
+    throw new ValidationError(field, `must be <= ${U16_MAX} (u16 max), got ${num}`);
   }
   return num;
 }
@@ -2809,47 +2766,110 @@ function validateU16(value, field) {
 // src/oracle/price-router.ts
 var PYTH_SOLANA_FEEDS = {
   // SOL
-  "ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d": { symbol: "SOL", mint: "So11111111111111111111111111111111111111112" },
+  ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d: {
+    symbol: "SOL",
+    mint: "So11111111111111111111111111111111111111112"
+  },
   // BTC
-  "e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43": { symbol: "BTC", mint: "9n4nbM75f5Ui33ZbPYXn59EwSgE8CGsHtAeTH5YFeJ9E" },
+  e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43: {
+    symbol: "BTC",
+    mint: "9n4nbM75f5Ui33ZbPYXn59EwSgE8CGsHtAeTH5YFeJ9E"
+  },
   // ETH
-  "ff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace": { symbol: "ETH", mint: "7vfCXTUXx5WJV5JADk17DUJ4ksgau7utNKj4b963voxs" },
+  ff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace: {
+    symbol: "ETH",
+    mint: "7vfCXTUXx5WJV5JADk17DUJ4ksgau7utNKj4b963voxs"
+  },
   // USDC
-  "eaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a": { symbol: "USDC", mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" },
+  eaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a: {
+    symbol: "USDC",
+    mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+  },
   // USDT
-  "2b89b9dc8fdf9f34709a5b106b472f0f39bb6ca9ce04b0fd7f2e971688e2e53b": { symbol: "USDT", mint: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB" },
+  "2b89b9dc8fdf9f34709a5b106b472f0f39bb6ca9ce04b0fd7f2e971688e2e53b": {
+    symbol: "USDT",
+    mint: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"
+  },
   // BONK
-  "72b021217ca3fe68922a19aaf990109cb9d84e9ad004b4d2025ad6f529314419": { symbol: "BONK", mint: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263" },
+  "72b021217ca3fe68922a19aaf990109cb9d84e9ad004b4d2025ad6f529314419": {
+    symbol: "BONK",
+    mint: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"
+  },
   // JTO
-  "b43660a5f790c69354b0729a5ef9d50d68f1df92107540210b9cccba1f947cc2": { symbol: "JTO", mint: "jtojtomepa8beP8AuQc6eXt5FriJwfFMwQx2v2f9mCL" },
+  b43660a5f790c69354b0729a5ef9d50d68f1df92107540210b9cccba1f947cc2: {
+    symbol: "JTO",
+    mint: "jtojtomepa8beP8AuQc6eXt5FriJwfFMwQx2v2f9mCL"
+  },
   // JUP
-  "0a0408d619e9380abad35060f9192039ed5042fa6f82301d0e48bb52be830996": { symbol: "JUP", mint: "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN" },
+  "0a0408d619e9380abad35060f9192039ed5042fa6f82301d0e48bb52be830996": {
+    symbol: "JUP",
+    mint: "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN"
+  },
   // PYTH
-  "0bbf28e9a841a1cc788f6a361b17ca072d0ea3098a1e5df1c3922d06719579ff": { symbol: "PYTH", mint: "HZ1JovNiVvGrGNiiYvEozEVgZ58xaU3RKwX8eACQBCt3" },
+  "0bbf28e9a841a1cc788f6a361b17ca072d0ea3098a1e5df1c3922d06719579ff": {
+    symbol: "PYTH",
+    mint: "HZ1JovNiVvGrGNiiYvEozEVgZ58xaU3RKwX8eACQBCt3"
+  },
   // RAY
-  "91568bae053f70f0c3fbf32eb55df25ec609fb8a21cfb1a0e3b34fc3caa1eab0": { symbol: "RAY", mint: "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R" },
+  "91568bae053f70f0c3fbf32eb55df25ec609fb8a21cfb1a0e3b34fc3caa1eab0": {
+    symbol: "RAY",
+    mint: "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R"
+  },
   // ORCA
-  "37505261e557e251f40c2c721e52c4c8bfb2e54a12f450d0e24078276ad51b95": { symbol: "ORCA", mint: "orcaEKTdK7LKz57vaAYr9QeNsVEPfiu6QeMU1kektZE" },
+  "37505261e557e251f40c2c721e52c4c8bfb2e54a12f450d0e24078276ad51b95": {
+    symbol: "ORCA",
+    mint: "orcaEKTdK7LKz57vaAYr9QeNsVEPfiu6QeMU1kektZE"
+  },
   // MNGO
-  "f9abf5eb70a2e68e21b72b68cc6e0a4d25e1d77e1ec16eae5b93068a2cb81f90": { symbol: "MNGO", mint: "MangoCzJ36AjZyKwVj3VnYU4GTonjfVEnJmvvWaxLac" },
+  f9abf5eb70a2e68e21b72b68cc6e0a4d25e1d77e1ec16eae5b93068a2cb81f90: {
+    symbol: "MNGO",
+    mint: "MangoCzJ36AjZyKwVj3VnYU4GTonjfVEnJmvvWaxLac"
+  },
   // MSOL
-  "c2289a6a43d2ce91c6f55caec370f4acc38a2ed477f58813334c6d03749ff2a4": { symbol: "MSOL", mint: "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So" },
+  c2289a6a43d2ce91c6f55caec370f4acc38a2ed477f58813334c6d03749ff2a4: {
+    symbol: "MSOL",
+    mint: "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So"
+  },
   // JITOSOL
-  "67be9f519b95cf24338801051f9a808eff0a578ccb388db73b7f6fe1de019ffb": { symbol: "JITOSOL", mint: "J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn" },
+  "67be9f519b95cf24338801051f9a808eff0a578ccb388db73b7f6fe1de019ffb": {
+    symbol: "JITOSOL",
+    mint: "J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn"
+  },
   // WIF
-  "4ca4beeca86f0d164160323817a4e42b10010a724c2217c6ee41b54e6c5c4b03": { symbol: "WIF", mint: "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm" },
+  "4ca4beeca86f0d164160323817a4e42b10010a724c2217c6ee41b54e6c5c4b03": {
+    symbol: "WIF",
+    mint: "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm"
+  },
   // RENDER
-  "3573eb14b04aa0e4f7cf1e7ae1c2a0e3bc6100b2e476876ca079e10e2c42d7c6": { symbol: "RENDER", mint: "rndrizKT3MK1iimdxRdWabcF7Zg7AR5T4nud4EkHBof" },
+  "3573eb14b04aa0e4f7cf1e7ae1c2a0e3bc6100b2e476876ca079e10e2c42d7c6": {
+    symbol: "RENDER",
+    mint: "rndrizKT3MK1iimdxRdWabcF7Zg7AR5T4nud4EkHBof"
+  },
   // W
-  "eff7446475e218517566ea99e72a4abec2e1bd8498b43b7d8331e29dcb059389": { symbol: "W", mint: "85VBFQZC9TZkfaptBWjvUw7YbZjy52A6mjtPGjstQAmQ" },
+  eff7446475e218517566ea99e72a4abec2e1bd8498b43b7d8331e29dcb059389: {
+    symbol: "W",
+    mint: "85VBFQZC9TZkfaptBWjvUw7YbZjy52A6mjtPGjstQAmQ"
+  },
   // TNSR
-  "05ecd4597cd48fe13d6cc3596c62af4f9675aee06e2e0ca164a73be4b0813f3b": { symbol: "TNSR", mint: "TNSRxcUxoT9xBG3de7PiJyTDYu7kskLqcpddxnEJAS6" },
+  "05ecd4597cd48fe13d6cc3596c62af4f9675aee06e2e0ca164a73be4b0813f3b": {
+    symbol: "TNSR",
+    mint: "TNSRxcUxoT9xBG3de7PiJyTDYu7kskLqcpddxnEJAS6"
+  },
   // HNT
-  "649fdd7ec08e8e2a20f425729854e90293dcbe2376abc47197a14da6ff339756": { symbol: "HNT", mint: "hntyVP6YFm1Hg25TN9WGLqM12b8TQmcknKrdu1oxWux" },
+  "649fdd7ec08e8e2a20f425729854e90293dcbe2376abc47197a14da6ff339756": {
+    symbol: "HNT",
+    mint: "hntyVP6YFm1Hg25TN9WGLqM12b8TQmcknKrdu1oxWux"
+  },
   // MOBILE
-  "ff4c53361e36a9b1caa490f1e46e07e3c472d54d2a4856a1e4609bd4db36bff0": { symbol: "MOBILE", mint: "mb1eu7TzEc71KxDpsmsKoucSSuuoGLv1drys1oP2jh6" },
+  ff4c53361e36a9b1caa490f1e46e07e3c472d54d2a4856a1e4609bd4db36bff0: {
+    symbol: "MOBILE",
+    mint: "mb1eu7TzEc71KxDpsmsKoucSSuuoGLv1drys1oP2jh6"
+  },
   // IOT
-  "8bdd20f0c68bf7370a19389bbb3d17c1db7956c38efa08b2f3dd0e5db9b8c1ef": { symbol: "IOT", mint: "iotEVVZLEywoTn1QdwNPddxPWszn3zFhEot3MfL9fns" }
+  "8bdd20f0c68bf7370a19389bbb3d17c1db7956c38efa08b2f3dd0e5db9b8c1ef": {
+    symbol: "IOT",
+    mint: "iotEVVZLEywoTn1QdwNPddxPWszn3zFhEot3MfL9fns"
+  }
 };
 var MINT_TO_PYTH_FEED = /* @__PURE__ */ new Map();
 for (const [feedId, info] of Object.entries(PYTH_SOLANA_FEEDS)) {

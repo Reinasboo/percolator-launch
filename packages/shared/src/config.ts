@@ -1,10 +1,10 @@
-import "dotenv/config";
-import { validateEnv } from "./validation.js";
-import { validateNetworkConfig, ensureNetworkConfigValid } from "./networkValidation.js";
+import 'dotenv/config';
+import { validateEnv } from './validation.js';
+import { validateNetworkConfig, ensureNetworkConfigValid } from './networkValidation.js';
 
 // Validate network configuration at startup (prevents mainnet accidents)
 // Skip in test environment — tests manage env vars dynamically
-if (!process.env.VITEST && process.env.NODE_ENV !== "test") {
+if (!process.env.VITEST && process.env.NODE_ENV !== 'test') {
   ensureNetworkConfigValid(process.env);
 }
 
@@ -20,8 +20,10 @@ try {
   // Fall back to safe devnet defaults so the config module stays importable.
   networkConfig = {
     // PERC-469: prefer network-specific key, fall back to generic
-    rpcUrl: env.RPC_URL ?? `https://devnet.helius-rpc.com/?api-key=${env.HELIUS_DEVNET_API_KEY ?? env.HELIUS_API_KEY ?? ""}`,
-    programIds: [env.PROGRAM_ID ?? "FxfD37s1AZTeWfFQps9Zpebi2dNQ9QSSDtfMKdbsfKrD"],
+    rpcUrl:
+      env.RPC_URL ??
+      `https://devnet.helius-rpc.com/?api-key=${env.HELIUS_DEVNET_API_KEY ?? env.HELIUS_API_KEY ?? ''}`,
+    programIds: [env.PROGRAM_ID ?? 'FxfD37s1AZTeWfFQps9Zpebi2dNQ9QSSDtfMKdbsfKrD'],
   };
 }
 
@@ -31,27 +33,32 @@ export const config = {
   // PROGRAM_ID is required and validated above
   programId: networkConfig.programIds[0],
   /** Comma-separated list of all program IDs to scan for markets */
-  allProgramIds: (env.ALL_PROGRAM_IDS ?? [
-    "FxfD37s1AZTeWfFQps9Zpebi2dNQ9QSSDtfMKdbsfKrD",
-    "FwfBKZXbYr4vTK23bMFkbgKq3npJ3MSDxEaKmq9Aj4Qn",
-    "g9msRSV3sJmmE3r5Twn9HuBsxzuuRGTjKCVTKudm9in",
-  ].join(",")).split(",").filter(Boolean),
+  allProgramIds: (
+    env.ALL_PROGRAM_IDS ??
+    [
+      'FxfD37s1AZTeWfFQps9Zpebi2dNQ9QSSDtfMKdbsfKrD',
+      'FwfBKZXbYr4vTK23bMFkbgKq3npJ3MSDxEaKmq9Aj4Qn',
+      'g9msRSV3sJmmE3r5Twn9HuBsxzuuRGTjKCVTKudm9in',
+    ].join(',')
+  )
+    .split(',')
+    .filter(Boolean),
   // NOTE: Private key is NOT stored in config anymore.
   // Use getSealedSigner() from signer.ts to get signing capability.
   // Raw key material never exposed; only sign() interface provided.
-  supabaseUrl: env.SUPABASE_URL ?? "",
-  supabaseKey: env.SUPABASE_KEY ?? "",
-  supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY ?? "",
+  supabaseUrl: env.SUPABASE_URL ?? '',
+  supabaseKey: env.SUPABASE_KEY ?? '',
+  supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY ?? '',
   // PERC-469: heliusApiKey exposes the devnet key for internal service use (not browser)
-  heliusApiKey: (process.env.HELIUS_DEVNET_API_KEY ?? env.HELIUS_API_KEY ?? ""),
-  fallbackRpcUrl: env.FALLBACK_RPC_URL ?? "https://api.devnet.solana.com",
+  heliusApiKey: process.env.HELIUS_DEVNET_API_KEY ?? env.HELIUS_API_KEY ?? '',
+  fallbackRpcUrl: env.FALLBACK_RPC_URL ?? 'https://api.devnet.solana.com',
   port: env.PORT ?? 3001,
   crankIntervalMs: env.CRANK_INTERVAL_MS ?? 30_000,
   crankInactiveIntervalMs: env.CRANK_INACTIVE_INTERVAL_MS ?? 60_000,
   /** BH4: Reduced to 60s to catch markets created/deleted within smaller window */
   discoveryIntervalMs: env.DISCOVERY_INTERVAL_MS ?? 300_000,
   /** Helius webhook secret for auth validation */
-  webhookSecret: env.HELIUS_WEBHOOK_SECRET ?? "",
+  webhookSecret: env.HELIUS_WEBHOOK_SECRET ?? '',
   /** Public URL for webhook registration (e.g. Railway URL) */
-  webhookUrl: env.WEBHOOK_URL ?? "",
+  webhookUrl: env.WEBHOOK_URL ?? '',
 } as const;

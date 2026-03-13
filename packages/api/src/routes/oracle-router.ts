@@ -1,8 +1,8 @@
-import { Hono } from "hono";
-import { resolvePrice, type PriceRouterResult } from "@percolator/sdk";
-import { createLogger } from "@percolator/shared";
+import { Hono } from 'hono';
+import { resolvePrice, type PriceRouterResult } from '@percolator/sdk';
+import { createLogger } from '@percolator/shared';
 
-const logger = createLogger("api:oracle-router");
+const logger = createLogger('api:oracle-router');
 
 // Simple in-memory cache: mint → { result, expiresAt }
 const cache = new Map<string, { result: PriceRouterResult; expiresAt: number }>();
@@ -13,12 +13,12 @@ export function oracleRouterRoutes(): Hono {
   const app = new Hono();
 
   // GET /oracle/resolve/:mint — returns ranked oracle sources for a given token
-  app.get("/oracle/resolve/:mint", async (c) => {
-    const mint = c.req.param("mint");
+  app.get('/oracle/resolve/:mint', async (c) => {
+    const mint = c.req.param('mint');
 
     // Validate mint format (base58, 32-44 chars)
     if (!mint || mint.length < 32 || mint.length > 44) {
-      return c.json({ error: "Invalid mint address" }, 400);
+      return c.json({ error: 'Invalid mint address' }, 400);
     }
 
     // Evict expired entries on every read
@@ -47,8 +47,8 @@ export function oracleRouterRoutes(): Hono {
       return c.json({ ...result, cached: false });
     } catch (err: any) {
       const detail = err instanceof Error ? err.message : String(err);
-      logger.error("Oracle resolve error", { detail, path: c.req.path });
-      return c.json({ error: "Failed to resolve oracle sources" }, 500);
+      logger.error('Oracle resolve error', { detail, path: c.req.path });
+      return c.json({ error: 'Failed to resolve oracle sources' }, 500);
     }
   });
 

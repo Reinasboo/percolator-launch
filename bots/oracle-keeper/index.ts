@@ -566,8 +566,59 @@ async function updateHyperpMark(
 }
 
 // ── Health Check Server ─────────────────────────────────────
+/**
+ * Extract real client IP respecting X-Forwarded-For header and TRUSTED_PROXY_DEPTH.
+ * TRUSTED_PROXY_DEPTH controls how many proxy layers to skip:
+ * - 0: No proxy, use socket.remoteAddress directly
+ * - 1: One proxy layer (default), use last IP in X-Forwarded-For
+ * - 2+: Multiple proxy layers, count backward from end
+ */
+function getClientIp(
+  req: http.IncomingMessage,
+  trustedProxyDepth: number = 1
+): string {
+  if (trustedProxyDepth <= 0) {
+    return req.socket.remoteAddress || "unknown";
+  }
+
+  const forwarded = (req.headers["x-forwarded-for"] as string) || "";
+  if (forwarded) {
+    const ips = forwarded.split(",").map((ip) => ip.trim());
+    const idx = Math.max(0, ips.length - trustedProxyDepth);
+    return ips[idx] || "unknown";
+  }
+
+  return req.socket.remoteAddress || "unknown";
+}
+
+/**
+ * Check if IP is a loopback/localhost address.
+ */
+function isLoopbackIp(ip: string): boolean {
+  return ["127.0.0.1", "::1", "localhost"].includes(ip);
+}
+
 function startHealthServer() {
   const server = http.createServer((req, res) => {
+    // IP validation: restrict health endpoint to localhost unless explicitly allowed
+    const trustedProxyDepth = Math.max(
+      0,
+      Number(process.env.TRUSTED_PROXY_DEPTH ?? 1)
+    );
+    const clientIp = getClientIp(req, trustedProxyDepth);
+    const allowRemoteHealth = process.env.HEALTH_ALLOW_REMOTE === "true";
+
+    if (!allowRemoteHealth && !isLoopbackIp(clientIp)) {
+      res.writeHead(403, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify({
+          error: "forbidden",
+          detail: "Health endpoint restricted to localhost",
+        })
+      );
+      return;
+    }
+
     // Auth guard: if HEALTH_AUTH_TOKEN is set, require Bearer token
     if (HEALTH_AUTH_TOKEN) {
       const auth = req.headers.authorization;

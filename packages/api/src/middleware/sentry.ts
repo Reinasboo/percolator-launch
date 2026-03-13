@@ -1,5 +1,5 @@
-import * as Sentry from "@sentry/node";
-import type { MiddlewareHandler } from "hono";
+import * as Sentry from '@sentry/node';
+import type { MiddlewareHandler } from 'hono';
 
 /**
  * Initialize Sentry for the API server.
@@ -7,37 +7,37 @@ import type { MiddlewareHandler } from "hono";
  */
 export function initSentry(): void {
   const dsn = process.env.SENTRY_DSN;
-  
+
   if (!dsn) {
-    console.info("[sentry] SENTRY_DSN not set — error tracking disabled");
+    console.info('[sentry] SENTRY_DSN not set — error tracking disabled');
     return;
   }
 
   Sentry.init({
     dsn,
-    environment: process.env.NODE_ENV || "development",
-    release: process.env.API_VERSION || "api@0.1.0",
-    
+    environment: process.env.NODE_ENV || 'development',
+    release: process.env.API_VERSION || 'api@0.1.0',
+
     // Performance monitoring
     tracesSampleRate: 0.1, // 10% of transactions
-    
+
     // Don't send PII
     sendDefaultPii: false,
-    
+
     // Filter out health check noise
     beforeSend(event) {
       // Don't report 404s or expected client errors
-      if (event.tags?.["http.status_code"] === "404") return null;
+      if (event.tags?.['http.status_code'] === '404') return null;
       return event;
     },
-    
+
     integrations: [
       // Auto-instrument HTTP requests
       Sentry.httpIntegration(),
     ],
   });
 
-  console.info("[sentry] Initialized for API server");
+  console.info('[sentry] Initialized for API server');
 }
 
 /**
@@ -51,11 +51,11 @@ export function sentryMiddleware(): MiddlewareHandler {
 
     return Sentry.withScope(async (scope) => {
       // Set request context
-      scope.setTag("http.method", c.req.method);
-      scope.setTag("http.path", c.req.path);
-      
+      scope.setTag('http.method', c.req.method);
+      scope.setTag('http.path', c.req.path);
+
       // Set API key user if present (pseudonymous)
-      const apiKey = c.req.header("x-api-key");
+      const apiKey = c.req.header('x-api-key');
       if (apiKey) {
         scope.setUser({ id: `api-key:${apiKey.slice(0, 8)}...` });
       }
@@ -65,11 +65,11 @@ export function sentryMiddleware(): MiddlewareHandler {
 
         // Tag response status
         const status = c.res.status;
-        scope.setTag("http.status_code", String(status));
+        scope.setTag('http.status_code', String(status));
 
         // Report 5xx errors
         if (status >= 500) {
-          Sentry.captureMessage(`API ${status} on ${c.req.method} ${c.req.path}`, "error");
+          Sentry.captureMessage(`API ${status} on ${c.req.method} ${c.req.path}`, 'error');
         }
       } catch (err) {
         // Capture unhandled route errors

@@ -1,0 +1,124 @@
+﻿{
+  "actions": [
+    {
+      "action": "review",
+      "module": "bigint-buffer",
+      "resolves": [
+        {
+          "id": 1103747,
+          "path": ".>@solana/spl-token>@solana/buffer-layout-utils>bigint-buffer",
+          "dev": false,
+          "bundled": false,
+          "optional": false
+        }
+      ]
+    },
+    {
+      "action": "review",
+      "module": "@hono/node-server",
+      "resolves": [
+        {
+          "id": 1114170,
+          "path": "packages__indexer>@hono/node-server",
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ]
+    }
+  ],
+  "advisories": {
+    "1103747": {
+      "findings": [
+        {
+          "version": "1.1.5",
+          "paths": [
+            ".>@solana/spl-token>@solana/buffer-layout-utils>bigint-buffer"
+          ]
+        }
+      ],
+      "found_by": null,
+      "deleted": null,
+      "references": "- https://nvd.nist.gov/vuln/detail/CVE-2025-3194\n- https://security.snyk.io/vuln/SNYK-JS-BIGINTBUFFER-3364597\n- https://www.usenix.org/system/files/sec23fall-prepub-262_staicu.pdf\n- https://github.com/no2chem/bigint-buffer/blob/master/src/index.ts#L25\n- https://github.com/advisories/GHSA-3gc7-fjrx-p6mg",
+      "created": "2025-04-04T06:34:22.000Z",
+      "id": 1103747,
+      "npm_advisory_id": null,
+      "overview": "Versions of the package bigint-buffer from 0.0.0 to 1.1.5 are vulnerable to Buffer Overflow in the toBigIntLE() function. Attackers can exploit this to crash the application.",
+      "reported_by": null,
+      "title": "bigint-buffer Vulnerable to Buffer Overflow via toBigIntLE() Function",
+      "metadata": null,
+      "cves": [
+        "CVE-2025-3194"
+      ],
+      "access": "public",
+      "severity": "high",
+      "module_name": "bigint-buffer",
+      "vulnerable_versions": "<=1.1.5",
+      "github_advisory_id": "GHSA-3gc7-fjrx-p6mg",
+      "recommendation": "None",
+      "patched_versions": "<0.0.0",
+      "updated": "2025-04-04T18:23:46.000Z",
+      "cvss": {
+        "score": 7.5,
+        "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+      },
+      "cwe": [
+        "CWE-120"
+      ],
+      "url": "https://github.com/advisories/GHSA-3gc7-fjrx-p6mg"
+    },
+    "1114170": {
+      "findings": [
+        {
+          "version": "1.19.9",
+          "paths": [
+            "packages__indexer>@hono/node-server"
+          ]
+        }
+      ],
+      "found_by": null,
+      "deleted": null,
+      "references": "- https://github.com/honojs/node-server/security/advisories/GHSA-wc8c-qw6v-h7f6\n- https://github.com/honojs/node-server/commit/455015be1697dd89974a68b70350ea7b2d126d2e\n- https://nvd.nist.gov/vuln/detail/CVE-2026-29087\n- https://github.com/advisories/GHSA-wc8c-qw6v-h7f6",
+      "created": "2026-03-04T20:05:49.000Z",
+      "id": 1114170,
+      "npm_advisory_id": null,
+      "overview": "## Summary\n\nWhen using @hono/node-server's static file serving together with route-based middleware protections (e.g. protecting `/admin/*`), inconsistent URL decoding can allow protected static resources to be accessed without authorization.\n\nIn particular, paths containing encoded slashes (`%2F`) may be evaluated differently by routing/middleware matching versus static file path resolution, enabling a bypass where middleware does not run but the static file is still served.\n\n## Details\n\nThe routing layer and the node-server static handler normalize request paths differently. The router preserves `%2F` as a literal string when matching routes, while the static handler decodes `%2F` into `/` before resolving the filesystem path.\n\nExample request:\n\n- `/admin%2Fsecret.html`\n\nThis may:\n- fail to match middleware intended for `/admin/*`, but\n- still be resolved by the static handler as `/admin/secret.html` under the configured static root.\n\nThis does not allow access outside the configured static root and is not a path traversal vulnerability.\n\n## Impact\n\nAn unauthenticated attacker could bypass route-based authorization protections for protected static resources by supplying paths containing encoded slashes.\n\nApplications relying solely on route-based middleware to protect static subpaths under the same static root may have exposed those resources.",
+      "reported_by": null,
+      "title": "@hono/node-server has authorization bypass for protected static paths via encoded slashes in Serve Static Middleware",
+      "metadata": null,
+      "cves": [
+        "CVE-2026-29087"
+      ],
+      "access": "public",
+      "severity": "high",
+      "module_name": "@hono/node-server",
+      "vulnerable_versions": "<1.19.10",
+      "github_advisory_id": "GHSA-wc8c-qw6v-h7f6",
+      "recommendation": "Upgrade to version 1.19.10 or later",
+      "patched_versions": ">=1.19.10",
+      "updated": "2026-03-06T22:43:59.000Z",
+      "cvss": {
+        "score": 7.5,
+        "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"
+      },
+      "cwe": [
+        "CWE-863"
+      ],
+      "url": "https://github.com/advisories/GHSA-wc8c-qw6v-h7f6"
+    }
+  },
+  "muted": [],
+  "metadata": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 2,
+      "critical": 0
+    },
+    "dependencies": 1554,
+    "devDependencies": 0,
+    "optionalDependencies": 0,
+    "totalDependencies": 1554
+  }
+}

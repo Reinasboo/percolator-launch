@@ -135,17 +135,17 @@ describe('Instruction encoders', () => {
 
   it('encodeStakeUpdateConfig — only cooldown set', () => {
     const buf = encodeStakeUpdateConfig(300n, undefined);
-    expect(buf[1]).toBe(1);            // has_cooldown
+    expect(buf[1]).toBe(1); // has_cooldown
     expect(buf.readBigUInt64LE(2)).toBe(300n);
-    expect(buf[10]).toBe(0);           // no cap
+    expect(buf[10]).toBe(0); // no cap
     expect(buf.readBigUInt64LE(11)).toBe(0n);
   });
 
   it('encodeStakeUpdateConfig — only cap set', () => {
     const buf = encodeStakeUpdateConfig(undefined, 500n);
-    expect(buf[1]).toBe(0);            // no cooldown
+    expect(buf[1]).toBe(0); // no cooldown
     expect(buf.readBigUInt64LE(2)).toBe(0n);
-    expect(buf[10]).toBe(1);           // has_cap
+    expect(buf[10]).toBe(1); // has_cap
     expect(buf.readBigUInt64LE(11)).toBe(500n);
   });
 
@@ -239,7 +239,14 @@ describe('Account builders', () => {
     const collateralMint = Keypair.generate().publicKey;
 
     const accounts = initPoolAccounts({
-      admin, slab, pool, lpMint, vault, vaultAuth, collateralMint, percolatorProgram,
+      admin,
+      slab,
+      pool,
+      lpMint,
+      vault,
+      vaultAuth,
+      collateralMint,
+      percolatorProgram,
     });
 
     expect(accounts).toHaveLength(11);

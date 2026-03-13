@@ -1,5 +1,5 @@
-import { Connection } from "@solana/web3.js";
-import { config } from "../config.js";
+import { Connection } from '@solana/web3.js';
+import { config } from '../config.js';
 
 const MAX_TOKENS = 10;
 const REFILL_INTERVAL_MS = 1_000;
@@ -14,17 +14,17 @@ const requestTimestamps: number[] = [];
 function checkSlidingWindow(): boolean {
   const now = Date.now();
   const windowStart = now - SLIDING_WINDOW_MS;
-  
+
   // Remove old timestamps outside the window
   while (requestTimestamps.length > 0 && requestTimestamps[0]! < windowStart) {
     requestTimestamps.shift();
   }
-  
+
   // Check if we're within burst limit
   if (requestTimestamps.length >= MAX_REQUESTS_PER_WINDOW) {
     return false; // Rate limit exceeded
   }
-  
+
   requestTimestamps.push(now);
   return true;
 }
@@ -54,24 +54,33 @@ setInterval(drainQueue, 100);
 
 export async function acquireToken(): Promise<void> {
   refillTokens();
-  if (tokens > 0 && checkSlidingWindow()) { tokens--; return; }
-  return new Promise<void>((resolve) => { waitQueue.push(resolve); });
+  if (tokens > 0 && checkSlidingWindow()) {
+    tokens--;
+    return;
+  }
+  return new Promise<void>((resolve) => {
+    waitQueue.push(resolve);
+  });
 }
 
 let _primaryConnection: Connection | null = null;
 let _fallbackConnection: Connection | null = null;
 
 export function getPrimaryConnection(): Connection {
-  if (!_primaryConnection) _primaryConnection = new Connection(config.rpcUrl, "confirmed");
+  if (!_primaryConnection) _primaryConnection = new Connection(config.rpcUrl, 'confirmed');
   return _primaryConnection;
 }
 
 export function getFallbackConnection(): Connection {
-  if (!_fallbackConnection) _fallbackConnection = new Connection(config.fallbackRpcUrl, "confirmed");
+  if (!_fallbackConnection)
+    _fallbackConnection = new Connection(config.fallbackRpcUrl, 'confirmed');
   return _fallbackConnection;
 }
 
-interface CacheEntry { data: unknown; fetchedAt: number; }
+interface CacheEntry {
+  data: unknown;
+  fetchedAt: number;
+}
 const accountCache = new Map<string, CacheEntry>();
 const CACHE_TTL_MS = 5_000;
 const MAX_CACHE_SIZE = 500;
@@ -79,7 +88,10 @@ const MAX_CACHE_SIZE = 500;
 export function getCachedAccountInfo(key: string): unknown | undefined {
   const entry = accountCache.get(key);
   if (!entry) return undefined;
-  if (Date.now() - entry.fetchedAt > CACHE_TTL_MS) { accountCache.delete(key); return undefined; }
+  if (Date.now() - entry.fetchedAt > CACHE_TTL_MS) {
+    accountCache.delete(key);
+    return undefined;
+  }
   return entry.data;
 }
 
@@ -111,7 +123,7 @@ export function backoffMs(attempt: number, baseMs = 1000, maxMs = 30_000): numbe
 function is429(err: unknown): boolean {
   if (err instanceof Error) {
     const msg = err.message.toLowerCase();
-    return msg.includes("429") || msg.includes("too many requests") || msg.includes("rate limit");
+    return msg.includes('429') || msg.includes('too many requests') || msg.includes('rate limit');
   }
   return false;
 }
@@ -128,14 +140,19 @@ export async function rateLimitedCall<T>(
       return await fn(getPrimaryConnection());
     } catch (err) {
       if (is429(err) && readOnly) {
-        try { return await fn(getFallbackConnection()); }
-        catch (fe) { console.warn("[RPC] Fallback failed:", fe); }
+        try {
+          return await fn(getFallbackConnection());
+        } catch (fe) {
+          console.warn('[RPC] Fallback failed:', fe);
+        }
       }
       if (attempt < maxRetries - 1) {
         const delay = backoffMs(attempt);
         await new Promise((r) => setTimeout(r, delay));
-      } else { throw err; }
+      } else {
+        throw err;
+      }
     }
   }
-  throw new Error("rateLimitedCall: unreachable");
+  throw new Error('rateLimitedCall: unreachable');
 }

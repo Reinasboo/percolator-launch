@@ -1,19 +1,19 @@
-import { EventEmitter } from "node:events";
+import { EventEmitter } from 'node:events';
 
 export type ServerEvent =
-  | "market.creating"
-  | "market.created"
-  | "market.updated"
-  | "price.updated"
-  | "crank.success"
-  | "crank.failure"
-  | "crank.stale"
-  | "trade.executed"
-  | "position.liquidated"
-  | "liquidation.success"
-  | "liquidation.failure"
-  | "price.engine.degraded"
-  | "price.engine.recovered";
+  | 'market.creating'
+  | 'market.created'
+  | 'market.updated'
+  | 'price.updated'
+  | 'crank.success'
+  | 'crank.failure'
+  | 'crank.stale'
+  | 'trade.executed'
+  | 'position.liquidated'
+  | 'liquidation.success'
+  | 'liquidation.failure'
+  | 'price.engine.degraded'
+  | 'price.engine.recovered';
 
 export interface EventPayload {
   event: ServerEvent;
@@ -34,16 +34,16 @@ class ServerEventBus extends EventEmitter {
       data,
     };
     this.emit(event, payload);
-    this.emit("*", payload);
+    this.emit('*', payload);
   }
 
-  subscribe(event: ServerEvent | "*", listener: (payload: EventPayload) => void): () => void {
+  subscribe(event: ServerEvent | '*', listener: (payload: EventPayload) => void): () => void {
     this.on(event, listener);
-    
+
     // Track subscription count
     const key = event;
     this.subscriptions.set(key, (this.subscriptions.get(key) ?? 0) + 1);
-    
+
     // Return unsubscribe function
     return () => {
       this.off(event, listener);
@@ -54,7 +54,7 @@ class ServerEventBus extends EventEmitter {
     };
   }
 
-  getSubscriptionCount(event: ServerEvent | "*"): number {
+  getSubscriptionCount(event: ServerEvent | '*'): number {
     return this.subscriptions.get(event) ?? 0;
   }
 }

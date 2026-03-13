@@ -1,5 +1,5 @@
-import type { Context, Next } from "hono";
-import { timingSafeEqual, createHash } from "node:crypto";
+import type { Context, Next } from 'hono';
+import { timingSafeEqual, createHash } from 'node:crypto';
 
 /**
  * C2: API key auth middleware for mutation endpoints.
@@ -12,22 +12,22 @@ export function requireApiKey() {
     const apiAuthKey = process.env.API_AUTH_KEY;
     if (!apiAuthKey) {
       // R2-S9: In production, reject all requests if auth key is not configured
-      if (process.env.NODE_ENV === "production") {
-        return c.json({ error: "Server misconfigured — auth key not set" }, 500);
+      if (process.env.NODE_ENV === 'production') {
+        return c.json({ error: 'Server misconfigured — auth key not set' }, 500);
       }
       return next();
     }
-    
-    const provided = c.req.header("x-api-key");
+
+    const provided = c.req.header('x-api-key');
     if (!provided) {
-      return c.json({ error: "Unauthorized: invalid or missing x-api-key" }, 401);
+      return c.json({ error: 'Unauthorized: invalid or missing x-api-key' }, 401);
     }
-    
+
     // Use timing-safe comparison to prevent timing attacks
     // Hash both values to ensure equal length for timingSafeEqual
-    const providedHash = createHash("sha256").update(provided).digest();
-    const expectedHash = createHash("sha256").update(apiAuthKey).digest();
-    
+    const providedHash = createHash('sha256').update(provided).digest();
+    const expectedHash = createHash('sha256').update(apiAuthKey).digest();
+
     let isValid = false;
     try {
       isValid = timingSafeEqual(providedHash, expectedHash);
@@ -35,11 +35,11 @@ export function requireApiKey() {
       // timingSafeEqual throws if buffers are different lengths (shouldn't happen with hashes)
       isValid = false;
     }
-    
+
     if (!isValid) {
-      return c.json({ error: "Unauthorized: invalid or missing x-api-key" }, 401);
+      return c.json({ error: 'Unauthorized: invalid or missing x-api-key' }, 401);
     }
-    
+
     return next();
   };
 }

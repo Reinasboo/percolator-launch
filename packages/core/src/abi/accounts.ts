@@ -4,8 +4,8 @@ import {
   SYSVAR_CLOCK_PUBKEY,
   SYSVAR_RENT_PUBKEY,
   SystemProgram,
-} from "@solana/web3.js";
-import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
+} from '@solana/web3.js';
+import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 
 /**
  * Account spec for building instruction account metas.
@@ -25,83 +25,83 @@ export interface AccountSpec {
  * InitMarket: 9 accounts (Pyth Pull - feed_id is in instruction data, not as accounts)
  */
 export const ACCOUNTS_INIT_MARKET: readonly AccountSpec[] = [
-  { name: "admin", signer: true, writable: true },
-  { name: "slab", signer: false, writable: true },
-  { name: "mint", signer: false, writable: false },
-  { name: "vault", signer: false, writable: false },
-  { name: "tokenProgram", signer: false, writable: false },
-  { name: "clock", signer: false, writable: false },
-  { name: "rent", signer: false, writable: false },
-  { name: "dummyAta", signer: false, writable: false },
-  { name: "systemProgram", signer: false, writable: false },
+  { name: 'admin', signer: true, writable: true },
+  { name: 'slab', signer: false, writable: true },
+  { name: 'mint', signer: false, writable: false },
+  { name: 'vault', signer: false, writable: false },
+  { name: 'tokenProgram', signer: false, writable: false },
+  { name: 'clock', signer: false, writable: false },
+  { name: 'rent', signer: false, writable: false },
+  { name: 'dummyAta', signer: false, writable: false },
+  { name: 'systemProgram', signer: false, writable: false },
 ] as const;
 
 /**
  * InitUser: 5 accounts (clock/oracle removed in commit 410f947)
  */
 export const ACCOUNTS_INIT_USER: readonly AccountSpec[] = [
-  { name: "user", signer: true, writable: true },
-  { name: "slab", signer: false, writable: true },
-  { name: "userAta", signer: false, writable: true },
-  { name: "vault", signer: false, writable: true },
-  { name: "tokenProgram", signer: false, writable: false },
+  { name: 'user', signer: true, writable: true },
+  { name: 'slab', signer: false, writable: true },
+  { name: 'userAta', signer: false, writable: true },
+  { name: 'vault', signer: false, writable: true },
+  { name: 'tokenProgram', signer: false, writable: false },
 ] as const;
 
 /**
  * InitLP: 5 accounts (clock/oracle removed in commit 410f947)
  */
 export const ACCOUNTS_INIT_LP: readonly AccountSpec[] = [
-  { name: "user", signer: true, writable: true },
-  { name: "slab", signer: false, writable: true },
-  { name: "userAta", signer: false, writable: true },
-  { name: "vault", signer: false, writable: true },
-  { name: "tokenProgram", signer: false, writable: false },
+  { name: 'user', signer: true, writable: true },
+  { name: 'slab', signer: false, writable: true },
+  { name: 'userAta', signer: false, writable: true },
+  { name: 'vault', signer: false, writable: true },
+  { name: 'tokenProgram', signer: false, writable: false },
 ] as const;
 
 /**
  * DepositCollateral: 6 accounts
  */
 export const ACCOUNTS_DEPOSIT_COLLATERAL: readonly AccountSpec[] = [
-  { name: "user", signer: true, writable: true },
-  { name: "slab", signer: false, writable: true },
-  { name: "userAta", signer: false, writable: true },
-  { name: "vault", signer: false, writable: true },
-  { name: "tokenProgram", signer: false, writable: false },
-  { name: "clock", signer: false, writable: false },
+  { name: 'user', signer: true, writable: true },
+  { name: 'slab', signer: false, writable: true },
+  { name: 'userAta', signer: false, writable: true },
+  { name: 'vault', signer: false, writable: true },
+  { name: 'tokenProgram', signer: false, writable: false },
+  { name: 'clock', signer: false, writable: false },
 ] as const;
 
 /**
  * WithdrawCollateral: 8 accounts
  */
 export const ACCOUNTS_WITHDRAW_COLLATERAL: readonly AccountSpec[] = [
-  { name: "user", signer: true, writable: true },
-  { name: "slab", signer: false, writable: true },
-  { name: "vault", signer: false, writable: true },
-  { name: "userAta", signer: false, writable: true },
-  { name: "vaultPda", signer: false, writable: false },
-  { name: "tokenProgram", signer: false, writable: false },
-  { name: "clock", signer: false, writable: false },
-  { name: "oracleIdx", signer: false, writable: false },
+  { name: 'user', signer: true, writable: true },
+  { name: 'slab', signer: false, writable: true },
+  { name: 'vault', signer: false, writable: true },
+  { name: 'userAta', signer: false, writable: true },
+  { name: 'vaultPda', signer: false, writable: false },
+  { name: 'tokenProgram', signer: false, writable: false },
+  { name: 'clock', signer: false, writable: false },
+  { name: 'oracleIdx', signer: false, writable: false },
 ] as const;
 
 /**
  * KeeperCrank: 4 accounts
  */
 export const ACCOUNTS_KEEPER_CRANK: readonly AccountSpec[] = [
-  { name: "caller", signer: true, writable: true },
-  { name: "slab", signer: false, writable: true },
-  { name: "clock", signer: false, writable: false },
-  { name: "oracle", signer: false, writable: false },
+  { name: 'caller', signer: true, writable: true },
+  { name: 'slab', signer: false, writable: true },
+  { name: 'clock', signer: false, writable: false },
+  { name: 'oracle', signer: false, writable: false },
 ] as const;
 
 /**
  * TradeNoCpi: 4 accounts (PERC-199: clock sysvar removed — uses Clock::get() syscall)
  */
 export const ACCOUNTS_TRADE_NOCPI: readonly AccountSpec[] = [
-  { name: "user", signer: true, writable: true },
-  { name: "lp", signer: true, writable: true },
-  { name: "slab", signer: false, writable: true },
-  { name: "oracle", signer: false, writable: false },
+  { name: 'user', signer: true, writable: true },
+  { name: 'lp', signer: true, writable: true },
+  { name: 'slab', signer: false, writable: true },
+  { name: 'oracle', signer: false, writable: false },
 ] as const;
 
 /**
@@ -109,88 +109,88 @@ export const ACCOUNTS_TRADE_NOCPI: readonly AccountSpec[] = [
  * Note: account[0] is unused but must be present
  */
 export const ACCOUNTS_LIQUIDATE_AT_ORACLE: readonly AccountSpec[] = [
-  { name: "unused", signer: false, writable: false },
-  { name: "slab", signer: false, writable: true },
-  { name: "clock", signer: false, writable: false },
-  { name: "oracle", signer: false, writable: false },
+  { name: 'unused', signer: false, writable: false },
+  { name: 'slab', signer: false, writable: true },
+  { name: 'clock', signer: false, writable: false },
+  { name: 'oracle', signer: false, writable: false },
 ] as const;
 
 /**
  * CloseAccount: 8 accounts
  */
 export const ACCOUNTS_CLOSE_ACCOUNT: readonly AccountSpec[] = [
-  { name: "user", signer: true, writable: true },
-  { name: "slab", signer: false, writable: true },
-  { name: "vault", signer: false, writable: true },
-  { name: "userAta", signer: false, writable: true },
-  { name: "vaultPda", signer: false, writable: false },
-  { name: "tokenProgram", signer: false, writable: false },
-  { name: "clock", signer: false, writable: false },
-  { name: "oracle", signer: false, writable: false },
+  { name: 'user', signer: true, writable: true },
+  { name: 'slab', signer: false, writable: true },
+  { name: 'vault', signer: false, writable: true },
+  { name: 'userAta', signer: false, writable: true },
+  { name: 'vaultPda', signer: false, writable: false },
+  { name: 'tokenProgram', signer: false, writable: false },
+  { name: 'clock', signer: false, writable: false },
+  { name: 'oracle', signer: false, writable: false },
 ] as const;
 
 /**
  * TopUpInsurance: 5 accounts
  */
 export const ACCOUNTS_TOPUP_INSURANCE: readonly AccountSpec[] = [
-  { name: "user", signer: true, writable: true },
-  { name: "slab", signer: false, writable: true },
-  { name: "userAta", signer: false, writable: true },
-  { name: "vault", signer: false, writable: true },
-  { name: "tokenProgram", signer: false, writable: false },
+  { name: 'user', signer: true, writable: true },
+  { name: 'slab', signer: false, writable: true },
+  { name: 'userAta', signer: false, writable: true },
+  { name: 'vault', signer: false, writable: true },
+  { name: 'tokenProgram', signer: false, writable: false },
 ] as const;
 
 /**
  * TradeCpi: 7 accounts (PERC-199: clock sysvar removed — uses Clock::get() syscall)
  */
 export const ACCOUNTS_TRADE_CPI: readonly AccountSpec[] = [
-  { name: "user", signer: true, writable: true },
-  { name: "lpOwner", signer: false, writable: false },  // LP delegated to matcher - no signature needed
-  { name: "slab", signer: false, writable: true },
-  { name: "oracle", signer: false, writable: false },
-  { name: "matcherProg", signer: false, writable: false },
-  { name: "matcherCtx", signer: false, writable: true },
-  { name: "lpPda", signer: false, writable: false },
+  { name: 'user', signer: true, writable: true },
+  { name: 'lpOwner', signer: false, writable: false }, // LP delegated to matcher - no signature needed
+  { name: 'slab', signer: false, writable: true },
+  { name: 'oracle', signer: false, writable: false },
+  { name: 'matcherProg', signer: false, writable: false },
+  { name: 'matcherCtx', signer: false, writable: true },
+  { name: 'lpPda', signer: false, writable: false },
 ] as const;
 
 /**
  * SetRiskThreshold: 2 accounts
  */
 export const ACCOUNTS_SET_RISK_THRESHOLD: readonly AccountSpec[] = [
-  { name: "admin", signer: true, writable: true },
-  { name: "slab", signer: false, writable: true },
+  { name: 'admin', signer: true, writable: true },
+  { name: 'slab', signer: false, writable: true },
 ] as const;
 
 /**
  * UpdateAdmin: 2 accounts
  */
 export const ACCOUNTS_UPDATE_ADMIN: readonly AccountSpec[] = [
-  { name: "admin", signer: true, writable: true },
-  { name: "slab", signer: false, writable: true },
+  { name: 'admin', signer: true, writable: true },
+  { name: 'slab', signer: false, writable: true },
 ] as const;
 
 /**
  * CloseSlab: 2 accounts
  */
 export const ACCOUNTS_CLOSE_SLAB: readonly AccountSpec[] = [
-  { name: "admin", signer: true, writable: true },
-  { name: "slab", signer: false, writable: true },
+  { name: 'admin', signer: true, writable: true },
+  { name: 'slab', signer: false, writable: true },
 ] as const;
 
 /**
  * UpdateConfig: 2 accounts
  */
 export const ACCOUNTS_UPDATE_CONFIG: readonly AccountSpec[] = [
-  { name: "admin", signer: true, writable: true },
-  { name: "slab", signer: false, writable: true },
+  { name: 'admin', signer: true, writable: true },
+  { name: 'slab', signer: false, writable: true },
 ] as const;
 
 /**
  * SetMaintenanceFee: 2 accounts
  */
 export const ACCOUNTS_SET_MAINTENANCE_FEE: readonly AccountSpec[] = [
-  { name: "admin", signer: true, writable: true },
-  { name: "slab", signer: false, writable: true },
+  { name: 'admin', signer: true, writable: true },
+  { name: 'slab', signer: false, writable: true },
 ] as const;
 
 /**
@@ -198,8 +198,8 @@ export const ACCOUNTS_SET_MAINTENANCE_FEE: readonly AccountSpec[] = [
  * Sets the oracle price authority (admin only)
  */
 export const ACCOUNTS_SET_ORACLE_AUTHORITY: readonly AccountSpec[] = [
-  { name: "admin", signer: true, writable: true },
-  { name: "slab", signer: false, writable: true },
+  { name: 'admin', signer: true, writable: true },
+  { name: 'slab', signer: false, writable: true },
 ] as const;
 
 /**
@@ -207,8 +207,8 @@ export const ACCOUNTS_SET_ORACLE_AUTHORITY: readonly AccountSpec[] = [
  * Set oracle price circuit breaker cap (admin only)
  */
 export const ACCOUNTS_SET_ORACLE_PRICE_CAP: readonly AccountSpec[] = [
-  { name: "admin", signer: true, writable: true },
-  { name: "slab", signer: false, writable: true },
+  { name: 'admin', signer: true, writable: true },
+  { name: 'slab', signer: false, writable: true },
 ] as const;
 
 /**
@@ -216,8 +216,8 @@ export const ACCOUNTS_SET_ORACLE_PRICE_CAP: readonly AccountSpec[] = [
  * Push oracle price (oracle authority only)
  */
 export const ACCOUNTS_PUSH_ORACLE_PRICE: readonly AccountSpec[] = [
-  { name: "authority", signer: true, writable: true },
-  { name: "slab", signer: false, writable: true },
+  { name: 'authority', signer: true, writable: true },
+  { name: 'slab', signer: false, writable: true },
 ] as const;
 
 /**
@@ -225,8 +225,8 @@ export const ACCOUNTS_PUSH_ORACLE_PRICE: readonly AccountSpec[] = [
  * Resolves a binary/premarket (admin only)
  */
 export const ACCOUNTS_RESOLVE_MARKET: readonly AccountSpec[] = [
-  { name: "admin", signer: true, writable: true },
-  { name: "slab", signer: false, writable: true },
+  { name: 'admin', signer: true, writable: true },
+  { name: 'slab', signer: false, writable: true },
 ] as const;
 
 /**
@@ -234,28 +234,28 @@ export const ACCOUNTS_RESOLVE_MARKET: readonly AccountSpec[] = [
  * Withdraw insurance fund after market resolution (admin only)
  */
 export const ACCOUNTS_WITHDRAW_INSURANCE: readonly AccountSpec[] = [
-  { name: "admin", signer: true, writable: true },
-  { name: "slab", signer: false, writable: true },
-  { name: "adminAta", signer: false, writable: true },
-  { name: "vault", signer: false, writable: true },
-  { name: "tokenProgram", signer: false, writable: false },
-  { name: "vaultPda", signer: false, writable: false },
+  { name: 'admin', signer: true, writable: true },
+  { name: 'slab', signer: false, writable: true },
+  { name: 'adminAta', signer: false, writable: true },
+  { name: 'vault', signer: false, writable: true },
+  { name: 'tokenProgram', signer: false, writable: false },
+  { name: 'vaultPda', signer: false, writable: false },
 ] as const;
 
 /**
  * PauseMarket: 2 accounts
  */
 export const ACCOUNTS_PAUSE_MARKET: readonly AccountSpec[] = [
-  { name: "admin", signer: true, writable: true },
-  { name: "slab", signer: false, writable: true },
+  { name: 'admin', signer: true, writable: true },
+  { name: 'slab', signer: false, writable: true },
 ] as const;
 
 /**
  * UnpauseMarket: 2 accounts
  */
 export const ACCOUNTS_UNPAUSE_MARKET: readonly AccountSpec[] = [
-  { name: "admin", signer: true, writable: true },
-  { name: "slab", signer: false, writable: true },
+  { name: 'admin', signer: true, writable: true },
+  { name: 'slab', signer: false, writable: true },
 ] as const;
 
 // ============================================================================
@@ -274,7 +274,7 @@ export const ACCOUNTS_UNPAUSE_MARKET: readonly AccountSpec[] = [
  */
 export function buildAccountMetas(
   spec: readonly AccountSpec[],
-  keys: PublicKey[] | Record<string, PublicKey>
+  keys: PublicKey[] | Record<string, PublicKey>,
 ): AccountMeta[] {
   let keysArray: PublicKey[];
 
@@ -287,7 +287,7 @@ export function buildAccountMetas(
       if (!key) {
         throw new Error(
           `buildAccountMetas: missing key for account "${s.name}". ` +
-          `Provided keys: [${Object.keys(keys).join(", ")}]`
+            `Provided keys: [${Object.keys(keys).join(', ')}]`,
         );
       }
       return key;
@@ -295,9 +295,7 @@ export function buildAccountMetas(
   }
 
   if (keysArray.length !== spec.length) {
-    throw new Error(
-      `Account count mismatch: expected ${spec.length}, got ${keysArray.length}`
-    );
+    throw new Error(`Account count mismatch: expected ${spec.length}, got ${keysArray.length}`);
   }
   return spec.map((s, i) => ({
     pubkey: keysArray[i],
@@ -311,15 +309,15 @@ export function buildAccountMetas(
  * Creates SPL mint PDA for insurance LP tokens. Admin only, once per market.
  */
 export const ACCOUNTS_CREATE_INSURANCE_MINT: readonly AccountSpec[] = [
-  { name: "admin", signer: true, writable: false },
-  { name: "slab", signer: false, writable: false },
-  { name: "insLpMint", signer: false, writable: true },
-  { name: "vaultAuthority", signer: false, writable: false },
-  { name: "collateralMint", signer: false, writable: false },
-  { name: "systemProgram", signer: false, writable: false },
-  { name: "tokenProgram", signer: false, writable: false },
-  { name: "rent", signer: false, writable: false },
-  { name: "payer", signer: true, writable: true },
+  { name: 'admin', signer: true, writable: false },
+  { name: 'slab', signer: false, writable: false },
+  { name: 'insLpMint', signer: false, writable: true },
+  { name: 'vaultAuthority', signer: false, writable: false },
+  { name: 'collateralMint', signer: false, writable: false },
+  { name: 'systemProgram', signer: false, writable: false },
+  { name: 'tokenProgram', signer: false, writable: false },
+  { name: 'rent', signer: false, writable: false },
+  { name: 'payer', signer: true, writable: true },
 ] as const;
 
 /**
@@ -327,14 +325,14 @@ export const ACCOUNTS_CREATE_INSURANCE_MINT: readonly AccountSpec[] = [
  * Deposit collateral into insurance fund, receive LP tokens.
  */
 export const ACCOUNTS_DEPOSIT_INSURANCE_LP: readonly AccountSpec[] = [
-  { name: "depositor", signer: true, writable: false },
-  { name: "slab", signer: false, writable: true },
-  { name: "depositorAta", signer: false, writable: true },
-  { name: "vault", signer: false, writable: true },
-  { name: "tokenProgram", signer: false, writable: false },
-  { name: "insLpMint", signer: false, writable: true },
-  { name: "depositorLpAta", signer: false, writable: true },
-  { name: "vaultAuthority", signer: false, writable: false },
+  { name: 'depositor', signer: true, writable: false },
+  { name: 'slab', signer: false, writable: true },
+  { name: 'depositorAta', signer: false, writable: true },
+  { name: 'vault', signer: false, writable: true },
+  { name: 'tokenProgram', signer: false, writable: false },
+  { name: 'insLpMint', signer: false, writable: true },
+  { name: 'depositorLpAta', signer: false, writable: true },
+  { name: 'vaultAuthority', signer: false, writable: false },
 ] as const;
 
 /**
@@ -342,14 +340,14 @@ export const ACCOUNTS_DEPOSIT_INSURANCE_LP: readonly AccountSpec[] = [
  * Burn LP tokens and withdraw proportional share of insurance fund.
  */
 export const ACCOUNTS_WITHDRAW_INSURANCE_LP: readonly AccountSpec[] = [
-  { name: "withdrawer", signer: true, writable: false },
-  { name: "slab", signer: false, writable: true },
-  { name: "withdrawerAta", signer: false, writable: true },
-  { name: "vault", signer: false, writable: true },
-  { name: "tokenProgram", signer: false, writable: false },
-  { name: "insLpMint", signer: false, writable: true },
-  { name: "withdrawerLpAta", signer: false, writable: true },
-  { name: "vaultAuthority", signer: false, writable: false },
+  { name: 'withdrawer', signer: true, writable: false },
+  { name: 'slab', signer: false, writable: true },
+  { name: 'withdrawerAta', signer: false, writable: true },
+  { name: 'vault', signer: false, writable: true },
+  { name: 'tokenProgram', signer: false, writable: false },
+  { name: 'insLpMint', signer: false, writable: true },
+  { name: 'withdrawerLpAta', signer: false, writable: true },
+  { name: 'vaultAuthority', signer: false, writable: false },
 ] as const;
 
 /**
@@ -357,11 +355,11 @@ export const ACCOUNTS_WITHDRAW_INSURANCE_LP: readonly AccountSpec[] = [
  * Fund per-market isolated insurance balance.
  */
 export const ACCOUNTS_FUND_MARKET_INSURANCE: readonly AccountSpec[] = [
-  { name: "admin", signer: true, writable: true },
-  { name: "slab", signer: false, writable: true },
-  { name: "adminAta", signer: false, writable: true },
-  { name: "vault", signer: false, writable: true },
-  { name: "tokenProgram", signer: false, writable: false },
+  { name: 'admin', signer: true, writable: true },
+  { name: 'slab', signer: false, writable: true },
+  { name: 'adminAta', signer: false, writable: true },
+  { name: 'vault', signer: false, writable: true },
+  { name: 'tokenProgram', signer: false, writable: false },
 ] as const;
 
 /**
@@ -369,8 +367,8 @@ export const ACCOUNTS_FUND_MARKET_INSURANCE: readonly AccountSpec[] = [
  * Set max % of global fund this market can access.
  */
 export const ACCOUNTS_SET_INSURANCE_ISOLATION: readonly AccountSpec[] = [
-  { name: "admin", signer: true, writable: false },
-  { name: "slab", signer: false, writable: true },
+  { name: 'admin', signer: true, writable: false },
+  { name: 'slab', signer: false, writable: true },
 ] as const;
 
 /**
@@ -380,8 +378,8 @@ export const ACCOUNTS_SET_INSURANCE_ISOLATION: readonly AccountSpec[] = [
  * @deprecated PERC-305 is not deployed. Using this would invoke ChallengeSettlement.
  */
 export const ACCOUNTS_EXECUTE_ADL: readonly AccountSpec[] = [
-  { name: "keeper", signer: true, writable: false },
-  { name: "slab", signer: false, writable: true },
+  { name: 'keeper', signer: true, writable: false },
+  { name: 'slab', signer: false, writable: true },
 ] as const;
 
 // ============================================================================
@@ -393,7 +391,7 @@ export const ACCOUNTS_EXECUTE_ADL: readonly AccountSpec[] = [
  * Permissionless — no signer required beyond fee payer.
  */
 export const ACCOUNTS_ADVANCE_ORACLE_PHASE: readonly AccountSpec[] = [
-  { name: "slab", signer: false, writable: true },
+  { name: 'slab', signer: false, writable: true },
 ] as const;
 
 // ============================================================================
@@ -405,9 +403,9 @@ export const ACCOUNTS_ADVANCE_ORACLE_PHASE: readonly AccountSpec[] = [
  * Permissionless — anyone can fund. Transfers lamports directly (no system program).
  */
 export const ACCOUNTS_TOPUP_KEEPER_FUND: readonly AccountSpec[] = [
-  { name: "funder", signer: true, writable: true },
-  { name: "slab", signer: false, writable: true },
-  { name: "keeperFund", signer: false, writable: true },
+  { name: 'funder', signer: true, writable: true },
+  { name: 'slab', signer: false, writable: true },
+  { name: 'keeperFund', signer: false, writable: true },
 ] as const;
 
 // Note: WithdrawKeeperReward has no separate instruction.

@@ -1,7 +1,19 @@
-import { Connection, Keypair, Transaction, TransactionInstruction, SendOptions, ComputeBudgetProgram } from "@solana/web3.js";
-import bs58 from "bs58";
-import { acquireToken, getPrimaryConnection, getFallbackConnection, backoffMs } from "./rpc-client.js";
-import { ApiError, toApiError, getErrorMessage } from "../errors.js";
+import {
+  Connection,
+  Keypair,
+  Transaction,
+  TransactionInstruction,
+  SendOptions,
+  ComputeBudgetProgram,
+} from '@solana/web3.js';
+import bs58 from 'bs58';
+import {
+  acquireToken,
+  getPrimaryConnection,
+  getFallbackConnection,
+  backoffMs,
+} from './rpc-client.js';
+import { ApiError, toApiError, getErrorMessage } from '../errors.js';
 
 export { getPrimaryConnection as getConnection, getFallbackConnection };
 
@@ -28,7 +40,7 @@ const MAX_TRANSACTION_SIZE = 1232;
 
 export function loadKeypair(raw: string): Keypair {
   const trimmed = raw.trim();
-  if (trimmed.startsWith("[")) {
+  if (trimmed.startsWith('[')) {
     const arr = JSON.parse(trimmed) as number[];
     return Keypair.fromSecretKey(Uint8Array.from(arr));
   }
@@ -48,29 +60,27 @@ export async function getRecentPriorityFees(connection: Connection): Promise<{
     await acquireToken();
     // Get recent prioritization fees for the last 150 slots
     const recentFees = await connection.getRecentPrioritizationFees();
-    
+
     if (recentFees.length === 0) {
-      console.warn("[getRecentPriorityFees] No recent fees found, using defaults");
+      console.warn('[getRecentPriorityFees] No recent fees found, using defaults');
       return { priorityFeeMicroLamports: 10_000, computeUnitLimit: 400_000 };
     }
-    
+
     // Use 75th percentile to balance between cost and reliability
-    const sorted = recentFees
-      .map(f => f.prioritizationFee)
-      .sort((a, b) => a - b);
+    const sorted = recentFees.map((f) => f.prioritizationFee).sort((a, b) => a - b);
     const p75Index = Math.floor(sorted.length * 0.75);
     const priorityFee = sorted[p75Index] || 10_000;
-    
+
     // Ensure minimum fee during congestion
     const finalFee = Math.max(priorityFee, 1_000);
-    
+
     // Default compute units (can be adjusted based on instruction complexity)
     const computeUnitLimit = 400_000;
-    
+
     return { priorityFeeMicroLamports: finalFee, computeUnitLimit };
   } catch (err) {
     const msg = getErrorMessage(err);
-    console.warn("[getRecentPriorityFees] Failed to fetch priority fees:", msg);
+    console.warn('[getRecentPriorityFees] Failed to fetch priority fees:', msg);
     return { priorityFeeMicroLamports: 10_000, computeUnitLimit: 400_000 };
   }
 }
@@ -83,7 +93,7 @@ export function checkTransactionSize(tx: Transaction): void {
   const serialized = tx.serialize({ requireAllSignatures: false, verifySignatures: false });
   if (serialized.length > MAX_TRANSACTION_SIZE) {
     throw new Error(
-      `Transaction size ${serialized.length} bytes exceeds maximum ${MAX_TRANSACTION_SIZE} bytes`
+      `Transaction size ${serialized.length} bytes exceeds maximum ${MAX_TRANSACTION_SIZE} bytes`,
     );
   }
 }
@@ -91,10 +101,14 @@ export function checkTransactionSize(tx: Transaction): void {
 function is429(err: unknown): boolean {
   if (err instanceof Error) {
     const msg = err.message.toLowerCase();
-    return msg.includes("429") || msg.includes("too many requests") || msg.includes("rate limit");
+    return msg.includes('429') || msg.includes('too many requests') || msg.includes('rate limit');
   }
   // Check if it's an object with a code property (for structured errors)
-  if (typeof err === "object" && err !== null && typeof (err as Record<string, unknown>).code === "number") {
+  if (
+    typeof err === 'object' &&
+    err !== null &&
+    typeof (err as Record<string, unknown>).code === 'number'
+  ) {
     return (err as Record<string, unknown>).code === 429;
   }
   return false;
@@ -114,13 +128,15 @@ export async function pollSignatureStatus(
   if (!base58SigRegex.test(signature)) {
     throw new Error(`Invalid signature format: ${signature}`);
   }
-  
+
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     await acquireToken();
-    const resp = await connection.getSignatureStatuses([signature], { searchTransactionHistory: true });
+    const resp = await connection.getSignatureStatuses([signature], {
+      searchTransactionHistory: true,
+    });
     const status = resp.value[0];
-    if (status?.confirmationStatus === "confirmed" || status?.confirmationStatus === "finalized") {
+    if (status?.confirmationStatus === 'confirmed' || status?.confirmationStatus === 'finalized') {
       if (status.err) throw new Error(`Transaction failed: ${JSON.stringify(status.err)}`);
       return;
     }
@@ -136,34 +152,34 @@ export async function sendWithRetry(
   maxRetries = 3,
 ): Promise<string> {
   let lastErr: unknown;
-  
+
   // BH6 + BH11: Get dynamic priority fees once (outside retry loop)
   const { priorityFeeMicroLamports, computeUnitLimit } = await getRecentPriorityFees(connection);
-  
+
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       await acquireToken();
       const tx = new Transaction();
-      
+
       // BH6 + BH11: Add compute budget instructions
       tx.add(
         ComputeBudgetProgram.setComputeUnitLimit({ units: computeUnitLimit }),
-        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: priorityFeeMicroLamports })
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: priorityFeeMicroLamports }),
       );
-      
+
       tx.add(ix);
-      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
       tx.recentBlockhash = blockhash;
       tx.feePayer = signers[0].publicKey;
       tx.sign(...signers);
-      
+
       // BH9: Check transaction size before sending
       checkTransactionSize(tx);
 
-      const opts: SendOptions = { skipPreflight: false, preflightCommitment: "confirmed" };
+      const opts: SendOptions = { skipPreflight: false, preflightCommitment: 'confirmed' };
       await acquireToken();
       const sig = await connection.sendRawTransaction(tx.serialize(), opts);
-      
+
       // Use getSignatureStatuses polling instead of confirmTransaction
       // (confirmTransaction can falsely report "block height exceeded" on devnet)
       await pollSignatureStatus(connection, sig);
@@ -173,7 +189,9 @@ export async function sendWithRetry(
       const delay = is429(err)
         ? backoffMs(attempt, 2000, 30_000)
         : Math.min(1000 * 2 ** attempt, 8000);
-      console.warn(`[sendWithRetry] Attempt ${attempt + 1}/${maxRetries} failed, retrying in ${Math.round(delay)}ms`);
+      console.warn(
+        `[sendWithRetry] Attempt ${attempt + 1}/${maxRetries} failed, retrying in ${Math.round(delay)}ms`,
+      );
       await new Promise((r) => setTimeout(r, delay));
     }
   }
@@ -202,7 +220,7 @@ async function simulateForComputeUnits(
     simTx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 1_400_000 }));
     for (const ix of instructions) simTx.add(ix);
 
-    const { blockhash } = await connection.getLatestBlockhash("confirmed");
+    const { blockhash } = await connection.getLatestBlockhash('confirmed');
     simTx.recentBlockhash = blockhash;
     simTx.feePayer = feePayer.publicKey;
 
@@ -247,14 +265,19 @@ async function broadcastToMultipleRpcs(
   try {
     const fallback = getFallbackConnection();
     if (fallback) connections.push(fallback);
-  } catch { /* no fallback configured */ }
+  } catch {
+    /* no fallback configured */
+  }
 
   // Add additional RPC endpoints from environment
-  const extraRpcs = process.env.EXTRA_RPC_URLS?.split(",").filter(Boolean) ?? [];
-  for (const url of extraRpcs.slice(0, 3)) { // cap at 3 extra
+  const extraRpcs = process.env.EXTRA_RPC_URLS?.split(',').filter(Boolean) ?? [];
+  for (const url of extraRpcs.slice(0, 3)) {
+    // cap at 3 extra
     try {
-      connections.push(new Connection(url, "confirmed"));
-    } catch { /* invalid URL, skip */ }
+      connections.push(new Connection(url, 'confirmed'));
+    } catch {
+      /* invalid URL, skip */
+    }
   }
 
   if (connections.length <= 1) {
@@ -264,18 +287,18 @@ async function broadcastToMultipleRpcs(
 
   // Fire-and-forget to all endpoints simultaneously
   const results = await Promise.allSettled(
-    connections.map(conn => conn.sendRawTransaction(rawTx, opts))
+    connections.map((conn) => conn.sendRawTransaction(rawTx, opts)),
   );
 
   // Return first successful signature
   for (const result of results) {
-    if (result.status === "fulfilled") return result.value;
+    if (result.status === 'fulfilled') return result.value;
   }
 
   // All failed — throw the primary's error
   const primaryResult = results[0];
-  if (primaryResult.status === "rejected") throw primaryResult.reason;
-  throw new Error("All RPC endpoints failed to accept transaction");
+  if (primaryResult.status === 'rejected') throw primaryResult.reason;
+  throw new Error('All RPC endpoints failed to accept transaction');
 }
 
 // ---------------------------------------------------------------------------
@@ -318,12 +341,12 @@ export async function sendWithRetryKeeper(
       // Compute budget instructions first
       tx.add(
         ComputeBudgetProgram.setComputeUnitLimit({ units: computeUnitLimit }),
-        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: priorityFeeMicroLamports })
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: priorityFeeMicroLamports }),
       );
 
       for (const ix of instructions) tx.add(ix);
 
-      const { blockhash } = await connection.getLatestBlockhash("confirmed");
+      const { blockhash } = await connection.getLatestBlockhash('confirmed');
       tx.recentBlockhash = blockhash;
       tx.feePayer = signers[0].publicKey;
       tx.sign(...signers);
@@ -333,7 +356,7 @@ export async function sendWithRetryKeeper(
       const sendOpts: SendOptions = {
         // PERC-204: skipPreflight saves ~20-50ms per transaction
         skipPreflight: opts.skipPreflight,
-        preflightCommitment: "confirmed",
+        preflightCommitment: 'confirmed',
       };
 
       await acquireToken();
@@ -353,7 +376,9 @@ export async function sendWithRetryKeeper(
       const delay = is429(err)
         ? backoffMs(attempt, 2000, 30_000)
         : Math.min(1000 * 2 ** attempt, 8000);
-      console.warn(`[sendWithRetryKeeper] Attempt ${attempt + 1}/${maxRetries} failed, retrying in ${Math.round(delay)}ms`);
+      console.warn(
+        `[sendWithRetryKeeper] Attempt ${attempt + 1}/${maxRetries} failed, retrying in ${Math.round(delay)}ms`,
+      );
       await new Promise((r) => setTimeout(r, delay));
     }
   }
