@@ -440,7 +440,12 @@ export const CreateMarketWizard: FC<{ initialMint?: string }> = ({ initialMint }
 
   // Retry from failed step
   const handleRetry = () => {
-    if (!allValid || !publicKey || !createState.slabAddress) return;
+    if (!allValid || !publicKey) return;
+    // For step > 0, slab address must be known to resume the transaction chain.
+    // Step 0 generates a fresh keypair, so slabAddress is not required for step 0 retry.
+    // Without this guard, a blockhash-expiry error on step 0 would silently no-op when
+    // the user clicks "Retry Step 1" (slabAddress is null until sendTx succeeds).
+    if (createState.step > 0 && !createState.slabAddress) return;
     const { oracleFeed, priceE6 } = getOracleFeedAndPrice();
     const tier = SLAB_TIERS[wizard.slabTier];
     const effectiveMint = devnetMintAddress ?? wizard.mintAddress;

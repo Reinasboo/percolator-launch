@@ -14,6 +14,11 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+// Import jest-dom matchers directly rather than relying on global setupFiles.
+// In parallel CI workers the setupFiles import can intermittently fail to
+// register custom matchers on the Chai expect object, causing
+// "Invalid Chai property: toBeInTheDocument / toHaveTextContent" errors.
+import "@testing-library/jest-dom/vitest";
 import { render, screen, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MarketBrowser } from "@/components/market/MarketBrowser";
@@ -239,13 +244,14 @@ describe("MarketBrowser Component Tests", () => {
 
   describe("MKT-004: Sort with null values (CRITICAL)", () => {
     it("should handle markets with null/zero values without crashing", () => {
-      const market1 = createMockMarket({});
+      // Use distinct slab addresses so React keys are unique and rows are not deduplicated.
+      const market1 = createMockMarket({ slabAddress: new PublicKey("3BdFUYmduSkFuuiKuHDfv5LFvXkSmjbuLGa9hDwkyekz") });
       market1.engine.vault = 0n; // Zero vault
       market1.engine.totalOpenInterest = 0n;
       market1.engine.insuranceFund = { balance: 0n, feeRevenue: 0n };
       market1.engine.numUsedAccounts = 0;
       
-      const market2 = createMockMarket({});
+      const market2 = createMockMarket({ slabAddress: new PublicKey("9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM") });
       market2.engine.vault = 10000000n;
       market2.engine.totalOpenInterest = 5000000n;
       market2.engine.insuranceFund = { balance: 1000000n, feeRevenue: 0n };
