@@ -52,6 +52,9 @@ export const StepTokenSelect: FC<StepTokenSelectProps> = ({
   const [mintNetworkStatus, setMintNetworkStatus] = useState<MintNetworkStatus>("idle");
   const [mirrorError, setMirrorError] = useState<string | null>(null);
   const [mirrorMeta, setMirrorMeta] = useState<{ name: string; symbol: string; decimals: number } | null>(null);
+  // True when the mint is a devnet-native token (not a mainnet mirror). Used to suppress
+  // the "🪞 Devnet mirror" label for tokens created directly on devnet (PERC-1093).
+  const [isNativeDevnetMint, setIsNativeDevnetMint] = useState(false);
   // Use live RPC endpoint to detect devnet (not build-time env var which may be wrong in prod).
   const isDevnet = isDevnetEndpoint(connection.rpcEndpoint) || getNetwork() === "devnet";
 
@@ -82,12 +85,20 @@ export const StepTokenSelect: FC<StepTokenSelectProps> = ({
     if (!mintPk) {
       setMintNetworkStatus("idle");
       setMirrorError(null);
+      // PERC-1093 follow-up: unconditionally clear stale mirror state when input is cleared.
+      // Without this reset, mirrorMeta stays non-null from the previous valid mint and the
+      // propagation guard (tokenMeta !== null || mirrorMeta === null) silently swallows
+      // onTokenResolved(null), leaving wizard.tokenMeta pointing at the old token.
+      setMirrorMeta(null);
+      setIsNativeDevnetMint(false);
+      onTokenResolved(null);
       onMintNetworkValidChange?.(false);
       return;
     }
     let cancelled = false;
     setMirrorError(null);
     setMirrorMeta(null);
+    setIsNativeDevnetMint(false);
 
     if (isDevnet) {
       // DEVNET: First check if the mint already exists on-chain as a valid SPL token.
@@ -107,12 +118,14 @@ export const StepTokenSelect: FC<StepTokenSelectProps> = ({
 
             if (isTokenMint) {
               // Mint already exists on devnet — use it directly, no mirror needed.
+              // Mark as native so we don't show the "mainnet mirror" label (PERC-1093).
               const devnetMeta = {
                 name: tokenMeta?.name ?? `Token ${debounced.slice(0, 6)}`,
                 symbol: tokenMeta?.symbol ?? debounced.slice(0, 4).toUpperCase(),
                 decimals: tokenMeta?.decimals ?? 6,
               };
               setMirrorMeta(devnetMeta);
+              setIsNativeDevnetMint(true);
               onDevnetMintResolved?.(debounced, devnetMeta);
               onTokenResolved(devnetMeta);
               setMintNetworkStatus("valid");
@@ -205,10 +218,16 @@ export const StepTokenSelect: FC<StepTokenSelectProps> = ({
     return () => { cancelled = true; };
   }, [mintPk, connection, onMintNetworkValidChange, onDevnetMintResolved, isDevnet, debounced]);
 
-  // Propagate token meta changes
+  // Propagate token meta changes.
+  // PERC-1093: Don't override an already-resolved devnet/mirror meta with null mainnet metadata.
+  // The mainnet metadata API returns null for devnet-native tokens (no mainnet listing).
+  // Overwriting wizard.tokenMeta with null blocks step1Valid even when mintNetworkStatus="valid".
+  // Only propagate null when mirrorMeta is also null (i.e., nothing resolved yet / input cleared).
   useEffect(() => {
-    onTokenResolved(tokenMeta);
-  }, [tokenMeta, onTokenResolved]);
+    if (tokenMeta !== null || mirrorMeta === null) {
+      onTokenResolved(tokenMeta);
+    }
+  }, [tokenMeta, onTokenResolved, mirrorMeta]);
 
   // Check wallet token balance
   useEffect(() => {
@@ -332,9 +351,14 @@ export const StepTokenSelect: FC<StepTokenSelectProps> = ({
               <p className="text-[10px] font-mono text-[var(--text-dim)] truncate">
                 {debounced.slice(0, 6)}...{debounced.slice(-4)}
               </p>
-              {mirrorMeta && (
+              {mirrorMeta && !isNativeDevnetMint && (
                 <p className="text-[9px] text-[var(--accent)]/60 mt-0.5">
                   🪞 Devnet mirror of mainnet token
+                </p>
+              )}
+              {mirrorMeta && isNativeDevnetMint && (
+                <p className="text-[9px] text-[var(--accent)]/60 mt-0.5">
+                  ✓ Native devnet token
                 </p>
               )}
             </div>
