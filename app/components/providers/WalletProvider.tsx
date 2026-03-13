@@ -75,8 +75,9 @@ export const WalletProvider: FC<{ children: ReactNode }> = ({ children }) => {
       <PrivyAvailableContext.Provider value={true}>
         <PreferredWalletContext.Provider value={preferredWallet}>
           <PrivyProviderClient appId={appId}>
-            <AutoFundProvider />
-            {children}
+            <AutoFundProvider>
+              {children}
+            </AutoFundProvider>
           </PrivyProviderClient>
         </PreferredWalletContext.Provider>
       </PrivyAvailableContext.Provider>

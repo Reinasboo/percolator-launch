@@ -38,11 +38,10 @@ vi.mock("@/components/providers/SlabProvider", () => ({
   })),
 }));
 
-vi.mock("@/hooks/useAutoFund", () => ({
-  useAutoFund: vi.fn(() => ({
+vi.mock("@/components/providers/AutoFundProvider", () => ({
+  useAutoFundResult: vi.fn(() => ({
     funding: false,
     result: null,
-    error: null,
   })),
 }));
 
