@@ -274,7 +274,7 @@ describe("useReclaimSlabRent", () => {
     });
 
     expect(result.current.status).toBe("error");
-    expect(result.current.error).toMatch(/not owned by the Percolator program/i);
+    expect(result.current.error).toMatch(/not owned by a? Percolator program/i);
     expect(mockConnection.sendRawTransaction).not.toHaveBeenCalled();
   });
 });
