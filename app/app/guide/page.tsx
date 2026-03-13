@@ -107,7 +107,7 @@ export default function GuidePage() {
                 ["Tokens", "Test tokens from faucet", "Real SPL tokens with DEX pools"],
                 ["SOL", "Free from faucet", "Real SOL"],
                 ["Risk", "Play money — test freely", "Real money at risk"],
-                ["Markets", "Anyone can create (free, 3 tiers)", "Anyone can create (0.44–7 SOL rent deposit)"],
+                ["Markets", "Anyone can create (free, 3 tiers)", "Anyone can create (0.45–7 SOL rent deposit)"],
               ].map(([aspect, devnet, mainnet]) => (
                 <tr key={aspect} className="transition-colors hover:bg-[var(--bg-elevated)]">
                   <td className={`${cellClass} font-medium text-white`}>{aspect}</td>
@@ -214,7 +214,7 @@ export default function GuidePage() {
             </thead>
             <tbody className="divide-y divide-[var(--border)]">
               {[
-                ["Small", "256", "~$65 (~0.44 SOL)", "available"],
+                ["Small", "256", "~$67 (~0.45 SOL)", "available"],
                 ["Medium", "1,024", "~$260 (~1.8 SOL)", "available"],
                 ["Large", "4,096", "~$1,000 (~7 SOL)", "available"],
               ].map(([tier, slots, cost, status]) => (

@@ -4,13 +4,34 @@
  * When a wallet connects on devnet with < 0.1 SOL, automatically
  * calls /api/auto-fund to airdrop SOL and mint test USDC.
  *
- * Only fires once per session per wallet (deduplicated via ref).
+ * Only fires once per session per wallet (deduplicated via sessionStorage so
+ * dedup survives component unmount/remount on navigation — GH #1113).
  */
 
 "use client";
 
-import { useEffect, useRef, useCallback, useState } from "react";
+import { useEffect, useCallback, useState } from "react";
 import { useWalletCompat } from "@/hooks/useWalletCompat";
+
+const SS_KEY = "auto-fund-attempted";
+
+function getAutoFundAttempted(): Set<string> {
+  try {
+    return new Set<string>(JSON.parse(sessionStorage.getItem(SS_KEY) ?? "[]"));
+  } catch {
+    return new Set();
+  }
+}
+
+function markAutoFundAttempted(wallet: string): void {
+  try {
+    const s = getAutoFundAttempted();
+    s.add(wallet);
+    sessionStorage.setItem(SS_KEY, JSON.stringify([...s]));
+  } catch {
+    // sessionStorage unavailable (SSR guard) — silently skip
+  }
+}
 
 interface AutoFundResult {
   funded: boolean;
@@ -25,7 +46,6 @@ export function useAutoFund() {
   const [funding, setFunding] = useState(false);
   const [result, setResult] = useState<AutoFundResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const attemptedRef = useRef<Set<string>>(new Set());
 
   const fund = useCallback(async (wallet: string) => {
     try {
@@ -59,8 +79,8 @@ export function useAutoFund() {
     if (!isDevnet) return;
 
     const walletAddr = publicKey.toBase58();
-    if (attemptedRef.current.has(walletAddr)) return;
-    attemptedRef.current.add(walletAddr);
+    if (getAutoFundAttempted().has(walletAddr)) return;
+    markAutoFundAttempted(walletAddr);
 
     // Fire and forget — don't block UI
     fund(walletAddr);

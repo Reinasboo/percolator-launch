@@ -11,13 +11,34 @@
  *   3. If not, prompts wallet for a single initUser + deposit transaction
  *   4. Deposits up to 500 USDC (or wallet balance, whichever is less)
  *
- * Only fires on devnet, once per market per session.
+ * Only fires on devnet, once per market per session. Dedup uses sessionStorage
+ * (not useRef) so it survives component unmount/remount on navigation — GH #1113.
  */
 
 "use client";
 
 import { useEffect, useRef, useCallback, useState } from "react";
 import { PublicKey } from "@solana/web3.js";
+
+const SS_DEPOSIT_KEY = "auto-deposit-attempted";
+
+function getAutoDepositAttempted(): Set<string> {
+  try {
+    return new Set<string>(JSON.parse(sessionStorage.getItem(SS_DEPOSIT_KEY) ?? "[]"));
+  } catch {
+    return new Set();
+  }
+}
+
+function markAutoDepositAttempted(key: string): void {
+  try {
+    const s = getAutoDepositAttempted();
+    s.add(key);
+    sessionStorage.setItem(SS_DEPOSIT_KEY, JSON.stringify([...s]));
+  } catch {
+    // sessionStorage unavailable (SSR guard) — silently skip
+  }
+}
 import { getAssociatedTokenAddressSync } from "@solana/spl-token";
 import { useWalletCompat, useConnectionCompat } from "@/hooks/useWalletCompat";
 import { useUserAccount } from "@/hooks/useUserAccount";
@@ -55,9 +76,7 @@ export function useAutoDeposit(slabAddress: string): AutoDepositState {
   const [signature, setSignature] = useState<string | null>(null);
   const [amountUsdc, setAmountUsdc] = useState<number | null>(null);
 
-  // Track which markets we've already attempted for this session
-  const attemptedRef = useRef<Set<string>>(new Set());
-  // Prevent concurrent attempts
+  // Prevent concurrent attempts (in-memory ref is fine — concurrency is within one page load)
   const inflightRef = useRef(false);
 
   const isDevnet = process.env.NEXT_PUBLIC_SOLANA_NETWORK === "devnet";
@@ -67,7 +86,7 @@ export function useAutoDeposit(slabAddress: string): AutoDepositState {
     if (inflightRef.current) return;
 
     const key = `${publicKey.toBase58()}:${slabAddress}`;
-    if (attemptedRef.current.has(key)) return;
+    if (getAutoDepositAttempted().has(key)) return;
 
     // Check wallet USDC balance before marking as attempted
     try {
@@ -84,8 +103,8 @@ export function useAutoDeposit(slabAddress: string): AutoDepositState {
 
       if (depositAmount < MIN_WALLET_BALANCE) return; // Don't mark attempted yet
 
-      // Eligibility confirmed — mark as attempted to prevent reruns
-      attemptedRef.current.add(key);
+      // Eligibility confirmed — mark as attempted to prevent reruns (persists across navigation)
+      markAutoDepositAttempted(key);
 
       inflightRef.current = true;
       setDepositing(true);
