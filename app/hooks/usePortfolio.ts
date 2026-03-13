@@ -115,11 +115,20 @@ export function usePortfolio(): PortfolioData {
         let riskCount = 0;
 
         // Batch fetch all slab accounts using getMultipleAccountsInfo
+        // RPC limit is 100 accounts per call, so chunk into batches
         const slabAddresses = markets.map((m) => m.slabAddress);
         let slabAccountsInfo: (import("@solana/web3.js").AccountInfo<Buffer> | null)[] = [];
         
         try {
-          slabAccountsInfo = await connection.getMultipleAccountsInfo(slabAddresses);
+          const BATCH_SIZE = 100;
+          const chunks: PublicKey[][] = [];
+          for (let i = 0; i < slabAddresses.length; i += BATCH_SIZE) {
+            chunks.push(slabAddresses.slice(i, i + BATCH_SIZE));
+          }
+          const results = await Promise.all(
+            chunks.map((chunk) => connection.getMultipleAccountsInfo(chunk))
+          );
+          slabAccountsInfo = results.flat();
         } catch (error) {
           console.error("[usePortfolio] Failed to batch fetch slabs:", error);
           slabAccountsInfo = [];
