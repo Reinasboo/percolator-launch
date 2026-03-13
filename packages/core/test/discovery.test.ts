@@ -113,13 +113,13 @@ describe("slabDataSizeV1", () => {
     expect(slabDataSizeV1(1024)).toBe(SLAB_TIERS.medium.dataSize); // 257_448
   });
 
-  it("is smaller than empirical SLAB_TIERS.large for 4096 accounts (known 16-byte formula gap)", () => {
-    // The formula underestimates large by 16 bytes due to an on-chain struct detail.
-    // Empirical value = 1_025_848; formula = 1_025_832.
+  it("matches SLAB_TIERS.large for 4096 accounts (GH #1112: deployed FxfD37s1 uses formula value)", () => {
+    // FxfD37s1 (large, pre-PERC-118) has SLAB_LEN=1,025,832 — matches the formula exactly.
+    // Previous value of 1,025,848 was sourced from wrong binary (FwfBKZXb compiled as 4096-acct).
     const formula = slabDataSizeV1(4096);
     expect(formula).toBe(1_025_832);
-    expect(SLAB_TIERS.large.dataSize).toBe(1_025_848);
-    expect(SLAB_TIERS.large.dataSize - formula).toBe(16);
+    expect(SLAB_TIERS.large.dataSize).toBe(1_025_832);
+    expect(SLAB_TIERS.large.dataSize).toBe(formula);
   });
 
   it("is monotonically increasing with account count", () => {
