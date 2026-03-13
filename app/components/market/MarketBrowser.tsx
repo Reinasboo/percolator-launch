@@ -28,6 +28,20 @@ export const MarketBrowser: FC = () => {
   );
   const tokenMetaMap = useMultiTokenMeta(mints);
 
+  // NOTE: sortedMarkets must be computed before any early returns to satisfy
+  // React's Rules of Hooks (hooks must be called unconditionally on every render).
+  const sortedMarkets = useMemo(
+    () =>
+      [...markets].sort((a, b) => {
+        const order: Record<string, number> = { healthy: 0, caution: 1, warning: 2, empty: 3 };
+        return (
+          (order[computeMarketHealth(a.engine).level] ?? 4) -
+          (order[computeMarketHealth(b.engine).level] ?? 4)
+        );
+      }),
+    [markets],
+  );
+
   if (loading) {
     return (
       <div className="rounded-sm border border-[var(--border)] bg-[var(--panel-bg)] p-8 text-center shadow-sm">
@@ -54,18 +68,6 @@ export const MarketBrowser: FC = () => {
       </div>
     );
   }
-
-  const sortedMarkets = useMemo(
-    () =>
-      [...markets].sort((a, b) => {
-        const order: Record<string, number> = { healthy: 0, caution: 1, warning: 2, empty: 3 };
-        return (
-          (order[computeMarketHealth(a.engine).level] ?? 4) -
-          (order[computeMarketHealth(b.engine).level] ?? 4)
-        );
-      }),
-    [markets],
-  );
 
   return (
     <div className="rounded-sm border border-[var(--border)] bg-[var(--panel-bg)] shadow-sm">
