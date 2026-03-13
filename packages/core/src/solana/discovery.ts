@@ -44,11 +44,11 @@ const MAGIC_BYTES = new Uint8Array([0x54, 0x41, 0x4c, 0x4f, 0x43, 0x52, 0x45, 0x
  * Values are empirically verified against on-chain initialized accounts (GH #1109):
  *   small  = 65,352  (256-acct program, verified on-chain post-V1 upgrade)
  *   medium = 257,448 (1024-acct program g9msRSV3, verified on-chain)
- *   large  = 1,025,848 (4096-acct program, post-PERC-118 redeploy, +16 vs formula)
+ *   large  = 1,025,832 (4096-acct program FxfD37s1, pre-PERC-118, matches slabDataSizeV1(4096) formula)
  *
- * NOTE: small program (FwfBKZXb) may still be compiled with wrong features (4096-acct).
- *       DevOps must redeploy with --features small,devnet. These SDK values are correct
- *       for a properly compiled V1 small binary. See GH #1109.
+ * NOTE: small program (FwfBKZXb) redeployed with --features small,devnet (2026-03-13).
+ *       Large program FxfD37s1 is pre-PERC-118 — SLAB_LEN=1,025,832, matching formula.
+ *       See GH #1109, GH #1112.
  *
  * History: Small was V0 (62_808) until 2026-03-13 program upgrade. V0 values preserved
  *          in SLAB_TIERS_V0 for discovery of legacy on-chain accounts.
@@ -56,7 +56,7 @@ const MAGIC_BYTES = new Uint8Array([0x54, 0x41, 0x4c, 0x4f, 0x43, 0x52, 0x45, 0x
 export const SLAB_TIERS = {
   small:  { maxAccounts: 256,  dataSize: 65_352,    label: "Small",  description: "256 slots · ~0.45 SOL" },
   medium: { maxAccounts: 1024, dataSize: 257_448,   label: "Medium", description: "1,024 slots · ~1.79 SOL" },
-  large:  { maxAccounts: 4096, dataSize: 1_025_848, label: "Large",  description: "4,096 slots · ~7.14 SOL" },
+  large:  { maxAccounts: 4096, dataSize: 1_025_832, label: "Large",  description: "4,096 slots · ~7.14 SOL" },
 } as const;
 
 /** @deprecated V0 slab sizes — kept for backward compatibility with old on-chain slabs */
