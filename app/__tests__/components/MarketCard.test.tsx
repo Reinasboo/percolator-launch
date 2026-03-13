@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MarketBrowser } from "@/components/market/MarketBrowser";
 import { useMarketDiscovery } from "@/hooks/useMarketDiscovery";
@@ -32,6 +32,25 @@ vi.mock("@/hooks/useMarketDiscovery");
 vi.mock("@/hooks/useMultiTokenMeta");
 vi.mock("@/components/market/HealthBadge", () => ({
   HealthBadge: ({ level }: any) => <span data-testid="health-badge">{level}</span>,
+}));
+vi.mock("@/components/oracle/OracleBadge", () => ({
+  // Mirror the real OracleBadge's display labels so oracle badge assertions work
+  OracleBadge: ({ mode }: any) => {
+    const label =
+      mode === "hyperp" ? "HYPERP" : mode === "pyth-pinned" ? "PYTH" : "ADMIN";
+    return <span data-testid="oracle-badge">{label}</span>;
+  },
+}));
+vi.mock("@/lib/oraclePrice", () => ({
+  // Mirror the real detectOracleMode logic (no external imports needed here)
+  detectOracleMode: (config: any) => {
+    const ZERO = "11111111111111111111111111111111";
+    const feedBase58: string = config?.indexFeedId?.toBase58?.() ?? ZERO;
+    const authBase58: string = config?.oracleAuthority?.toBase58?.() ?? ZERO;
+    if (feedBase58 === ZERO) return "hyperp";
+    if (authBase58 === ZERO) return "pyth-pinned";
+    return "admin";
+  },
 }));
 vi.mock("@/lib/health", () => ({
   computeMarketHealth: (engine: any) => ({

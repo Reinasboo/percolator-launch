@@ -46,12 +46,14 @@ const MAGIC_BYTES = new Uint8Array([0x54, 0x41, 0x4c, 0x4f, 0x43, 0x52, 0x45, 0x
  *       Previous SLAB_TIERS used CONFIG_LEN=536 (wrong — that's a stale comment from pre-PERC-328
  *       when an extra _reserved field existed in the native layout). The deployed programs use 496.
  *       ENGINE_OFF = align_up(104 + 496, 8) = 600 (not 640 — 40-byte discrepancy fixed in PERC-1094).
- *       Verified by querying on-chain Small program accounts: single initialized slab has 65312 bytes.
- *       RiskEngine grew by 32 bytes (PERC-298: long_oi + short_oi) + 24 (PERC-299: emergency OI).
+ *       NOTE: The deployed devnet Small-tier program binary was compiled with the V0 layout
+ *       (ENGINE_OFF=480, ACCOUNT_SIZE=240) → SLAB_LEN=62_808. On-chain query (GH #1104) confirms
+ *       127 accounts at 62_808 bytes; 0 at 65_312. PR #1096 incorrectly set Small to the V1 value.
+ *       Medium and Large tiers are compiled with V1 layout and retain their V1 sizes.
  */
-// Deployed devnet program: HEADER=104, CONFIG=496 (BPF), ENGINE_OFF=600, ACCOUNT_SIZE=248
+// Deployed devnet program: Small uses V0 layout (62_808); Medium/Large use V1 layout.
 export const SLAB_TIERS = {
-  small:  { maxAccounts: 256,  dataSize: 65_312,    label: "Small",  description: "256 slots · ~0.45 SOL" },
+  small:  { maxAccounts: 256,  dataSize: 62_808,    label: "Small",  description: "256 slots · ~0.44 SOL" },
   medium: { maxAccounts: 1024, dataSize: 257_408,   label: "Medium", description: "1,024 slots · ~1.79 SOL" },
   large:  { maxAccounts: 4096, dataSize: 1_025_792, label: "Large",  description: "4,096 slots · ~7.14 SOL" },
 } as const;
