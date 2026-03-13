@@ -44,7 +44,7 @@ import { useWalletCompat, useConnectionCompat } from "@/hooks/useWalletCompat";
 import { useUserAccount } from "@/hooks/useUserAccount";
 import { useInitUser } from "@/hooks/useInitUser";
 import { useSlabState } from "@/components/providers/SlabProvider";
-import { useAutoFund } from "@/hooks/useAutoFund";
+import { useAutoFundResult } from "@/components/providers/AutoFundProvider";
 
 const AUTO_DEPOSIT_AMOUNT = 500_000_000n; // 500 USDC (6 decimals) — reasonable starter
 const MIN_WALLET_BALANCE = 10_000_000n; // 10 USDC minimum to bother depositing
@@ -68,7 +68,7 @@ export function useAutoDeposit(slabAddress: string): AutoDepositState {
   const userAccount = useUserAccount();
   const { initUser } = useInitUser(slabAddress);
   const { config: mktConfig } = useSlabState();
-  const { result: fundResult } = useAutoFund();
+  const { result: fundResult } = useAutoFundResult();
 
   const [depositing, setDepositing] = useState(false);
   const [deposited, setDeposited] = useState(false);
