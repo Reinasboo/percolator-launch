@@ -5,7 +5,7 @@ import { PublicKey } from '@solana/web3.js';
 import { useWalletCompat, useConnectionCompat } from '@/hooks/useWalletCompat';
 import { getAssociatedTokenAddressSync, unpackAccount } from '@solana/spl-token';
 import { STAKE_PROGRAM_ID, deriveDepositPda } from '@percolator/sdk';
-import { getBackendUrl } from '@/lib/config';
+
 
 // ═══════════════════════════════════════════════════════════════
 // Types
@@ -107,9 +107,8 @@ export function useLpPositions(): LpPositionsState & { refresh: () => void } {
     setError(null);
 
     try {
-      // 1. Fetch all pools
-      const base = getBackendUrl();
-      const res = await fetch(`${base}/api/stake/pools`);
+      // 1. Fetch all pools (Next.js API route – use relative URL for same-origin)
+      const res = await fetch(`/api/stake/pools`);
       if (!res.ok) throw new Error(`Failed to fetch pools: ${res.status}`);
       const { pools } = (await res.json()) as { pools: ApiPool[] };
 
