@@ -216,8 +216,8 @@ export class ResilientRpc {
       async (conn) => {
         return await sendAndConfirmTransaction(conn, tx, signers, {
           commitment: this.config.commitment,
-          skipPreflight: false,
           ...opts,
+          skipPreflight: false,
         });
       },
       label ?? "sendAndConfirmTx",
