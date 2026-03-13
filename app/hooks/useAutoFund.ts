@@ -33,7 +33,7 @@ function markAutoFundAttempted(wallet: string): void {
   }
 }
 
-interface AutoFundResult {
+export interface AutoFundResult {
   funded: boolean;
   sol_airdropped: boolean;
   usdc_minted: boolean;
