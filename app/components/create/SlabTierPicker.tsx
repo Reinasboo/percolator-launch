@@ -9,7 +9,7 @@ interface SlabTierPickerProps {
 }
 
 const TIER_COSTS: Record<SlabTierKey, string> = {
-  small: "~0.44 SOL",
+  small: "~0.45 SOL",
   medium: "~1.8 SOL",
   large: "~7 SOL",
 };

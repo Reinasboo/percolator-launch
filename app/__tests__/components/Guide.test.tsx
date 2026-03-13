@@ -9,6 +9,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
+import '@testing-library/jest-dom';
 import { render, screen, fireEvent } from '@testing-library/react';
 import GuidePage from '../../app/guide/page';
 
@@ -130,8 +131,8 @@ describe('Guide Page', () => {
     expect(screen.getByText('1,024')).toBeInTheDocument();
     expect(screen.getByText('4,096')).toBeInTheDocument();
 
-    // Check for cost estimates
-    expect(screen.getAllByText(/~\$65/i).length).toBeGreaterThanOrEqual(1);
+    // Check for cost estimates (V1 slab sizes: small ~$67, medium ~$260, large ~$1,000)
+    expect(screen.getAllByText(/~\$6[567]/i).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText(/~\$260/i).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText(/~\$1,000/i).length).toBeGreaterThanOrEqual(1);
   });
