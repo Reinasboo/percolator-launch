@@ -258,10 +258,13 @@ function computeSlabSize(
   bitmapOff: number,
   accountSize: number,
   maxAccounts: number,
+  // postBitmap bytes immediately after the free-slot bitmap:
+  //   SDK default (V0/V1/V1-legacy): 18 = num_used(u16,2) + pad(6) + next_account_id(u64,8) + free_head(u16,2)
+  //   V1D deployed program:            2 = free_head(u16,2) only — no num_used, pad, or next_account_id
+  postBitmap = 18,
 ): number {
   const bitmapWords = Math.ceil(maxAccounts / 64);
   const bitmapBytes = bitmapWords * 8;
-  const postBitmap = 18; // num_used(u16,2) + pad(6) + next_account_id(u64,8) + free_head(u16,2)
   const nextFreeBytes = maxAccounts * 2;
   const preAccountsLen = bitmapOff + bitmapBytes + postBitmap + nextFreeBytes;
   const accountsOff = Math.ceil(preAccountsLen / 8) * 8;
@@ -281,7 +284,9 @@ for (const n of TIERS) {
   V0_SIZES.set(computeSlabSize(V0_ENGINE_OFF, V0_ENGINE_BITMAP_OFF, V0_ACCOUNT_SIZE, n), n);
   V1_SIZES.set(computeSlabSize(V1_ENGINE_OFF, V1_ENGINE_BITMAP_OFF, V1_ACCOUNT_SIZE, n), n);
   V1_SIZES_LEGACY.set(computeSlabSize(V1_ENGINE_OFF_LEGACY, V1_ENGINE_BITMAP_OFF, V1_ACCOUNT_SIZE, n), n);
-  V1D_SIZES.set(computeSlabSize(V1D_ENGINE_OFF, V1D_ENGINE_BITMAP_OFF, V1D_ACCOUNT_SIZE, n), n);
+  // GH#1234: V1D deployed program omits num_used/pad/next_account_id → postBitmap=2 (free_head only).
+  // This yields 65088 (n=256) and 1025568 (n=4096) matching actual devnet account sizes.
+  V1D_SIZES.set(computeSlabSize(V1D_ENGINE_OFF, V1D_ENGINE_BITMAP_OFF, V1D_ACCOUNT_SIZE, n, 2), n);
 }
 
 function buildLayout(version: 0 | 1, maxAccounts: number, engineOffOverride?: number): SlabLayout {
