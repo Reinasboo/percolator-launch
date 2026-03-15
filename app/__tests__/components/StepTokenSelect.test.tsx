@@ -6,7 +6,7 @@
  * call onMintChange with the same value, which would reset mintExistsOnNetwork
  * in the parent and permanently disable the Continue button.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, act, fireEvent } from "@testing-library/react";
 import { StepTokenSelect } from "@/components/create/StepTokenSelect";
 
