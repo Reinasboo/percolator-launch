@@ -139,7 +139,7 @@ describe("slabDataSizeV1", () => {
 
 // ============================================================================
 // SLAB_TIERS_V1D — GH#1205: V1D tiers must be exported and present for discovery
-// ENGINE_OFF=424, BITMAP_OFF=624, ACCOUNT_SIZE=248
+// ENGINE_OFF=424, BITMAP_OFF=624, ACCOUNT_SIZE=248, postBitmap=2 (GH#1234 fix)
 // ============================================================================
 
 describe("SLAB_TIERS_V1D (GH#1205)", () => {
@@ -151,24 +151,25 @@ describe("SLAB_TIERS_V1D (GH#1205)", () => {
     expect(Object.keys(SLAB_TIERS_V1D)).toEqual(["micro", "small", "medium", "large"]);
   });
 
-  it("micro tier: 64 accounts, dataSize=17080", () => {
+  // GH#1234: V1D deployed program uses postBitmap=2 (free_head only) → all sizes 16 bytes smaller
+  it("micro tier: 64 accounts, dataSize=17064", () => {
     expect(SLAB_TIERS_V1D.micro.maxAccounts).toBe(64);
-    expect(SLAB_TIERS_V1D.micro.dataSize).toBe(17_080);
+    expect(SLAB_TIERS_V1D.micro.dataSize).toBe(17_064);
   });
 
-  it("small tier: 256 accounts, dataSize=65104", () => {
+  it("small tier: 256 accounts, dataSize=65088", () => {
     expect(SLAB_TIERS_V1D.small.maxAccounts).toBe(256);
-    expect(SLAB_TIERS_V1D.small.dataSize).toBe(65_104);
+    expect(SLAB_TIERS_V1D.small.dataSize).toBe(65_088);
   });
 
-  it("medium tier: 1024 accounts, dataSize=257200", () => {
+  it("medium tier: 1024 accounts, dataSize=257184", () => {
     expect(SLAB_TIERS_V1D.medium.maxAccounts).toBe(1024);
-    expect(SLAB_TIERS_V1D.medium.dataSize).toBe(257_200);
+    expect(SLAB_TIERS_V1D.medium.dataSize).toBe(257_184);
   });
 
-  it("large tier: 4096 accounts, dataSize=1025584", () => {
+  it("large tier: 4096 accounts, dataSize=1025568", () => {
     expect(SLAB_TIERS_V1D.large.maxAccounts).toBe(4096);
-    expect(SLAB_TIERS_V1D.large.dataSize).toBe(1_025_584);
+    expect(SLAB_TIERS_V1D.large.dataSize).toBe(1_025_568);
   });
 
   it("V1D sizes are distinct from V1 and V0 sizes (no collision)", () => {

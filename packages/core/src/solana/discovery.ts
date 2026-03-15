@@ -72,17 +72,19 @@ export const SLAB_TIERS_V0 = {
  * these sizes, causing V1D slabs to fall through to the memcmp fallback with wrong dataSize
  * hints → detectSlabLayout returning null → parse failure (GH#1205).
  *
- * Sizes computed via computeSlabSize(ENGINE_OFF=424, BITMAP_OFF=624, ACCOUNT_SIZE=248, N):
- *   micro  =  17,080  (64 slots)
- *   small  =  65,104  (256 slots)
- *   medium = 257,200  (1,024 slots)
- *   large  = 1,025,584 (4,096 slots)
+ * Sizes computed via computeSlabSize(ENGINE_OFF=424, BITMAP_OFF=624, ACCOUNT_SIZE=248, N, postBitmap=2):
+ *   The V1D deployed program uses postBitmap=2 (free_head u16 only — no num_used/pad/next_account_id).
+ *   This is 16 bytes smaller per tier than the SDK default (postBitmap=18). GH#1234.
+ *   micro  =  17,064  (64 slots)
+ *   small  =  65,088  (256 slots)
+ *   medium = 257,184  (1,024 slots)
+ *   large  = 1,025,568 (4,096 slots)
  */
 export const SLAB_TIERS_V1D = {
-  micro:  { maxAccounts: 64,   dataSize: 17_080,     label: "Micro",  description: "64 slots (V1D devnet)" },
-  small:  { maxAccounts: 256,  dataSize: 65_104,     label: "Small",  description: "256 slots (V1D devnet)" },
-  medium: { maxAccounts: 1024, dataSize: 257_200,    label: "Medium", description: "1,024 slots (V1D devnet)" },
-  large:  { maxAccounts: 4096, dataSize: 1_025_584,  label: "Large",  description: "4,096 slots (V1D devnet)" },
+  micro:  { maxAccounts: 64,   dataSize: 17_064,     label: "Micro",  description: "64 slots (V1D devnet)" },
+  small:  { maxAccounts: 256,  dataSize: 65_088,     label: "Small",  description: "256 slots (V1D devnet)" },
+  medium: { maxAccounts: 1024, dataSize: 257_184,    label: "Medium", description: "1,024 slots (V1D devnet)" },
+  large:  { maxAccounts: 4096, dataSize: 1_025_568,  label: "Large",  description: "4,096 slots (V1D devnet)" },
 } as const;
 
 /** @deprecated Alias — use SLAB_TIERS (already V1) */
