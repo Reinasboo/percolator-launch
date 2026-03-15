@@ -44,6 +44,8 @@ lerna-debug.log*
 .vercel
 .env.vercel
 .env.vercel.preview
+.env.pulled
+app/.env.pulled
 
 # Turbo
 .turbo
