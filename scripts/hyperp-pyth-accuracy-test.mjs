@@ -28,6 +28,12 @@ const MINTS = {
   "ETH/USDC": "7vfCXTUXx5WJV5JADk17DUJ4ksgau7utNKj4b963voxs",   // Wormhole ETH
 };
 
+// Pyth Hermes base URL — respects HERMES_URL env override (same as oracle-keeper.ts:64-66)
+const HERMES_URL = process.env.HERMES_URL ?? "https://hermes.pyth.network";
+
+// Canonical mainnet USDC mint — used to reliably filter quote tokens instead of symbol matching
+const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+
 // Minimum liquidity (USD) required for a DexScreener pool to be used as the price source.
 // Pools below this threshold are considered stale/thin and we fall through to Jupiter price API.
 // cbBTC's deepest Raydium pool was ~$0.4M and had a frozen price — well below 1M.
@@ -67,7 +73,7 @@ async function fetchWithTimeout(url, timeout = 10000) {
 /** Fetch Pyth Hermes price (no API key needed) */
 async function fetchPythPrice(pair) {
   const id = PYTH_IDS[pair];
-  const url = `https://hermes.pyth.network/v2/updates/price/latest?ids[]=${id}`;
+  const url = `${HERMES_URL}/v2/updates/price/latest?ids[]=${id}`;
   const data = await fetchWithTimeout(url);
   const parsed = data?.parsed?.[0]?.price;
   if (!parsed) throw new Error(`Pyth: no price for ${pair}`);
@@ -83,13 +89,19 @@ async function fetchDexPrice(pair) {
   const url = `https://api.dexscreener.com/latest/dex/tokens/${mint}`;
   const data = await fetchWithTimeout(url);
 
-  // Sort by USD liquidity desc, pick deepest
+  // Sort by USD liquidity desc, pick deepest.
+  // Pin quote token to canonical USDC mint to avoid brittle symbol-string matching
+  // (multiple tokens on Solana share the "USDC" symbol but only one is mainnet USDC).
   const pairs = (data?.pairs ?? [])
-    .filter((p) => p.chainId === "solana" && p.quoteToken?.symbol === "USDC")
+    .filter(
+      (p) =>
+        p.chainId === "solana" &&
+        p.quoteToken?.address === USDC_MINT
+    )
     .sort((a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0));
 
   if (pairs.length === 0) {
-    // Fallback: try Jupiter price API
+    // No USDC-quoted pool found on DexScreener — try Jupiter as independent spot source
     return await fetchJupiterPrice(pair);
   }
 
@@ -99,6 +111,8 @@ async function fetchDexPrice(pair) {
   // If the deepest DexScreener pool is below our minimum threshold, its price feed
   // is likely stale / thin (e.g. cbBTC's $0.4M frozen pool). Fall back to Jupiter
   // which aggregates live on-chain reserves across all AMMs.
+  // IMPORTANT: fetchJupiterPrice does NOT call fetchPythPrice — that would cause a
+  // Pyth-vs-Pyth comparison and always show 0% deviation for thin-liq pairs.
   if (liquidity < MIN_DEX_LIQUIDITY_USD) {
     console.log(
       `  [${pair}] DexScreener pool liq $${(liquidity / 1e6).toFixed(2)}M < $${(MIN_DEX_LIQUIDITY_USD / 1e6).toFixed(0)}M threshold — falling back to Jupiter`
@@ -118,33 +132,16 @@ async function fetchDexPrice(pair) {
 }
 
 /**
- * Fallback price source when DexScreener pool is stale/thin.
+ * Last-resort price source: Jupiter price API v2.
  *
- * Strategy (in priority order):
- *   1. Pyth Hermes — the oracle-keeper's own primary source. If the keeper
- *      pushes Pyth prices, comparing Pyth vs Pyth gives the true accuracy
- *      of the push pipeline (circuit breaker, EMA, staleness handling).
- *   2. Jupiter price API v2 — requires auth as of Mar 2026; kept as last-resort
- *      attempt in case the key is provided via JUPITER_API_KEY env var.
+ * NOTE: Do NOT call fetchPythPrice from here. This function exists to provide an
+ * *independent* spot price to compare against Pyth. Calling Pyth from both sides
+ * of the comparison would always yield 0% deviation and defeat the accuracy test.
+ *
+ * Jupiter price API v2 requires auth as of Mar 2026; supply JUPITER_API_KEY env var.
+ * If Jupiter is also unavailable, this throws and the sample is recorded as an error.
  */
 async function fetchJupiterPrice(pair) {
-  // 1. Pyth Hermes direct (free, no API key, used by oracle-keeper itself)
-  if (PYTH_IDS[pair]) {
-    try {
-      const pythData = await fetchPythPrice(pair);
-      return {
-        price: pythData.price,
-        source: "Pyth Hermes (keeper source — no liquid DEX pool)",
-        pool: "N/A",
-        liquidity: 0,
-      };
-    } catch (err) {
-      // fall through to Jupiter attempt
-      console.log(`  [${pair}] Pyth Hermes fallback failed: ${err.message}`);
-    }
-  }
-
-  // 2. Jupiter price API v2 (requires auth as of Mar 2026)
   const mint = MINTS[pair];
   const jupiterKey = process.env.JUPITER_API_KEY ?? "";
   const headers = jupiterKey ? { "Authorization": `Bearer ${jupiterKey}` } : {};
@@ -162,7 +159,7 @@ async function fetchJupiterPrice(pair) {
     if (!isFinite(price) || price <= 0) throw new Error(`Jupiter: invalid price for ${pair}`);
     return { price, source: "Jupiter price API", pool: "N/A", liquidity: 0 };
   } catch (err) {
-    throw new Error(`No live price source available for ${pair}: ${err.message}`);
+    throw new Error(`No live independent price source for ${pair}: ${err.message}`);
   }
 }
 
