@@ -736,8 +736,11 @@ function MarketsPageInner() {
                             symbol={
                               // GH#1544: prefer on-chain symbol; fall back to Supabase symbol
                               // so anonymous markets show a meaningful abbreviation instead of "?"
-                              tokenMetaMap.get(m.mintAddress)?.symbol ??
-                              (m.supabase?.symbol ?? undefined)
+                              // Use || (not ??) so empty-string on-chain symbols fall through to
+                              // the Supabase fallback — CodeRabbit review fix.
+                              tokenMetaMap.get(m.mintAddress)?.symbol ||
+                              m.supabase?.symbol ||
+                              undefined
                             }
                             size="sm"
                           />
