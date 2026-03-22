@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import { permanentRedirect } from "next/navigation";
 
 interface Props {
   params: Promise<{ slab: string }>;
@@ -18,5 +18,5 @@ interface Props {
  */
 export default async function MarketSlabRedirect({ params }: Props) {
   const { slab } = await params;
-  redirect(`/trade/${slab}`);
+  permanentRedirect(`/trade/${slab}`);
 }
