@@ -10,6 +10,7 @@ import { HealthBadge } from "@/components/market/HealthBadge";
 import { formatTokenAmount } from "@/lib/format";
 import { getSupabase } from "@/lib/supabase";
 import { isSaneMarketValue, isZombieMarket } from "@/lib/activeMarketFilter";
+import { BLOCKED_SLAB_ADDRESSES } from "@/lib/blocklist";
 import type { Database } from "@/lib/database.types";
 
 type MarketWithStats = Database['public']['Views']['markets_with_stats']['Row'];
@@ -253,6 +254,11 @@ function MarketsPageInner() {
       return n;
     };
     return effectiveMarkets.filter((m) => {
+      // GH#1539: Exclude blocked markets — mirrors /api/markets BLOCKED_MARKET_ADDRESSES filter.
+      // Without this, blocked slab addresses (from lib/blocklist.ts) appear in the UI count
+      // but not the API total, causing a 2-market discrepancy (170 vs 168).
+      if (BLOCKED_SLAB_ADDRESSES.has(m.slabAddress)) return false;
+
       // GH#1531: Show all non-zombie Supabase markets — counter matches /api/markets total.
       if (m.supabase) {
         const zombie = isZombieMarket({

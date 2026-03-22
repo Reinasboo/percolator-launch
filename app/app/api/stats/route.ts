@@ -265,14 +265,28 @@ export async function GET(request: NextRequest) {
   const nonZombieCount = statsData.length - nonZombieListedMarkets.length;
 
   // GH#1535: Expose activeTotal matching /api/markets activeTotal exactly.
-  // /api/markets activeTotal = zombie-excluded non-blocked markets that pass isActiveMarket()
-  // (i.e. at least one sane stat: price, volume, or OI — after sanitizePrice cap).
-  // /api/stats activeMarkets (69) uses the phantom-aware subset (stricter: phantom zeroing
-  // before isActiveMarket), which is a subset of the zombie-filtered set.
-  // Both values are valid but measure different things. Exposing activeTotal here gives
-  // consumers a single consistent field name across both endpoints.
-  // Computed from nonZombieListedMarkets (already zombie-filtered + price-cap-sanitized).
-  const activeTotal = nonZombieListedMarkets.filter(isActiveMarket).length;
+  // GH#1538: Must apply phantom OI zeroing before isActiveMarket(), otherwise phantom
+  // markets with stale volume_24h/total_open_interest pass the sane-value check and
+  // get over-counted (151 vs 115). /api/markets applies phantom zeroing in its sanitized
+  // pipeline before isActiveMarket(); we must mirror that here.
+  const activeTotal = nonZombieListedMarkets.filter((m) => {
+    const raw = m as Record<string, unknown>;
+    const accountsCount = Number(raw.total_accounts) || 0;
+    const vaultBal = Number(raw.vault_balance) || 0;
+    const isPhantom = isPhantomOpenInterest(accountsCount, vaultBal);
+    // Build a view with phantom fields zeroed, mirroring /api/markets sanitization
+    const checked = {
+      last_price: (() => {
+        const p = numericOrNull(raw.last_price);
+        return (p != null && p > 0 && p <= MAX_SANE_PRICE_FOR_ACTIVE) ? p : null;
+      })(),
+      volume_24h: isPhantom ? 0 : numericOrNull(raw.volume_24h),
+      total_open_interest: isPhantom ? 0 : numericOrNull(raw.total_open_interest),
+      open_interest_long: isPhantom ? 0 : numericOrNull(raw.open_interest_long),
+      open_interest_short: isPhantom ? 0 : numericOrNull(raw.open_interest_short),
+    };
+    return isActiveMarket(checked as Parameters<typeof isActiveMarket>[0]);
+  }).length;
 
   return NextResponse.json({
     // GH#1529: totalMarkets is now aligned with /api/markets total (non-zombie, non-blocked).
