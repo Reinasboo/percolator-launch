@@ -8,6 +8,7 @@ import { getConfig } from "@/lib/config";
 import * as Sentry from "@sentry/nextjs";
 import { isSaneMarketValue, isActiveMarket, isZombieMarket } from "@/lib/activeMarketFilter";
 import { isPhantomOpenInterest } from "@/lib/phantom-oi";
+import { computeMarketHealthFromStats } from "@/lib/health";
 import { BLOCKED_SLAB_ADDRESSES } from "@/lib/blocklist";
 import { SLUG_ALIASES } from "@/lib/symbol-utils";
 
@@ -415,23 +416,66 @@ export async function GET(request: NextRequest) {
     // the "recent" value (not in SORTABLE_FIELDS), returning unsorted DB order.
     // Map "recent" → created_at with forced DESC direction so API consumers and the
     // frontend server-side path both return newest-first.
-    const effectiveSortParam = sortParam === "recent" ? "created_at" : sortParam;
-    const effectiveSortDir = sortParam === "recent" ? -1 : sortDir; // recent always DESC
+    //
+    // GH#1566: sort=oi and sort=volume are named aliases matching the frontend SortKey enum.
+    // Previously these fell through to no-sort (not in SORTABLE_FIELDS), returning DB order.
+    // - "oi"     → total_open_interest DESC (raw atom count; USD not reliable on devnet)
+    // - "volume" → volume_24h DESC
+    // - "health" → computed health level numeric sort via computeMarketHealthFromStats
+    //              (healthy=0 < caution=1 < warning=2 < empty=3), ascending by default
+    const NAMED_SORT_ALIASES: Record<string, { field: string; dir: number } | "health"> = {
+      recent: { field: "created_at", dir: -1 },
+      oi: { field: "total_open_interest", dir: -1 },
+      volume: { field: "volume_24h", dir: -1 },
+      health: "health",
+    };
+    const namedAlias = sortParam ? NAMED_SORT_ALIASES[sortParam] : undefined;
+    const effectiveSortParam =
+      namedAlias && namedAlias !== "health"
+        ? namedAlias.field
+        : sortParam === "recent" ? "created_at" : sortParam; // backward-compat fallback
+    const effectiveSortDir =
+      namedAlias && namedAlias !== "health"
+        ? namedAlias.dir
+        : sortParam === "recent" ? -1 : sortDir;
+
+    // Health sort uses a computed level rank, not a raw field value.
+    const HEALTH_ORDER: Record<string, number> = { healthy: 0, caution: 1, warning: 2, empty: 3 };
+    const healthRank = (m: Record<string, unknown>): number => {
+      const h = computeMarketHealthFromStats({
+        total_open_interest: m.total_open_interest as number | null,
+        open_interest_long: m.open_interest_long as number | null,
+        open_interest_short: m.open_interest_short as number | null,
+        insurance_balance: m.insurance_balance as number | null,
+        insurance_fund: m.insurance_fund as number | null,
+        c_tot: m.c_tot as number | null,
+        vault_balance: m.vault_balance as number | null,
+        total_accounts: m.total_accounts as number | null,
+      });
+      return HEALTH_ORDER[h.level] ?? 5;
+    };
+
     const sorted =
-      effectiveSortParam && SORTABLE_FIELDS.has(effectiveSortParam)
+      namedAlias === "health"
         ? [...oracleModeFiltered].sort((a, b) => {
-            const av = (a as Record<string, unknown>)[effectiveSortParam] ?? null;
-            const bv = (b as Record<string, unknown>)[effectiveSortParam] ?? null;
-            // Nulls last regardless of order direction.
-            if (av === null && bv === null) return 0;
-            if (av === null) return 1;
-            if (bv === null) return -1;
-            if (typeof av === "string" && typeof bv === "string") {
-              return effectiveSortDir * av.localeCompare(bv);
-            }
-            return effectiveSortDir * ((av as number) - (bv as number));
+            const ra = healthRank(a as Record<string, unknown>);
+            const rb = healthRank(b as Record<string, unknown>);
+            return sortDir * (ra - rb);
           })
-        : oracleModeFiltered;
+        : effectiveSortParam && SORTABLE_FIELDS.has(effectiveSortParam)
+          ? [...oracleModeFiltered].sort((a, b) => {
+              const av = (a as Record<string, unknown>)[effectiveSortParam] ?? null;
+              const bv = (b as Record<string, unknown>)[effectiveSortParam] ?? null;
+              // Nulls last regardless of order direction.
+              if (av === null && bv === null) return 0;
+              if (av === null) return 1;
+              if (bv === null) return -1;
+              if (typeof av === "string" && typeof bv === "string") {
+                return effectiveSortDir * av.localeCompare(bv);
+              }
+              return effectiveSortDir * ((av as number) - (bv as number));
+            })
+          : oracleModeFiltered;
 
     // GH#1348: Respect ?limit= query param to avoid returning 100+ markets
     // GH#1490: Validate limit (must be 1–500) and offset (must be >= 0) using
