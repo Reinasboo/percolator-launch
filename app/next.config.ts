@@ -46,6 +46,18 @@ const nextConfig: NextConfig = {
       buffer: "buffer",
     },
   },
+  async redirects() {
+    return [
+      // GH#1552: /markets/[slab] only works client-side (intercepting route).
+      // Direct navigation / refresh hits the server where no page exists → 404.
+      // Permanent redirect to the canonical /trade/[slab] route.
+      {
+        source: "/markets/:slab",
+        destination: "/trade/:slab",
+        permanent: true,
+      },
+    ];
+  },
   async rewrites() {
     return [
       // Data routes → API service
