@@ -362,9 +362,15 @@ function MarketsPageInner() {
           const order: Record<string, number> = { healthy: 0, caution: 1, warning: 2, empty: 3 };
           return (order[ha.level] ?? 5) - (order[hb.level] ?? 5);
         }
-        case "recent":
-          // Sort by most recently added (slab address is sequential-ish)
+        case "recent": {
+          // Sort by created_at descending; fall back to slab address if missing
+          const aTime = a.supabase?.created_at;
+          const bTime = b.supabase?.created_at;
+          if (aTime && bTime) return bTime.localeCompare(aTime);
+          if (bTime) return 1;  // b has time, a doesn't → b first
+          if (aTime) return -1; // a has time, b doesn't → a first
           return b.slabAddress.localeCompare(a.slabAddress);
+        }
         default: return 0;
       }
     });
