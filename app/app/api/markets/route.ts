@@ -63,6 +63,20 @@ function sanitizeCtot(v: number | null | undefined): number | null {
 }
 
 /**
+ * GH#1564: Coerce a value to number | null.
+ * Supabase returns NUMERIC columns as JavaScript strings at runtime (TypeScript `as number`
+ * is compile-time only). Without this coercion, Number.isFinite("0.42") → false, causing
+ * sanitizePrice / rawToUsd / isSaneMarketValue to return null for every market.
+ * This helper is module-level so it can be used both in the map() pipeline and in the
+ * zombie-check block (previously it was defined inline inside map, too late for USD calcs).
+ */
+function numericOrNull(v: unknown): number | null {
+  if (v == null) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
  * Convert a raw on-chain token micro-unit amount to USD.
  * Returns null when the raw value is a sentinel/garbage or no price is available.
  * (#1160: expose a pre-computed USD field so API consumers don't have to divide by 10^decimals themselves)
@@ -176,17 +190,37 @@ export async function GET(request: NextRequest) {
           oracle_mode = "admin"; // safe default
         }
       }
+      // GH#1564: Coerce all NUMERIC fields from Supabase strings to numbers up-front.
+      // Supabase returns NUMERIC columns as strings at runtime; TypeScript `as number` is
+      // compile-time only and performs no actual coercion. Without this, Number.isFinite
+      // receives a string, returns false, and sanitizePrice / rawToUsd / isSaneMarketValue
+      // all return null — causing volume_24h_usd and total_open_interest_usd to be null
+      // for every market (168/168). Mirrors the fix already applied in GH#1494 for the
+      // zombie-check numericOrNull block, now extended to the USD computation path.
+      const n_last_price = numericOrNull(m.last_price);
+      const n_mark_price = numericOrNull(m.mark_price);
+      const n_index_price = numericOrNull(m.index_price);
+      const n_volume_24h = numericOrNull(m.volume_24h);
+      const n_total_open_interest = numericOrNull(m.total_open_interest);
+      const n_open_interest_long = numericOrNull(m.open_interest_long);
+      const n_open_interest_short = numericOrNull(m.open_interest_short);
+      const n_decimals = numericOrNull(m.decimals);
+      const n_funding_rate = numericOrNull(m.funding_rate);
+      const n_vault_balance = numericOrNull(m.vault_balance);
+      const n_c_tot = numericOrNull(m.c_tot);
+      const n_total_accounts = numericOrNull(m.total_accounts);
+
       // #1160: Compute a USD-denominated OI field so consumers don't need to divide
       // by 10^decimals manually. Derived from total_open_interest when sane, falls
       // back to open_interest_long + open_interest_short. Raw fields are preserved.
-      const sanitizedPrice = sanitizePrice(m.last_price as number | null, "last_price", m.slab_address as string);
-      const rawOi = isSaneMarketValue(m.total_open_interest as number | null)
-        ? m.total_open_interest as number
+      const sanitizedPrice = sanitizePrice(n_last_price, "last_price", m.slab_address as string);
+      const rawOi = isSaneMarketValue(n_total_open_interest)
+        ? n_total_open_interest!
         : (() => {
-            const combined = (m.open_interest_long as number ?? 0) + (m.open_interest_short as number ?? 0);
+            const combined = (n_open_interest_long ?? 0) + (n_open_interest_short ?? 0);
             return isSaneMarketValue(combined) ? combined : null;
           })();
-      const total_open_interest_usd = rawToUsd(rawOi, m.decimals as number | null, sanitizedPrice);
+      const total_open_interest_usd = rawToUsd(rawOi, n_decimals, sanitizedPrice);
 
       // GH#1250: If total_accounts == 0, OI must be stale/orphaned — suppress from display.
       // Root cause: the on-chain totalOpenInterest counter is not decremented when positions
@@ -204,20 +238,18 @@ export async function GET(request: NextRequest) {
       // computeMarketHealthFromStats and the markets page sort/filter.
       // GH#1438: Aligned to strict < via shared isPhantomOpenInterest() helper in lib/phantom-oi.ts
       // so /api/markets and /api/stats are guaranteed to use the same predicate (single source of truth).
-      // GH#1494: coerce NUMERIC (string from Supabase) to number before arithmetic comparisons.
-      const accountsCount = Number(m.total_accounts ?? 0);
-      const vaultBal = Number(m.vault_balance ?? 0);
+      // GH#1494/GH#1564: coerce NUMERIC (string from Supabase) to number before arithmetic comparisons.
+      // Uses module-level numericOrNull() already applied above; fall back to 0 for nulls.
+      const accountsCount = n_total_accounts ?? 0;
+      const vaultBal = n_vault_balance ?? 0;
       const isPhantomOI = isPhantomOpenInterest(accountsCount, vaultBal);
       const displayOiUsd = isPhantomOI ? null : total_open_interest_usd;
 
       // GH#1270: Pre-compute volume_24h in USD so consumers (e.g. Watchlist) don't need
       // to divide by 10^decimals manually. Mirrors the total_open_interest_usd pattern.
       // Raw volume_24h is preserved in the response for backward compatibility.
-      const volume_24h_usd = rawToUsd(
-        m.volume_24h as number | null,
-        m.decimals as number | null,
-        sanitizedPrice,
-      );
+      // GH#1564: uses n_volume_24h (coerced from Supabase NUMERIC string) — see block above.
+      const volume_24h_usd = rawToUsd(n_volume_24h, n_decimals, sanitizedPrice);
 
       // GH#1420 + GH#1427: Mark zombie markets using shared isZombieMarket() helper.
       // (CodeRabbit #1466: extracted from inline predicate in stats route to avoid drift.)
@@ -227,63 +259,55 @@ export async function GET(request: NextRequest) {
       // (opt-in via ?include_zombie=true). See isZombieMarket() in activeMarketFilter.ts
       // for the two conditions: vault=0 (drained) or vault=null+no-stats (phantom).
       //
-      // GH#1494: Supabase returns NUMERIC columns (vault_balance, total_open_interest,
-      // volume_24h) as strings at runtime. TypeScript `as number | null` is compile-time
-      // only and does NOT coerce the value. Without Number() coercion, the strict equality
-      // check `vaultBal === 0` in isZombieMarket() compares string "0" to number 0 →
-      // always false → is_zombie is never set to true despite zombieCount=73.
-      // Fix: coerce all NUMERIC fields to number|null before passing to isZombieMarket().
-      const numericOrNull = (v: unknown): number | null => {
-        if (v == null) return null;
-        const n = Number(v);
-        return Number.isFinite(n) ? n : null;
-      };
+      // GH#1494/GH#1564: All NUMERIC fields are now coerced via module-level numericOrNull()
+      // at the top of this map() (the n_* locals block). No inline helper needed here.
       // GH#1506: Use sanitizedPrice (already capped at MAX_SANE_PRICE_USD=$1M) for the
-      // zombie check instead of numericOrNull(m.last_price). Raw DB prices can be stale
-      // garbage values that pass isSaneMarketValue (< 1e18) but exceed the display cap.
-      // NNOB had a stale raw last_price > $1M in DB — sanitizePrice nulled it for output,
-      // but passing numericOrNull(m.last_price) to isZombieMarket() made hasActivity=true
-      // → c_tot>0 exemption fired → is_zombie=false, even though the API returned null.
-      // Using sanitizedPrice keeps the zombie check consistent with what consumers receive.
+      // zombie check instead of raw last_price. Raw DB prices can be stale garbage values
+      // that pass isSaneMarketValue (< 1e18) but exceed the display cap. NNOB had a stale
+      // raw last_price > $1M — sanitizePrice nulled it for output, but passing the raw value
+      // to isZombieMarket() made hasActivity=true → c_tot>0 exemption → is_zombie=false even
+      // though the API returned null. Using sanitizedPrice keeps zombie check consistent with
+      // what consumers receive.
+      // GH#1564: All n_* locals already coerced via numericOrNull() above — no double-coerce needed.
       const is_zombie = isZombieMarket({
-        vault_balance: numericOrNull(m.vault_balance),
-        c_tot: numericOrNull(m.c_tot),
+        vault_balance: n_vault_balance,
+        c_tot: n_c_tot,
         last_price: sanitizedPrice,
-        volume_24h: numericOrNull(m.volume_24h),
-        total_open_interest: numericOrNull(m.total_open_interest),
-        total_accounts: numericOrNull(m.total_accounts),
+        volume_24h: n_volume_24h,
+        total_open_interest: n_total_open_interest,
+        total_accounts: n_total_accounts,
       });
 
       return {
         ...m,
         oracle_mode,
         is_zombie,
-        funding_rate: sanitizeFundingRate(m.funding_rate as number | null),
+        funding_rate: sanitizeFundingRate(n_funding_rate),
         // #856: Null out corrupt admin-set test prices (raw unscaled u64 values or billions/trillions).
         // Matches Rust MAX_ORACLE_PRICE = $1B USD ceiling.
         // GH#1420: Also null out prices for zombie markets — stale prices with no liquidity are misleading.
+        // GH#1564: sanitizedPrice already computed from coerced n_last_price (not the raw string m.last_price).
         last_price: is_zombie ? null : sanitizedPrice,
-        mark_price: is_zombie ? null : sanitizePrice(m.mark_price as number | null, "mark_price", m.slab_address as string),
+        mark_price: is_zombie ? null : sanitizePrice(n_mark_price, "mark_price", m.slab_address as string),
         // #855: Apply same sanitization to index_price — same DB column type and
         // corruption vector as last_price/mark_price. Inconsistent sanitization
         // means a corrupt index price still reaches consumers.
-        index_price: is_zombie ? null : sanitizePrice(m.index_price as number | null, "index_price", m.slab_address as string),
+        index_price: is_zombie ? null : sanitizePrice(n_index_price, "index_price", m.slab_address as string),
         // #1160 / GH#1290 / PERC-570: OI fields — USD and raw atoms.
         // Raw atom fields (total_open_interest, open_interest_long, open_interest_short) are
         // zeroed (not just the USD conversion) when the phantom OI guard fires.
-        // Previously only total_open_interest_usd was suppressed, leaving the raw atom value
-        // in the response and feeding phantom OI into health calculations and sort/filter.
-        // GH#1250/1271/PERC-816/GH#1290: Suppressed when total_accounts == 0 or vault_balance < 1_000_000.
-        total_open_interest: isPhantomOI ? 0 : (m.total_open_interest as number ?? 0),
-        open_interest_long: isPhantomOI ? 0 : (m.open_interest_long as number ?? 0),
-        open_interest_short: isPhantomOI ? 0 : (m.open_interest_short as number ?? 0),
+        // GH#1564: uses coerced n_* values — spread from m would still be strings.
+        total_open_interest: isPhantomOI ? 0 : (n_total_open_interest ?? 0),
+        open_interest_long: isPhantomOI ? 0 : (n_open_interest_long ?? 0),
+        open_interest_short: isPhantomOI ? 0 : (n_open_interest_short ?? 0),
         total_open_interest_usd: displayOiUsd,
         // GH#1270: Pre-converted 24h volume in USD. Null when price unavailable or raw
         // value is a sentinel. Raw volume_24h preserved for backward compatibility.
+        // GH#1564: volume_24h_usd now computed from coerced n_volume_24h (not the string m.volume_24h).
         volume_24h_usd,
         // GH#1208: Sanitize c_tot — near-sentinel values (e.g. 7.997e17) pass the
         // isSaneMarketValue 1e18 check but are clearly corrupt LP collateral totals.
-        c_tot: sanitizeCtot(m.c_tot as number | null),
+        c_tot: sanitizeCtot(n_c_tot),
       };
     });
 

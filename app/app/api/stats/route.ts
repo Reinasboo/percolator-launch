@@ -129,7 +129,8 @@ export async function GET(request: NextRequest) {
     };
   });
   const activeData = phantomAwareData.filter(isActiveMarket);
-  const totalMarkets = activeData.length;
+  // GH#1563: totalMarkets (activeData.length = 69) was the activeMarkets field removed from
+  // the response. activeData is still used for volume/OI/trades aggregations — keep it.
 
   // Convert raw on-chain token micro-units to USD using decimals + price
   // Without this, sentinel-like values (2e12) leak through as $2T (#1154)
@@ -287,10 +288,11 @@ export async function GET(request: NextRequest) {
     // Previously totalMarkets=69 was the active-market subset (at least one sane stat),
     // which diverged from totalListedMarkets=168 without any documented distinction.
     // totalListedMarkets (deprecated alias) is kept for backward compat.
-    // activeMarkets exposes the previous totalMarkets value for internal tooling.
     // GH#1535: activeTotal matches /api/markets activeTotal (zombie-excluded + isActiveMarket).
+    // GH#1563: Removed activeMarkets (was 69 — the all-market active subset from phantomAwareData).
+    // It diverged from activeTotal (115 = zombie-excluded isActiveMarket) with no clear definition,
+    // causing API consumer confusion. activeTotal is the canonical "active" count going forward.
     totalMarkets: nonZombieListedMarkets.length,
-    activeMarkets: totalMarkets,
     activeTotal,
     // #1172: totalListedMarkets includes all non-blocked, non-zombie markets.
     // GH#1465: Previously this was statsData.length (included zombies), diverging
