@@ -32,7 +32,7 @@ const MINTS = {
 const HERMES_URL = process.env.HERMES_URL ?? "https://hermes.pyth.network";
 
 // Canonical mainnet USDC mint — used to reliably filter quote tokens instead of symbol matching
-const USDC_MINT = "EPjFWaJrgqAfIsZ2uG9Kqh28rtzuwMvzA98Fwp34d82w";
+const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
 // Minimum liquidity (USD) required for a DexScreener pool to be used as the price source.
 // Pools below this threshold are considered stale/thin and we fall through to Jupiter price API.
