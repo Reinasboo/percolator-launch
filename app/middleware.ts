@@ -206,7 +206,26 @@ function _blockedSlabFromPath(pathname: string): string | null {
   return null;
 }
 
+// ── /markets/:slab → /trade/:slab permanent redirect (GH#1558) ───────────────
+// next.config.ts redirects are processed by the Next.js router, but when an RSC
+// hits BAILOUT_TO_CLIENT_SIDE_RENDERING the redirect is swallowed by the JS
+// navigation layer and the HTTP response comes back as 200 (not 308).
+// Middleware runs at the Edge before the Next.js router, so it is guaranteed to
+// emit the correct 308 status code for all clients (curl, crawlers, JS-disabled).
+// This is belt-and-suspenders alongside the next.config.ts entry (kept for dev).
+const _marketsSlabRe = /^\/markets\/([^/]+)\/?$/;
+
 export async function middleware(request: NextRequest) {
+  // ── /markets/:slab → /trade/:slab (GH#1558) ─────────────────────────────
+  const marketsMatch = _marketsSlabRe.exec(request.nextUrl.pathname);
+  if (marketsMatch) {
+    const slab = marketsMatch[1];
+    const destination = new URL(`/trade/${slab}`, request.url);
+    // Preserve query string if present (e.g. ?ref=share)
+    destination.search = request.nextUrl.search;
+    return NextResponse.redirect(destination, { status: 308 });
+  }
+
   // ── IP Blocklist check ─────────────────────────────────────────────────────
   // Resolve client IP using the same proxy-depth logic as the rate limiter.
   if (_blocklist.length > 0) {

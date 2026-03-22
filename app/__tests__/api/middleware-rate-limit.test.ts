@@ -1,6 +1,7 @@
 /**
  * Tests for middleware.ts — Upstash Redis distributed rate limiter (GH#1213),
- * off-by-one fix (GH#1245), and funding slab blocklist guard (GH#1363).
+ * off-by-one fix (GH#1245), funding slab blocklist guard (GH#1363), and
+ * /markets/:slab → /trade/:slab 308 redirect (GH#1558).
  *
  * KEY NOTE: vi.fn().mockImplementation(() => ...) with an arrow function is
  * NOT usable as a constructor (Vitest 4 enforces this). Ratelimit instances
@@ -347,5 +348,59 @@ describe("middleware — insurance slab blocklist guard (GH#1390)", () => {
   it("does not affect non-insurance routes", async () => {
     const res = await middleware(makeReq("/api/markets"));
     expect(res.status).not.toBe(404);
+  });
+});
+
+// ── Suite 7: /markets/:slab → /trade/:slab 308 redirect (GH#1558) ─────────
+// next.config.ts redirects are swallowed by the RSC BAILOUT_TO_CLIENT_SIDE_RENDERING
+// error boundary, returning HTTP 200 instead of 308. The middleware redirect fires
+// at the Edge before the Next.js router, guaranteeing the correct 308 status code.
+describe("middleware — /markets/:slab 308 redirect (GH#1558)", () => {
+  let middleware: MiddlewareFn;
+
+  beforeEach(async () => {
+    delete process.env.UPSTASH_REDIS_REST_URL;
+    delete process.env.UPSTASH_REDIS_REST_TOKEN;
+    delete process.env.BLOCKED_MARKET_ADDRESSES;
+    middleware = await freshMiddleware();
+  });
+
+  it("redirects /markets/<slab> with HTTP 308", async () => {
+    const slab = "3UJRD9YCtey3YjAD6iVznaWvHgz1bzz6dLzBhQekToqA";
+    const res = await middleware(makeReq(`/markets/${slab}`));
+    expect(res.status).toBe(308);
+  });
+
+  it("redirects to /trade/<slab>", async () => {
+    const slab = "3UJRD9YCtey3YjAD6iVznaWvHgz1bzz6dLzBhQekToqA";
+    const res = await middleware(makeReq(`/markets/${slab}`));
+    expect(res.headers.get("location")).toContain(`/trade/${slab}`);
+  });
+
+  it("preserves query string in redirect", async () => {
+    const slab = "3UJRD9YCtey3YjAD6iVznaWvHgz1bzz6dLzBhQekToqA";
+    const res = await middleware(
+      new NextRequest(`http://localhost/markets/${slab}?ref=share`, {
+        headers: { "x-forwarded-for": "1.2.3.4" },
+      }),
+    );
+    expect(res.status).toBe(308);
+    expect(res.headers.get("location")).toContain("?ref=share");
+  });
+
+  it("does not redirect /markets (no slab — list page)", async () => {
+    const res = await middleware(makeReq("/markets"));
+    expect(res.status).not.toBe(308);
+  });
+
+  it("does not redirect /trade/<slab>", async () => {
+    const slab = "3UJRD9YCtey3YjAD6iVznaWvHgz1bzz6dLzBhQekToqA";
+    const res = await middleware(makeReq(`/trade/${slab}`));
+    expect(res.status).not.toBe(308);
+  });
+
+  it("does not redirect /api/markets routes", async () => {
+    const res = await middleware(makeReq("/api/markets"));
+    expect(res.status).not.toBe(308);
   });
 });
