@@ -22,14 +22,20 @@ export const MarketLogo: FC<MarketLogoProps> = ({ logoUrl, mintAddress, symbol, 
   const effectiveUrl = logoUrl ?? (cdnError ? null : cdnUrl);
 
   if (!effectiveUrl || error) {
-    // Fallback: first letter of symbol in a colored circle
-    const letter = (symbol ?? "?")[0].toUpperCase();
+    // GH#1544: Fallback label priority:
+    //   1. Token symbol (up to 4 chars, e.g. "SOL", "BONK")
+    //   2. Mint address prefix (first 3 chars) — better than "?" for anonymous markets
+    const fallbackLabel = symbol
+      ? symbol.slice(0, 4).toUpperCase()
+      : mintAddress
+        ? mintAddress.slice(0, 3).toUpperCase()
+        : "?";
     return (
       <div
         className="flex items-center justify-center border border-[var(--border)] bg-[var(--panel-bg)] text-[var(--text-dim)] font-mono font-bold"
-        style={{ width: px, height: px, fontSize: px * 0.4 }}
+        style={{ width: px, height: px, fontSize: px * (fallbackLabel.length > 2 ? 0.28 : 0.4) }}
       >
-        {letter}
+        {fallbackLabel}
       </div>
     );
   }
