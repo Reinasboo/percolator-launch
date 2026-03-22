@@ -7,6 +7,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 afterEach(() => {
   vi.resetModules();
   delete process.env.NEXT_PUBLIC_BLOCKED_MARKET_ADDRESSES;
+  delete process.env.BLOCKED_MARKET_ADDRESSES;
 });
 
 describe("GH#1539: unified blocklist", () => {
@@ -23,6 +24,7 @@ describe("GH#1539: unified blocklist", () => {
     process.env.NEXT_PUBLIC_BLOCKED_MARKET_ADDRESSES = "TestAddr111,TestAddr222";
     vi.resetModules();
     const { BLOCKED_SLAB_ADDRESSES } = await import("@/lib/blocklist");
+    // Verify the module itself (not inline parsing) includes the env var entries
     expect(BLOCKED_SLAB_ADDRESSES.has("TestAddr111")).toBe(true);
     expect(BLOCKED_SLAB_ADDRESSES.has("TestAddr222")).toBe(true);
   });
@@ -33,5 +35,40 @@ describe("GH#1539: unified blocklist", () => {
     expect(isBlockedSlab("SomeRandomNonBlockedAddress")).toBe(false);
     expect(isBlockedSlab(null)).toBe(false);
     expect(isBlockedSlab(undefined)).toBe(false);
+  });
+
+  it("validateBlocklist warns when server-only BLOCKED_MARKET_ADDRESSES is set without public mirror", async () => {
+    process.env.BLOCKED_MARKET_ADDRESSES = "ServerOnlyAddr1,ServerOnlyAddr2";
+    delete process.env.NEXT_PUBLIC_BLOCKED_MARKET_ADDRESSES;
+    vi.resetModules();
+    const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { validateBlocklist } = await import("@/lib/blocklist");
+    validateBlocklist();
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining("BLOCKED_MARKET_ADDRESSES is set but NEXT_PUBLIC_BLOCKED_MARKET_ADDRESSES is not")
+    );
+    consoleSpy.mockRestore();
+  });
+
+  it("validateBlocklist does NOT warn when both env vars are in sync", async () => {
+    process.env.BLOCKED_MARKET_ADDRESSES = "SomeAddr";
+    process.env.NEXT_PUBLIC_BLOCKED_MARKET_ADDRESSES = "SomeAddr";
+    vi.resetModules();
+    const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { validateBlocklist } = await import("@/lib/blocklist");
+    validateBlocklist();
+    expect(consoleSpy).not.toHaveBeenCalled();
+    consoleSpy.mockRestore();
+  });
+
+  it("validateBlocklist does NOT warn when neither env var is set", async () => {
+    delete process.env.BLOCKED_MARKET_ADDRESSES;
+    delete process.env.NEXT_PUBLIC_BLOCKED_MARKET_ADDRESSES;
+    vi.resetModules();
+    const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { validateBlocklist } = await import("@/lib/blocklist");
+    validateBlocklist();
+    expect(consoleSpy).not.toHaveBeenCalled();
+    consoleSpy.mockRestore();
   });
 });

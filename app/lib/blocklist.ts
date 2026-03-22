@@ -96,3 +96,34 @@ export function isBlockedSlab(slabAddress: string | null | undefined): boolean {
   if (!slabAddress) return false;
   return BLOCKED_SLAB_ADDRESSES.has(slabAddress);
 }
+
+/**
+ * GH#1539: Detect legacy env var drift at startup.
+ *
+ * If BLOCKED_MARKET_ADDRESSES (server-only) is populated but
+ * NEXT_PUBLIC_BLOCKED_MARKET_ADDRESSES is not, the UI will silently miss
+ * those entries (client code cannot read server-only env vars).  Warn loudly
+ * so ops teams catch misconfigurations before they cause a UI/API count
+ * mismatch again.
+ *
+ * Call this once from your app startup (e.g. instrumentation.ts) or rely
+ * on the automatic check that fires during module initialisation below.
+ */
+export function validateBlocklist(): void {
+  if (typeof process === "undefined") return; // edge / browser — skip
+  const serverOnly = (process.env.BLOCKED_MARKET_ADDRESSES ?? "").trim();
+  const publicVar = (process.env.NEXT_PUBLIC_BLOCKED_MARKET_ADDRESSES ?? "").trim();
+  if (serverOnly && !publicVar) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[blocklist] WARNING: BLOCKED_MARKET_ADDRESSES is set but " +
+        "NEXT_PUBLIC_BLOCKED_MARKET_ADDRESSES is not. Client-side UI will NOT " +
+        "see the server-only entries, which can recreate the GH#1539 UI/API " +
+        "count mismatch. Migrate the value to NEXT_PUBLIC_BLOCKED_MARKET_ADDRESSES."
+    );
+  }
+}
+
+// Auto-run at module load so the warning fires during both dev and production
+// startup without requiring an explicit call site.
+validateBlocklist();
