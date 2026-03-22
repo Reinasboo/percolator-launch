@@ -313,7 +313,12 @@ export async function GET(request: NextRequest) {
     // mint_address or mainnet_ca is the SOL mint. This bridges the gap between the
     // human-readable token names shown in the UI (via token-metadata enrichment) and
     // the raw DB values that the search runs against.
-    const searchParam = request?.nextUrl?.searchParams?.get("search") ?? null;
+    // GH#1556: Accept both ?search= and ?q= — the UI and direct API consumers use both.
+    // ?search= is the canonical param; ?q= is the legacy/shorthand alias. search= wins when both are present.
+    const searchParam =
+      request?.nextUrl?.searchParams?.get("search") ??
+      request?.nextUrl?.searchParams?.get("q") ??
+      null;
     const searchTrimmed = searchParam ? searchParam.trim() : null;
     const searchFiltered = searchTrimmed
       ? (() => {
@@ -381,19 +386,26 @@ export async function GET(request: NextRequest) {
       "insurance_balance",
       "total_accounts",
     ]);
+    // GH#1555: sort=recent is a named alias for created_at DESC (most recently created first).
+    // PR #1550 fixed the frontend client-side sort but the API endpoint still silently ignored
+    // the "recent" value (not in SORTABLE_FIELDS), returning unsorted DB order.
+    // Map "recent" → created_at with forced DESC direction so API consumers and the
+    // frontend server-side path both return newest-first.
+    const effectiveSortParam = sortParam === "recent" ? "created_at" : sortParam;
+    const effectiveSortDir = sortParam === "recent" ? -1 : sortDir; // recent always DESC
     const sorted =
-      sortParam && SORTABLE_FIELDS.has(sortParam)
+      effectiveSortParam && SORTABLE_FIELDS.has(effectiveSortParam)
         ? [...oracleModeFiltered].sort((a, b) => {
-            const av = (a as Record<string, unknown>)[sortParam] ?? null;
-            const bv = (b as Record<string, unknown>)[sortParam] ?? null;
+            const av = (a as Record<string, unknown>)[effectiveSortParam] ?? null;
+            const bv = (b as Record<string, unknown>)[effectiveSortParam] ?? null;
             // Nulls last regardless of order direction.
             if (av === null && bv === null) return 0;
             if (av === null) return 1;
             if (bv === null) return -1;
             if (typeof av === "string" && typeof bv === "string") {
-              return sortDir * av.localeCompare(bv);
+              return effectiveSortDir * av.localeCompare(bv);
             }
-            return sortDir * ((av as number) - (bv as number));
+            return effectiveSortDir * ((av as number) - (bv as number));
           })
         : oracleModeFiltered;
 
