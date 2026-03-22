@@ -9,6 +9,7 @@
     "dev": "pnpm --filter @percolator/app dev",
     "build:app": "pnpm --filter @percolator/app build",
     "build:core": "pnpm --filter @percolator/sdk build",
+    "pretest": "pnpm --filter @percolator/shared build",
     "test": "pnpm -r test",
     "test:app": "cd app && pnpm test",
     "test:core": "cd packages/core && pnpm test",
