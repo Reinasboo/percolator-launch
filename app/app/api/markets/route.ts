@@ -8,7 +8,7 @@ import { getConfig } from "@/lib/config";
 import * as Sentry from "@sentry/nextjs";
 import { isSaneMarketValue, isActiveMarket, isZombieMarket } from "@/lib/activeMarketFilter";
 import { isPhantomOpenInterest } from "@/lib/phantom-oi";
-import { BLOCKED_SLAB_ADDRESSES as HARDCODED_BLOCKED_MARKETS } from "@/lib/blocklist";
+import { BLOCKED_SLAB_ADDRESSES } from "@/lib/blocklist";
 import { SLUG_ALIASES } from "@/lib/symbol-utils";
 
 /**
@@ -126,14 +126,8 @@ function sanitizePrice(v: number | null | undefined, field?: string, slabAddress
 }
 
 // #868: Blocklist for markets with corrupt state or wrong oracle_authority (e.g. issue #837).
-// Hardcoded list lives in @/lib/blockedMarkets; env var adds runtime overrides.
-const BLOCKED_MARKET_ADDRESSES: ReadonlySet<string> = new Set([
-  ...HARDCODED_BLOCKED_MARKETS,
-  ...(process.env.BLOCKED_MARKET_ADDRESSES ?? "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean),
-]);
+// GH#1539: Now uses the unified BLOCKED_SLAB_ADDRESSES from lib/blocklist.ts which
+// includes both hardcoded addresses and env var overrides. No local merge needed.
 
 export const dynamic = "force-dynamic";
 
@@ -169,7 +163,7 @@ export async function GET(request: NextRequest) {
     const includeZombie = request?.nextUrl?.searchParams?.get("include_zombie") === "true";
 
     const sanitized = ((data ?? []) as unknown as Record<string, unknown>[])
-      .filter((m) => !BLOCKED_MARKET_ADDRESSES.has(m.slab_address as string))
+      .filter((m) => !BLOCKED_SLAB_ADDRESSES.has(m.slab_address as string))
       .map((m) => {
       let oracle_mode = m.oracle_mode as string | null;
       if (!oracle_mode) {
