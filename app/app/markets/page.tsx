@@ -359,8 +359,25 @@ function MarketsPageInner() {
           const hb = b.onChain
             ? computeMarketHealth(b.onChain.engine)
             : (b.supabase ? computeMarketHealthFromStats(b.supabase) : { level: "empty" as const });
-          const order: Record<string, number> = { healthy: 0, caution: 1, warning: 2, empty: 3 };
-          return (order[ha.level] ?? 5) - (order[hb.level] ?? 5);
+          // GH#1622: oracle-down markets sort to the bottom (after empty=3), before total unknowns.
+          const order: Record<string, number> = { healthy: 0, caution: 1, warning: 2, empty: 3, "oracle-down": 4 };
+          // Apply oracle-down override for sort (mirrors effectiveHealth logic in render)
+          const numericOrNullSort = (v: unknown): number | null => {
+            if (v == null) return null;
+            const n = Number(v);
+            return Number.isFinite(n) ? n : null;
+          };
+          const isOracleDownA = a.supabase != null
+            && !(a.supabase as Record<string, unknown>).is_zombie
+            && (a.supabase.mark_price == null || numericOrNullSort(a.supabase.mark_price) === null || numericOrNullSort(a.supabase.mark_price)! <= 0)
+            && (a.supabase.index_price == null || numericOrNullSort(a.supabase.index_price) === null || numericOrNullSort(a.supabase.index_price)! <= 0);
+          const isOracleDownB = b.supabase != null
+            && !(b.supabase as Record<string, unknown>).is_zombie
+            && (b.supabase.mark_price == null || numericOrNullSort(b.supabase.mark_price) === null || numericOrNullSort(b.supabase.mark_price)! <= 0)
+            && (b.supabase.index_price == null || numericOrNullSort(b.supabase.index_price) === null || numericOrNullSort(b.supabase.index_price)! <= 0);
+          const levelA = isOracleDownA ? "oracle-down" : ha.level;
+          const levelB = isOracleDownB ? "oracle-down" : hb.level;
+          return (order[levelA] ?? 5) - (order[levelB] ?? 5);
         }
         case "recent": {
           // Sort by created_at descending; fall back to slab address if missing
@@ -680,6 +697,22 @@ function MarketsPageInner() {
                   const onChainPriceE6 = m.onChain ? resolveMarketPriceE6(m.onChain.config) : 0n;
                   const rawPrice = m.supabase?.last_price ?? priceE6ToUsd(onChainPriceE6);
                   const lastPrice = rawPrice != null && rawPrice > MAX_SANE_PRICE_USD ? null : rawPrice;
+                  
+                  // GH#1622: Override health to "oracle-down" when both mark_price and
+                  // index_price are null from the API — keeper has not cranked this market
+                  // regardless of oracle mode (admin, hyperp, or pyth). Without this guard,
+                  // markets with null oracle data still display their liquidity-based health
+                  // level (e.g. "Healthy") giving a false impression of a live, tradeable market.
+                  // Only override to oracle-down when Supabase data is present but prices are
+                  // missing — if supabase is null we have no data at all (show computed health).
+                  // Do NOT override for zombie markets (is_zombie=true) — they show "Empty".
+                  const isOracleDown = m.supabase != null
+                    && !(m.supabase as Record<string, unknown>).is_zombie
+                    && (m.supabase.mark_price == null || (m.supabase.mark_price as number) <= 0)
+                    && (m.supabase.index_price == null || (m.supabase.index_price as number) <= 0);
+                  const effectiveHealth = isOracleDown
+                    ? { level: "oracle-down" as const, label: "No Oracle", insuranceRatio: 0, capitalRatio: 0 }
+                    : health;
                   const rawDecimals = tokenMetaMap.get(m.mintAddress)?.decimals ?? (m.supabase?.decimals ?? 6);
                   const mintDecimals = Math.min(Math.max(rawDecimals, 0), 18); // clamp to sane range
                   const tokenDivisor = 10 ** mintDecimals;
@@ -816,7 +849,7 @@ function MarketsPageInner() {
                       </div>
                       <div className="hidden sm:block text-right text-sm text-[var(--text)] truncate tabular-nums" style={{ fontFamily: "var(--font-jetbrains-mono)", fontVariantNumeric: "tabular-nums" }}>{insuranceDisplay}</div>
                       <div className="text-right text-sm text-[var(--text-secondary)] tabular-nums" style={{ fontVariantNumeric: "tabular-nums" }}>{m.maxLeverage}x</div>
-                      <div className="text-right"><HealthBadge level={health.level} /></div>
+                      <div className="text-right"><HealthBadge level={effectiveHealth.level} /></div>
                     </Link>
                   );
                 })}
