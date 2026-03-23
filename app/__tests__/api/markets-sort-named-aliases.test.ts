@@ -5,10 +5,14 @@
  * but the API's SORTABLE_FIELDS set did not include them. They fell through to no-sort,
  * returning DB insertion order. sort=recent had the same bug (fixed in PR#1557).
  *
- * Fix (this PR): NAMED_SORT_ALIASES map handles:
- *   - "oi"     → total_open_interest DESC
+ * Fix (GH#1566): NAMED_SORT_ALIASES map handles:
+ *   - "oi"     → total_open_interest_usd DESC NULLS LAST
  *   - "volume" → volume_24h DESC
  *   - "health" → computeMarketHealthFromStats rank ASC (healthy=0, caution=1, warning=2, empty=3)
+ *
+ * GH#1582: sort=oi previously used total_open_interest (raw atoms), causing no-price markets
+ * with large atom counts (e.g. 2.66T atoms, null USD OI) to rank above priced markets.
+ * Fix: alias changed to total_open_interest_usd; null values sort last via existing null-last logic.
  *
  * This test validates the sort logic inline (same pattern as markets-sort.test.ts).
  */
@@ -37,7 +41,7 @@ const SORTABLE_FIELDS = new Set([
 
 const NAMED_SORT_ALIASES: Record<string, { field: string; dir: number } | "health"> = {
   recent: { field: "created_at", dir: -1 },
-  oi: { field: "total_open_interest", dir: -1 },
+  oi: { field: "total_open_interest_usd", dir: -1 }, // GH#1582: was total_open_interest (raw atoms)
   volume: { field: "volume_24h", dir: -1 },
   health: "health",
 };
@@ -95,7 +99,8 @@ function applySort(
 const MARKETS: Record<string, unknown>[] = [
   {
     symbol: "AAA",
-    total_open_interest: 2_660_054_000_000, // highest OI
+    total_open_interest: 2_660_054_000_000, // highest raw atoms — but NO price → null USD OI
+    total_open_interest_usd: null,           // GH#1582: no-price market; must rank LAST in sort=oi
     volume_24h: 1_000,
     vault_balance: 5_000_000,
     total_accounts: 3,
@@ -107,6 +112,7 @@ const MARKETS: Record<string, unknown>[] = [
   {
     symbol: "BBB",
     total_open_interest: 0,
+    total_open_interest_usd: null,
     volume_24h: 999_999_999,  // highest volume
     vault_balance: 0,          // empty (zombie)
     total_accounts: 0,
@@ -118,6 +124,7 @@ const MARKETS: Record<string, unknown>[] = [
   {
     symbol: "CCC",
     total_open_interest: 9_000_000,
+    total_open_interest_usd: 4_620,          // GH#1582: MOLTBOT-like priced market ($4,620 OI)
     volume_24h: 500,
     vault_balance: 5_000_000,
     total_accounts: 2,
@@ -128,27 +135,43 @@ const MARKETS: Record<string, unknown>[] = [
   },
   {
     symbol: "DDD",
-    total_open_interest: 0,
+    total_open_interest: 54_000_000,
+    total_open_interest_usd: 59_994,         // GH#1582: usdEkK5G-like market ($59,994 OI)
     volume_24h: 0,
     vault_balance: 5_000_000,
     total_accounts: 1,
     c_tot: 100,
     insurance_balance: 100,
-    open_interest_long: 0,
-    open_interest_short: 0,
+    open_interest_long: 27_000_000,
+    open_interest_short: 27_000_000,
   },
 ];
 
 // ---- Tests ----
 
-describe("GH#1566 sort=oi", () => {
-  it("sorts by total_open_interest DESC (highest OI first)", () => {
+describe("GH#1566 / GH#1582 sort=oi", () => {
+  it("GH#1582: sorts by total_open_interest_usd DESC — priced markets rank above no-price markets", () => {
     const result = applySort(MARKETS, "oi");
-    const ois = result.map((m) => m.total_open_interest);
-    expect(ois[0]).toBe(2_660_054_000_000);
-    expect(ois[1]).toBe(9_000_000);
-    // 0 values last
-    expect(ois[ois.length - 1]).toBe(0);
+    const usdOis = result.map((m) => m.total_open_interest_usd);
+    // DDD ($59,994 USD OI) must rank first — has the highest USD OI
+    expect(result[0].symbol).toBe("DDD");
+    expect(usdOis[0]).toBe(59_994);
+    // CCC ($4,620 USD OI) must rank second
+    expect(result[1].symbol).toBe("CCC");
+    expect(usdOis[1]).toBe(4_620);
+    // Null USD OI markets (AAA, BBB) must rank last (NULLS LAST)
+    expect(usdOis[usdOis.length - 1]).toBeNull();
+    expect(usdOis[usdOis.length - 2]).toBeNull();
+  });
+
+  it("GH#1582: no-price market with massive raw atom OI (2.66T) does NOT outrank priced markets", () => {
+    const result = applySort(MARKETS, "oi");
+    // AAA has the highest raw OI (2.66T atoms) but null USD OI — must NOT be first
+    expect(result[0].symbol).not.toBe("AAA");
+    // AAA must be in the null group at the end
+    const aaaIndex = result.findIndex((m) => m.symbol === "AAA");
+    const firstNullIndex = result.findIndex((m) => m.total_open_interest_usd === null);
+    expect(aaaIndex).toBeGreaterThanOrEqual(firstNullIndex);
   });
 
   it("sort=oi result differs from DB order (regression guard)", () => {
@@ -161,8 +184,9 @@ describe("GH#1566 sort=oi", () => {
     const asc = applySort(MARKETS, "oi", "asc");
     const desc = applySort(MARKETS, "oi", "desc");
     // Named alias forces DESC; ?order= param ignored for named aliases
-    expect(asc.map((m) => m.total_open_interest)).toEqual(desc.map((m) => m.total_open_interest));
-    expect(asc[0].total_open_interest).toBe(2_660_054_000_000);
+    expect(asc.map((m) => m.total_open_interest_usd)).toEqual(desc.map((m) => m.total_open_interest_usd));
+    // Highest USD OI market must be first
+    expect(asc[0].total_open_interest_usd).toBe(59_994);
   });
 });
 
