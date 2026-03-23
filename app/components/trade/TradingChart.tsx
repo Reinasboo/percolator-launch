@@ -75,7 +75,7 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
 }) => {
   const { config } = useSlabState();
   const { priceUsd } = useLivePrice();
-  const [chartType, setChartType] = useState<ChartType>("line");
+  const [chartType, setChartType] = useState<ChartType>("candle");
   const [timeframe, setTimeframe] = useState<Timeframe>("1d");
   const [oraclePrices, setOraclePrices] = useState<PricePoint[]>([]);
   const [hoveredCandle, setHoveredCandle] = useState<CandleData | null>(null);
@@ -146,9 +146,18 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
     return { candles: [], lineData: oracleFiltered };
   }, [hasExternalData, externalCandles, oracleFiltered, chartType]);
 
+  // Auto-fallback: if user selected candle but data is insufficient, show line instead
+  const insufficientCandles = chartType === "candle" && candles.length < 2;
+  const effectiveChartType: ChartType = insufficientCandles && oracleFiltered.length > 0 ? "line" : chartType;
+
+  // Recompute line path when auto-falling back to line mode
+  const effectiveLineData = effectiveChartType === "line" && insufficientCandles
+    ? (hasExternalData ? externalCandles.map(c => ({ timestamp: c.timestamp, price: c.close })) : oracleFiltered)
+    : lineData;
+
   // Calculate chart bounds
   const { minPrice, maxPrice, minTime, maxTime, priceRange } = useMemo(() => {
-    const data = chartType === "candle" ? candles : lineData;
+    const data = effectiveChartType === "candle" ? candles : effectiveLineData;
     if (data.length === 0) {
       return { minPrice: 0, maxPrice: 0, minTime: 0, maxTime: 0, priceRange: 0 };
     }
@@ -186,24 +195,24 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
       maxTime: tMax,
       priceRange: max - min,
     };
-  }, [candles, lineData, chartType]);
+  }, [candles, effectiveLineData, effectiveChartType]);
 
   const CHART_W = W - PAD.left - PAD.right;
 
   // Render line chart
   const linePath = useMemo(() => {
-    if (chartType !== "line" || lineData.length === 0) return "";
+    if (effectiveChartType !== "line" || effectiveLineData.length === 0) return "";
     
     const timeRange = maxTime - minTime || 1;
     const safePriceRange = priceRange || 1;
-    const points = lineData.map((p) => {
+    const points = effectiveLineData.map((p) => {
       const x = PAD.left + ((p.timestamp - minTime) / timeRange) * CHART_W;
       const y = PAD.top + ((maxPrice - p.price) / safePriceRange) * CHART_H;
       return `${x},${y}`;
     });
     
     return points.join(" ");
-  }, [lineData, minTime, maxTime, minPrice, maxPrice, priceRange, CHART_W, chartType]);
+  }, [effectiveLineData, minTime, maxTime, minPrice, maxPrice, priceRange, CHART_W, effectiveChartType]);
 
   // Y-axis labels
   const yLabels = useMemo(() => {
@@ -236,7 +245,7 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
   }, [minTime, maxTime, timeframe, CHART_W]);
 
   // Use external line data or oracle line data for price stats
-  const activeLineData = lineData.length > 0 ? lineData : oracleFiltered;
+  const activeLineData = effectiveLineData.length > 0 ? effectiveLineData : oracleFiltered;
   const currentPrice = activeLineData[activeLineData.length - 1]?.price ?? priceUsd ?? 0;
   const firstPrice = activeLineData[0]?.price ?? currentPrice;
   const priceChange = currentPrice - firstPrice;
@@ -244,7 +253,7 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
   const isUp = priceChange >= 0;
 
   // Show empty state only if BOTH external and oracle data are missing
-  const totalDataPoints = lineData.length + candles.length;
+  const totalDataPoints = effectiveLineData.length + candles.length;
   if (totalDataPoints === 0) {
     return (
       <ChartEmptyState
@@ -334,6 +343,15 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
         </div>
       </div>
 
+      {/* Candle fallback notice */}
+      {insufficientCandles && (
+        <div className="mb-2 flex items-center gap-2 rounded-none border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5">
+          <span className="text-xs text-[var(--text-dim)]">
+            Not enough trades for candle view — showing line chart. Candles will appear as trading activity increases.
+          </span>
+        </div>
+      )}
+
       {/* Chart */}
       <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} className="w-full h-auto max-h-[200px] sm:max-h-[400px]" preserveAspectRatio="xMidYMid meet">
         <defs>
@@ -388,7 +406,7 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
         ))}
 
         {/* Line chart */}
-        {chartType === "line" && linePath && (
+        {effectiveChartType === "line" && linePath && (
           <>
             <polygon
               points={`${linePath} ${W - PAD.right},${PAD.top + CHART_H} ${PAD.left},${PAD.top + CHART_H}`}
@@ -405,7 +423,7 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
         )}
 
         {/* Candlestick chart */}
-        {chartType === "candle" &&
+        {effectiveChartType === "candle" &&
           candles.map((candle, i) => {
             const timeRange = maxTime - minTime || 1;
             const x = PAD.left + ((candle.timestamp - minTime) / timeRange) * CHART_W;
