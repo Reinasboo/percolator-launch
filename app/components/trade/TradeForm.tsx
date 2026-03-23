@@ -62,7 +62,7 @@ export const TradeForm: FC<{ slabAddress: string }> = ({ slabAddress }) => {
   const userAccount = realUserAccount ?? (mockMode ? getMockUserAccountIdle(slabAddress) : null);
   const { trade, loading, error } = useTrade(slabAddress);
   const { engine, params } = useEngineState();
-  const { accounts, config: mktConfig, header } = useSlabState();
+  const { accounts, config: mktConfig, header, refresh: refreshSlab } = useSlabState();
   const tokenMeta = useTokenMeta(mktConfig?.collateralMint ?? null);
   const { priceUsd } = useLivePrice();
   // GH#1330: Detect stale oracle to block trade submission before tx failure.
@@ -278,7 +278,10 @@ export const TradeForm: FC<{ slabAddress: string }> = ({ slabAddress }) => {
       setTradePhase("confirming");
       setLastSig(sig ?? null);
       setMarginInput("");
-      setTimeout(() => setTradePhase("idle"), 2000);
+      // GH#trading-race: Trigger immediate slab re-poll so position appears
+      // without waiting up to 30s for the next adaptive poll cycle.
+      refreshSlab();
+      setTimeout(() => { setTradePhase("idle"); refreshSlab(); }, 2000);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error("[TradeForm] raw error:", msg);
@@ -463,7 +466,7 @@ export const TradeForm: FC<{ slabAddress: string }> = ({ slabAddress }) => {
           style={{
             background: `linear-gradient(to right, var(--accent) 0%, var(--accent) ${maxLeverage > 1 ? ((leverage - 1) / (maxLeverage - 1)) * 100 : 100}%, rgba(255,255,255,0.03) ${maxLeverage > 1 ? ((leverage - 1) / (maxLeverage - 1)) * 100 : 100}%, rgba(255,255,255,0.03) 100%)`,
           }}
-          className="mb-3 h-1.5 w-full cursor-pointer appearance-none accent-[var(--accent)] [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[var(--accent)] [&::-webkit-slider-thumb]:shadow-[0_0_6px_rgba(153,69,255,0.4)] [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-[var(--accent)]"
+          className="mb-3 h-1.5 w-full cursor-pointer appearance-none touch-none accent-[var(--accent)] [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[var(--accent)] [&::-webkit-slider-thumb]:shadow-[0_0_6px_rgba(153,69,255,0.4)] [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-[var(--accent)]"
         />
         <div className="flex gap-1">
           {availableLeverage.map((l) => (
