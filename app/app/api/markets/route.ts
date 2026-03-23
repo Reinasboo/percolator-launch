@@ -94,7 +94,8 @@ function rawToUsd(raw: number | null | undefined, decimals: number | null | unde
   const p = priceUsd ?? 0;
   if (p <= 0) return null;
   const usd = (raw! / 10 ** d) * p;
-  return usd > MAX_PER_MARKET_USD ? null : usd;
+  // GH#1618: round to 2dp to eliminate IEEE-754 float artifacts (e.g. 4620.241999999999)
+  return usd > MAX_PER_MARKET_USD ? null : Math.round(usd * 100) / 100;
 }
 
 /** Sanitize a numeric funding_rate from the DB view. Returns null for garbage values. */

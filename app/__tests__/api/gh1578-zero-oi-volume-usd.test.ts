@@ -159,9 +159,11 @@ describe("GH#1578: zero OI/volume → USD should be 0, not null", () => {
   });
 
   it("preserves non-zero USD values for active markets", async () => {
+    // GH#1618: rawToUsd rounds to 2dp. Use amounts large enough to produce ≥$0.01.
+    // 200_000_000_000 raw * 0.000099 / 1e6 = 19.8 → rounds to $19.80
     mockRows = [makeZeroOiMarket({
-      total_open_interest: "1000000",
-      volume_24h: "500000",
+      total_open_interest: "200000000000",
+      volume_24h: "100000000000",
       total_accounts: "10",
       vault_balance: "10000000",
     })];
@@ -169,7 +171,7 @@ describe("GH#1578: zero OI/volume → USD should be 0, not null", () => {
     const body = await res.json();
     const market = body.markets?.[0];
     expect(market).toBeDefined();
-    // 1000000 raw * 0.000099 / 1e6 = 0.000099
+    // 200_000_000_000 / 1e6 * 0.000099 = 19.8 → $19.80
     expect(market.total_open_interest_usd).toBeGreaterThan(0);
     expect(market.volume_24h_usd).toBeGreaterThan(0);
   });
