@@ -139,6 +139,23 @@ describe("GH#1578: zero OI/volume → USD should be 0, not null", () => {
     expect(market.volume_24h_usd).toBe(0);
   });
 
+  it("GH#1594: returns 0 OI when total_open_interest is null but long+short are both 0", async () => {
+    // 63 markets had null total_open_interest_usd because the combined fallback
+    // path returned null for combined=0 (isSaneMarketValue(0) === false)
+    mockRows = [makeZeroOiMarket({
+      total_open_interest: null,  // not indexed yet
+      open_interest_long: "0",
+      open_interest_short: "0",
+      total_accounts: "5",
+      vault_balance: "5000000",
+    })];
+    const res = await GET(makeRequest());
+    const body = await res.json();
+    const market = body.markets?.[0];
+    expect(market).toBeDefined();
+    expect(market.total_open_interest_usd).toBe(0);
+  });
+
   it("preserves non-zero USD values for active markets", async () => {
     mockRows = [makeZeroOiMarket({
       total_open_interest: "1000000",

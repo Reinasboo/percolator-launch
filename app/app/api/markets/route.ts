@@ -229,7 +229,8 @@ export async function GET(request: NextRequest) {
         : (() => {
             // total_open_interest was null or garbage → try long+short fallback
             const combined = (n_open_interest_long ?? 0) + (n_open_interest_short ?? 0);
-            return isSaneMarketValue(combined) ? combined : null;
+            // GH#1594: combined === 0 is valid (zero OI), same as primary path's n_total_open_interest === 0 guard
+            return combined === 0 || isSaneMarketValue(combined) ? combined : null;
           })();
       const total_open_interest_usd = rawToUsd(rawOi, n_decimals, sanitizedPrice);
 
