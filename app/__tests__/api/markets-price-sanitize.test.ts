@@ -218,7 +218,7 @@ describe("GET /api/markets — price sanitization (#856)", () => {
 
     expect(norm?.total_open_interest_usd).toBeCloseTo(0.001, 6);   // 1000 / 1e6 * 1.0
     expect(sentinel?.total_open_interest_usd).toBe(0);              // GH#1594: sentinel primary rejected, but long=0+short=0 → valid zero OI
-    expect(noprice?.total_open_interest_usd).toBeNull();            // no price
+    expect(noprice?.total_open_interest_usd).toBe(0);               // GH#1610: atoms=1000 > 0, price=null → 0 not null (admin-oracle, unpriced)
     expect(fallback?.total_open_interest_usd).toBeCloseTo(0.001, 6); // (600+400) / 1e6 * 1.0
   });
 
@@ -328,7 +328,9 @@ describe("GET /api/markets — price sanitization (#856)", () => {
       // market still appears in the response and its raw total_open_interest is non-zero.
       const pureOi1M = body.markets.find((m) => m.symbol === "PURE_OI_1M");
       expect(pureOi1M).toBeDefined(); // market is included (vault=1M is not phantom)
-      expect(pureOi1M?.total_open_interest_usd).toBeNull(); // no price → USD is null, not phantom-suppressed
+      // GH#1610: atoms=5B > 0, price=null → USD=0 (not null). Unpriced OI displays as 0
+      // so sort=oi ranks these markets above zero-OI markets, not below them.
+      expect(pureOi1M?.total_open_interest_usd).toBe(0);
       expect((pureOi1M as Record<string, unknown>)?.total_open_interest).toBe(5_000_000_000); // raw OI passes through
     });
 

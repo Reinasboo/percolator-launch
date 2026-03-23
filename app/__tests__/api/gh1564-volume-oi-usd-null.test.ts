@@ -122,14 +122,18 @@ describe("GH#1564: volume_24h_usd and total_open_interest_usd when Supabase retu
     expect(market.total_open_interest_usd).toBeCloseTo(630, 0);
   });
 
-  it("returns null USD fields when last_price is null (no price = no USD)", async () => {
+  it("returns null volume_24h_usd and 0 total_open_interest_usd when last_price is null", async () => {
+    // volume_24h_usd: no price → null (can't value volume without a price)
+    // total_open_interest_usd: GH#1610 — atoms=1.5B > 0, price=null → 0 not null.
+    // Admin-oracle markets where the keeper never posted a price still have real OI;
+    // returning 0 (not null) lets sort=oi rank them above zero-OI markets correctly.
     mockRows = [makeMarket({ last_price: null, mark_price: null, index_price: null })];
     const res = await GET(makeRequest());
     const body = await res.json();
     const market = body.markets[0];
 
     expect(market.volume_24h_usd).toBeNull();
-    expect(market.total_open_interest_usd).toBeNull();
+    expect(market.total_open_interest_usd).toBe(0); // GH#1610: atoms > 0, no price → 0
   });
 
   it("returns 0 total_open_interest_usd for phantom OI market (GH#1606: atoms zeroed → USD=0)", async () => {
