@@ -489,7 +489,16 @@ export async function GET(request: NextRequest) {
         ? [...oracleModeFiltered].sort((a, b) => {
             const ra = healthRank(a as Record<string, unknown>);
             const rb = healthRank(b as Record<string, unknown>);
-            return sortDir * (ra - rb);
+            if (ra !== rb) return sortDir * (ra - rb);
+            // GH#1612: Tiebreaker within same health rank — vault>0 before vault=0.
+            // Markets with vault_balance=1000000 but c_tot=0 both score rank 3 (empty)
+            // alongside vault=0 markets, causing interleaving. Break ties by vault presence.
+            const va = numericOrNull((a as Record<string, unknown>).vault_balance) ?? 0;
+            const vb = numericOrNull((b as Record<string, unknown>).vault_balance) ?? 0;
+            // vault>0 sorts first (ascending): compare so that higher vault comes first
+            if (va > 0 && vb === 0) return -1;
+            if (va === 0 && vb > 0) return 1;
+            return 0;
           })
         : effectiveSortParam && SORTABLE_FIELDS.has(effectiveSortParam)
           ? [...oracleModeFiltered].sort((a, b) => {
