@@ -380,8 +380,8 @@ export const TradeForm: FC<{ slabAddress: string }> = ({ slabAddress }) => {
           onClick={() => setDirection("long")}
           className={`flex-1 rounded-none py-2 text-[11px] font-medium uppercase tracking-[0.1em] transition-all duration-150 ${
             direction === "long"
-              ? "border border-[var(--long)]/60 text-[var(--long)] bg-[var(--long)]/8 shadow-[0_0_12px_rgba(20,241,149,0.1)]"
-              : "border border-[var(--border)]/30 text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:border-[var(--border)]"
+              ? "bg-green-500/20 border border-green-500/50 text-green-400"
+              : "border border-[var(--border)] text-[var(--text-dim)]"
           }`}
         >
           Long
@@ -391,8 +391,8 @@ export const TradeForm: FC<{ slabAddress: string }> = ({ slabAddress }) => {
           onClick={() => setDirection("short")}
           className={`flex-1 rounded-none py-2 text-[11px] font-medium uppercase tracking-[0.1em] transition-all duration-150 ${
             direction === "short"
-              ? "border border-[var(--short)]/60 text-[var(--short)] bg-[var(--short)]/8 shadow-[0_0_12px_rgba(255,59,92,0.1)]"
-              : "border border-[var(--short)]/30 text-[var(--short)]/60 hover:text-[var(--short)] hover:border-[var(--short)]/50 hover:bg-[var(--short)]/5"
+              ? "bg-red-500/20 border border-red-500/50 text-red-400"
+              : "border border-[var(--border)] text-[var(--text-dim)]"
           }`}
         >
           Short
@@ -515,10 +515,10 @@ export const TradeForm: FC<{ slabAddress: string }> = ({ slabAddress }) => {
             const deposit = document.querySelector('[data-deposit-trigger]');
             if (deposit) deposit.scrollIntoView({ behavior: 'smooth', block: 'center' });
           }}
-          className={`w-full rounded-none py-2.5 text-[11px] font-medium uppercase tracking-[0.1em] text-white transition-all duration-150 hover:scale-[1.01] active:scale-[0.99] focus-visible:ring-1 focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--bg)] ${
+          className={`w-full rounded-none py-2.5 text-[11px] font-bold uppercase tracking-[0.1em] text-black transition-all duration-150 hover:scale-[1.01] active:scale-[0.99] focus-visible:ring-1 focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--bg)] ${
             direction === "long"
-              ? "bg-[var(--long)] hover:brightness-110 focus-visible:ring-[var(--long)]"
-              : "bg-[var(--short)] hover:brightness-110 focus-visible:ring-[var(--short)]"
+              ? "bg-green-500 hover:bg-green-400 focus-visible:ring-green-500"
+              : "bg-red-500 hover:bg-red-400 focus-visible:ring-red-500"
           }`}
         >
           {needsAccount ? "Create Account & Deposit" : "Deposit to Trade"}
@@ -530,10 +530,10 @@ export const TradeForm: FC<{ slabAddress: string }> = ({ slabAddress }) => {
             setShowConfirmModal(true);
           }}
           disabled={tradePhase !== "idle" || loading || !marginInput || positionSize <= 0n || exceedsMargin || riskGateActive || header?.paused || lpUnderfunded || vaultEmpty || (!priceUsd && !mockMode) || (oracleStale && !mockMode)}
-          className={`w-full rounded-none py-2.5 text-[11px] font-medium uppercase tracking-[0.1em] text-white transition-all duration-150 hover:scale-[1.01] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100 focus-visible:ring-1 focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--bg)] ${
+          className={`w-full rounded-none py-2.5 text-[11px] font-bold uppercase tracking-[0.1em] text-black transition-all duration-150 hover:scale-[1.01] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100 focus-visible:ring-1 focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--bg)] ${
             direction === "long"
-              ? "bg-[var(--long)] hover:brightness-110 focus-visible:ring-[var(--long)]"
-              : "bg-[var(--short)] hover:brightness-110 focus-visible:ring-[var(--short)]"
+              ? "bg-green-500 hover:bg-green-400 focus-visible:ring-green-500"
+              : "bg-red-500 hover:bg-red-400 focus-visible:ring-red-500"
           }`}
         >
           {tradePhase === "submitting" ? (

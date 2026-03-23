@@ -13,12 +13,14 @@ export interface UseTokenChartResult {
   refresh: () => void;
 }
 
-type Timeframe = "1h" | "4h" | "1d" | "7d" | "30d";
+type Timeframe = "1m" | "5m" | "1h" | "4h" | "1d" | "7d" | "30d";
 
 const TIMEFRAME_TO_API: Record<
   Timeframe,
   { timeframe: "minute" | "hour" | "day"; aggregate: number; limit: number }
 > = {
+  "1m": { timeframe: "minute", aggregate: 1, limit: 30 },     // 1-min candles, 30min of data
+  "5m": { timeframe: "minute", aggregate: 5, limit: 24 },     // 5-min candles, 2h of data
   "1h": { timeframe: "minute", aggregate: 5, limit: 12 },     // 5-min candles, 1h of data
   "4h": { timeframe: "minute", aggregate: 15, limit: 16 },    // 15-min candles, 4h of data
   "1d": { timeframe: "hour", aggregate: 1, limit: 24 },       // 1-hour candles, 1d of data
@@ -95,7 +97,7 @@ export function useTokenChart(
     fetchData(mintAddress, timeframe);
 
     // Poll for fresh data every 60 seconds (only short timeframes benefit)
-    if (timeframe === "1h" || timeframe === "4h" || timeframe === "1d") {
+    if (timeframe === "1m" || timeframe === "5m" || timeframe === "1h" || timeframe === "4h" || timeframe === "1d") {
       const interval = setInterval(() => {
         fetchData(mintAddress, timeframe);
       }, POLL_INTERVAL_MS);

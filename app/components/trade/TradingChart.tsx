@@ -1,29 +1,23 @@
 "use client";
 
-import { FC, useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { FC, useState, useRef, useEffect, useCallback } from "react";
+import { createChart, IChartApi, ISeriesApi, LineStyle, ColorType, CrosshairMode } from "lightweight-charts";
 import { useSlabState } from "@/components/providers/SlabProvider";
 import { useLivePrice } from "@/hooks/useLivePrice";
 import { useTokenChart } from "@/hooks/useTokenChart";
 import { ChartEmptyState } from "./ChartEmptyState";
 
 type ChartType = "line" | "candle";
-type Timeframe = "1h" | "4h" | "1d" | "7d" | "30d";
+type Timeframe = "1m" | "5m" | "1h" | "4h" | "1d" | "7d" | "30d";
 
 interface PricePoint {
   timestamp: number;
   price: number;
 }
 
-interface CandleData {
-  timestamp: number;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-}
-
 const TIMEFRAME_MS: Record<Timeframe, number> = {
+  "1m": 60 * 1000,
+  "5m": 5 * 60 * 1000,
   "1h": 60 * 60 * 1000,
   "4h": 4 * 60 * 60 * 1000,
   "1d": 24 * 60 * 60 * 1000,
@@ -31,43 +25,26 @@ const TIMEFRAME_MS: Record<Timeframe, number> = {
   "30d": 30 * 24 * 60 * 60 * 1000,
 };
 
-const CANDLE_INTERVAL_MS = 5 * 60 * 1000; // 5-minute candles
+const CANDLE_INTERVAL_MS = 5 * 60 * 1000;
 
-function aggregateCandles(prices: PricePoint[], intervalMs: number): CandleData[] {
+function aggregateCandles(prices: PricePoint[], intervalMs: number) {
   if (prices.length === 0) return [];
-  
-  const candles: CandleData[] = [];
-  let currentCandle: CandleData | null = null;
-  
+  const candles: { timestamp: number; open: number; high: number; low: number; close: number; volume: number }[] = [];
+  let current: (typeof candles)[0] | null = null;
   prices.forEach((point) => {
     const candleStart = Math.floor(point.timestamp / intervalMs) * intervalMs;
-    
-    if (!currentCandle || currentCandle.timestamp !== candleStart) {
-      if (currentCandle) candles.push(currentCandle);
-      currentCandle = {
-        timestamp: candleStart,
-        open: point.price,
-        high: point.price,
-        low: point.price,
-        close: point.price,
-        volume: 0,
-      };
+    if (!current || current.timestamp !== candleStart) {
+      if (current) candles.push(current);
+      current = { timestamp: candleStart, open: point.price, high: point.price, low: point.price, close: point.price, volume: 0 };
     } else {
-      currentCandle.high = Math.max(currentCandle.high, point.price);
-      currentCandle.low = Math.min(currentCandle.low, point.price);
-      currentCandle.close = point.price;
+      current.high = Math.max(current.high, point.price);
+      current.low = Math.min(current.low, point.price);
+      current.close = point.price;
     }
   });
-  
-  if (currentCandle) candles.push(currentCandle);
+  if (current) candles.push(current);
   return candles;
 }
-
-const W = 800;
-const H = 400;
-const CHART_H = 300;
-const VOLUME_H = 60;
-const PAD = { top: 20, bottom: 40, left: 60, right: 20 };
 
 export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = ({
   slabAddress,
@@ -78,10 +55,12 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
   const [chartType, setChartType] = useState<ChartType>("candle");
   const [timeframe, setTimeframe] = useState<Timeframe>("1d");
   const [oraclePrices, setOraclePrices] = useState<PricePoint[]>([]);
-  const [hoveredCandle, setHoveredCandle] = useState<CandleData | null>(null);
-  const svgRef = useRef<SVGSVGElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const seriesRef = useRef<ISeriesApi<"Candlestick"> | ISeriesApi<"Line"> | null>(null);
+  const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
+  const priceLineRef = useRef<ReturnType<ISeriesApi<"Candlestick">["createPriceLine"]> | null>(null);
 
-  // PERC-512: Fetch external token OHLCV from GeckoTerminal (free, no key)
   const {
     candles: externalCandles,
     status: externalStatus,
@@ -90,7 +69,7 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
 
   const hasExternalData = externalStatus === "success" && externalCandles.length > 0;
 
-  // Fetch oracle price history (always — used when external data unavailable)
+  // Fetch oracle price history
   useEffect(() => {
     fetch(`/api/markets/${slabAddress}/prices`)
       .then((r) => r.json())
@@ -104,7 +83,7 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
       .catch(() => {});
   }, [slabAddress]);
 
-  // Add live price updates to oracle prices
+  // Live price updates
   useEffect(() => {
     if (!config || !priceUsd) return;
     const now = Date.now();
@@ -115,146 +94,174 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
     });
   }, [config, priceUsd]);
 
-  // Derive oracle-based price array (filtered by timeframe)
-  const oracleFiltered = useMemo(() => {
+  // Derive data
+  const oracleFiltered = (() => {
     const cutoff = Date.now() - TIMEFRAME_MS[timeframe];
     return oraclePrices.filter((p) => p.timestamp >= cutoff);
-  }, [oraclePrices, timeframe]);
+  })();
 
-  // Merge external + oracle: external data is preferred when available.
-  // For line chart, convert external candle close prices to PricePoints.
-  const { candles, lineData } = useMemo(() => {
-    if (hasExternalData) {
-      // External data available: use it for both candle and line views
-      const externalLine: PricePoint[] = externalCandles.map((c) => ({
-        timestamp: c.timestamp,
-        price: c.close,
-      }));
-      if (chartType === "candle") {
-        return { candles: externalCandles as CandleData[], lineData: [] };
-      }
-      return { candles: [], lineData: externalLine };
-    }
+  const candleData = (() => {
+    if (hasExternalData) return externalCandles as { timestamp: number; open: number; high: number; low: number; close: number; volume: number }[];
+    return aggregateCandles(oracleFiltered, CANDLE_INTERVAL_MS);
+  })();
 
-    // Fallback: oracle prices only
-    if (chartType === "candle") {
-      return {
-        candles: aggregateCandles(oracleFiltered, CANDLE_INTERVAL_MS),
-        lineData: [],
-      };
-    }
-    return { candles: [], lineData: oracleFiltered };
-  }, [hasExternalData, externalCandles, oracleFiltered, chartType]);
+  const lineData = (() => {
+    if (hasExternalData) return externalCandles.map((c) => ({ timestamp: c.timestamp, price: c.close }));
+    return oracleFiltered;
+  })();
 
-  // Auto-fallback: if user selected candle but data is insufficient, show line instead
-  const insufficientCandles = chartType === "candle" && candles.length < 2;
-  const effectiveChartType: ChartType = insufficientCandles && oracleFiltered.length > 0 ? "line" : chartType;
+  const totalDataPoints = candleData.length + lineData.length;
 
-  // Recompute line path when auto-falling back to line mode
-  const effectiveLineData = effectiveChartType === "line" && insufficientCandles
-    ? (hasExternalData ? externalCandles.map(c => ({ timestamp: c.timestamp, price: c.close })) : oracleFiltered)
-    : lineData;
+  // GH#1625: sparse-data guard for lwc renderer.
+  // lightweight-charts renders a single candle with open=high=low=close as an
+  // invisible hairline, leaving the chart visually blank on uncranked markets.
+  // Mirror the SVG guard from PR #1624: if fewer than 2 data points, show ChartEmptyState.
+  const effectiveSparse =
+    (chartType === "candle" && candleData.length < 2) ||
+    (chartType === "line" && lineData.length < 2);
 
-  // Calculate chart bounds
-  const { minPrice, maxPrice, minTime, maxTime, priceRange } = useMemo(() => {
-    const data = effectiveChartType === "candle" ? candles : effectiveLineData;
-    if (data.length === 0) {
-      return { minPrice: 0, maxPrice: 0, minTime: 0, maxTime: 0, priceRange: 0 };
-    }
+  // Create/destroy chart
+  useEffect(() => {
+    if (!containerRef.current) return;
 
-    let min = Infinity;
-    let max = -Infinity;
-    let tMin = Infinity;
-    let tMax = -Infinity;
-
-    data.forEach((d) => {
-      if ("high" in d && "low" in d) {
-        min = Math.min(min, d.low);
-        max = Math.max(max, d.high);
-      } else if ("price" in d) {
-        min = Math.min(min, d.price);
-        max = Math.max(max, d.price);
-      }
-      tMin = Math.min(tMin, d.timestamp);
-      tMax = Math.max(tMax, d.timestamp);
+    // GH#1625 / GH#1628: Use autoSize so lightweight-charts manages its own
+    // dimensions via an internal ResizeObserver. This prevents blank/black charts
+    // when clientWidth/clientHeight are 0 at mount time (no flex parent, or
+    // narrow mobile viewports like 375px). The container must have an explicit
+    // CSS height — see the div below (h-[300px] lg:h-[500px]).
+    const chart = createChart(containerRef.current, {
+      autoSize: true,
+      layout: {
+        background: { type: ColorType.Solid, color: "#0D0D0F" },
+        textColor: "rgba(255,255,255,0.45)",
+      },
+      grid: {
+        vertLines: { color: "rgba(255,255,255,0.04)" },
+        horzLines: { color: "rgba(255,255,255,0.04)" },
+      },
+      crosshair: { mode: CrosshairMode.Normal },
+      rightPriceScale: { borderColor: "rgba(255,255,255,0.06)" },
+      timeScale: { borderColor: "rgba(255,255,255,0.06)", timeVisible: true, secondsVisible: false },
     });
 
-    // Add padding if price is stable
-    const rawRange = max - min;
-    const avg = (min + max) / 2;
-    if (rawRange < avg * 0.001 || rawRange === 0) {
-      const padding = avg * 0.01;
-      min = avg - padding;
-      max = avg + padding;
-    }
+    chartRef.current = chart;
 
-    return {
-      minPrice: min,
-      maxPrice: max,
-      minTime: tMin,
-      maxTime: tMax,
-      priceRange: max - min,
+    return () => {
+      chart.remove();
+      chartRef.current = null;
+      seriesRef.current = null;
+      volumeSeriesRef.current = null;
+      priceLineRef.current = null;
     };
-  }, [candles, effectiveLineData, effectiveChartType]);
+  }, []);
 
-  const CHART_W = W - PAD.left - PAD.right;
+  // Update series when data or chartType changes
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
 
-  // Render line chart
-  const linePath = useMemo(() => {
-    if (effectiveChartType !== "line" || effectiveLineData.length === 0) return "";
-    
-    const timeRange = maxTime - minTime || 1;
-    const safePriceRange = priceRange || 1;
-    const points = effectiveLineData.map((p) => {
-      const x = PAD.left + ((p.timestamp - minTime) / timeRange) * CHART_W;
-      const y = PAD.top + ((maxPrice - p.price) / safePriceRange) * CHART_H;
-      return `${x},${y}`;
-    });
-    
-    return points.join(" ");
-  }, [effectiveLineData, minTime, maxTime, minPrice, maxPrice, priceRange, CHART_W, effectiveChartType]);
-
-  // Y-axis labels
-  const yLabels = useMemo(() => {
-    const labels: { y: number; value: number }[] = [];
-    const count = 5;
-    for (let i = 0; i <= count; i++) {
-      const price = maxPrice - (priceRange * i) / count;
-      const y = PAD.top + (i / count) * CHART_H;
-      labels.push({ y, value: price });
+    // Remove old series
+    if (seriesRef.current) {
+      chart.removeSeries(seriesRef.current);
+      seriesRef.current = null;
     }
-    return labels;
-  }, [minPrice, maxPrice, priceRange]);
-
-  // X-axis labels
-  const xLabels = useMemo(() => {
-    const labels: { x: number; time: string }[] = [];
-    const count = 6;
-    const timeRange = maxTime - minTime || 1;
-    for (let i = 0; i <= count; i++) {
-      const t = minTime + (timeRange * i) / count;
-      const date = new Date(t);
-      const x = PAD.left + (i / count) * CHART_W;
-      const format =
-        timeframe === "1h" || timeframe === "4h" || timeframe === "1d"
-          ? date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-          : date.toLocaleDateString([], { month: "short", day: "numeric" });
-      labels.push({ x, time: format });
+    if (volumeSeriesRef.current) {
+      chart.removeSeries(volumeSeriesRef.current);
+      volumeSeriesRef.current = null;
     }
-    return labels;
-  }, [minTime, maxTime, timeframe, CHART_W]);
+    priceLineRef.current = null;
 
-  // Use external line data or oracle line data for price stats
-  const activeLineData = effectiveLineData.length > 0 ? effectiveLineData : oracleFiltered;
-  const currentPrice = activeLineData[activeLineData.length - 1]?.price ?? priceUsd ?? 0;
-  const firstPrice = activeLineData[0]?.price ?? currentPrice;
+    if (chartType === "candle" && candleData.length > 0) {
+      const series = chart.addCandlestickSeries({
+        upColor: "#22d3ee",
+        downColor: "#ef4444",
+        borderDownColor: "#ef4444",
+        borderUpColor: "#22d3ee",
+        wickDownColor: "#ef4444",
+        wickUpColor: "#22d3ee",
+      });
+
+      const formatted = candleData.map((c) => ({
+        time: (Math.floor(c.timestamp / 1000)) as import("lightweight-charts").UTCTimestamp,
+        open: c.open,
+        high: c.high,
+        low: c.low,
+        close: c.close,
+      }));
+      series.setData(formatted);
+      seriesRef.current = series;
+
+      // Volume histogram
+      const volumeSeries = chart.addHistogramSeries({
+        priceFormat: { type: "volume" },
+        priceScaleId: "volume",
+      });
+      chart.priceScale("volume").applyOptions({
+        scaleMargins: { top: 0.85, bottom: 0 },
+      });
+      const volumeData = candleData.map((c) => ({
+        time: (Math.floor(c.timestamp / 1000)) as import("lightweight-charts").UTCTimestamp,
+        value: c.volume ?? 0,
+        color: c.close >= c.open ? "rgba(34,211,238,0.6)" : "rgba(239,68,68,0.6)",
+      }));
+      volumeSeries.setData(volumeData);
+      volumeSeriesRef.current = volumeSeries;
+
+      // Mark price line
+      if (priceUsd != null) {
+        priceLineRef.current = series.createPriceLine({
+          price: priceUsd,
+          color: "#9945FF",
+          lineWidth: 1,
+          lineStyle: LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: "Mark",
+        });
+      }
+    } else if (chartType === "line" && lineData.length > 0) {
+      const series = chart.addLineSeries({
+        color: "#22d3ee",
+        lineWidth: 2,
+      });
+      const formatted = lineData.map((p) => ({
+        time: (Math.floor(p.timestamp / 1000)) as import("lightweight-charts").UTCTimestamp,
+        value: p.price,
+      }));
+      series.setData(formatted);
+      seriesRef.current = series as unknown as ISeriesApi<"Candlestick">;
+
+      // Mark price line on line series
+      if (priceUsd != null) {
+        priceLineRef.current = series.createPriceLine({
+          price: priceUsd,
+          color: "#9945FF",
+          lineWidth: 1,
+          lineStyle: LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: "Mark",
+        });
+      }
+    }
+
+    chart.timeScale().fitContent();
+  }, [chartType, candleData, lineData, priceUsd]);
+
+  // Update mark price line when live price changes
+  useEffect(() => {
+    if (priceLineRef.current && seriesRef.current && priceUsd != null) {
+      priceLineRef.current.applyOptions({ price: priceUsd });
+    }
+  }, [priceUsd]);
+
+  // Compute price stats for header
+  const activeData = lineData.length > 0 ? lineData : oracleFiltered;
+  const currentPrice = activeData[activeData.length - 1]?.price ?? priceUsd ?? 0;
+  const firstPrice = activeData[0]?.price ?? currentPrice;
   const priceChange = currentPrice - firstPrice;
   const priceChangePercent = firstPrice > 0 ? (priceChange / firstPrice) * 100 : 0;
   const isUp = priceChange >= 0;
 
-  // Show empty state only if BOTH external and oracle data are missing
-  const totalDataPoints = effectiveLineData.length + candles.length;
-  if (totalDataPoints === 0) {
+  if (totalDataPoints === 0 || effectiveSparse) {
     return (
       <ChartEmptyState
         currentPrice={priceUsd ?? undefined}
@@ -265,7 +272,7 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
 
   return (
     <div className="rounded-none border border-[var(--border)] bg-[var(--bg)] p-3">
-      {/* Header — wraps on small mobile so controls don't overflow viewport (#860) */}
+      {/* Header */}
       <div className="mb-3 flex flex-wrap items-start justify-between gap-y-2">
         <div className="min-w-0">
           <div className="text-2xl font-bold" style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", color: isUp ? "var(--long)" : "var(--short)" }}>
@@ -275,7 +282,6 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
             <span className="text-xs" style={{ color: isUp ? "var(--long)" : "var(--short)" }}>
               {isUp ? "+" : ""}{priceChange.toFixed(4)} ({isUp ? "+" : ""}{priceChangePercent.toFixed(2)}%)
             </span>
-            {/* PERC-512: Data source badge */}
             {hasExternalData ? (
               <span
                 className="text-[9px] font-medium uppercase tracking-[0.08em] px-1.5 py-0.5 rounded-sm"
@@ -298,9 +304,8 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
           </div>
         </div>
 
-        {/* Controls — shrink-wrap so they don't force parent wider than viewport */}
+        {/* Controls */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Chart type */}
           <div className="flex gap-1 rounded-none border border-[var(--border)] bg-[var(--bg-elevated)] p-0.5">
             <button
               onClick={() => setChartType("line")}
@@ -324,9 +329,8 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
             </button>
           </div>
 
-          {/* Timeframe */}
           <div className="flex gap-1 rounded-none border border-[var(--border)] bg-[var(--bg-elevated)] p-0.5">
-            {(["1h", "4h", "1d", "7d", "30d"] as Timeframe[]).map((tf) => (
+            {(["1m", "5m", "1h", "4h", "1d", "7d", "30d"] as Timeframe[]).map((tf) => (
               <button
                 key={tf}
                 onClick={() => setTimeframe(tf)}
@@ -343,116 +347,10 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
         </div>
       </div>
 
-      {/* Candle fallback notice */}
-      {insufficientCandles && (
-        <div className="mb-2 flex items-center gap-2 rounded-none border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5">
-          <span className="text-xs text-[var(--text-dim)]">
-            Not enough trades for candle view — showing line chart. Candles will appear as trading activity increases.
-          </span>
-        </div>
-      )}
-
-      {/* Chart */}
-      <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} className="w-full h-auto max-h-[200px] sm:max-h-[400px]" preserveAspectRatio="xMidYMid meet">
-        <defs>
-          <linearGradient id="lineGradient" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor={isUp ? "var(--long)" : "var(--short)"} stopOpacity="0.3" />
-            <stop offset="100%" stopColor={isUp ? "var(--long)" : "var(--short)"} stopOpacity="0" />
-          </linearGradient>
-        </defs>
-
-        {/* Grid lines */}
-        {yLabels.map((label, i) => (
-          <line
-            key={`grid-y-${i}`}
-            x1={PAD.left}
-            x2={W - PAD.right}
-            y1={label.y}
-            y2={label.y}
-            stroke="var(--border)"
-            strokeWidth="1"
-            strokeDasharray="4 4"
-            opacity="0.3"
-          />
-        ))}
-
-        {/* Y-axis labels */}
-        {yLabels.map((label, i) => (
-          <text
-            key={`label-y-${i}`}
-            x={PAD.left - 10}
-            y={label.y + 4}
-            textAnchor="end"
-            fontSize="10"
-            fill="var(--text-dim)"
-            fontFamily="var(--font-mono)"
-          >
-            ${label.value.toFixed(label.value < 1 ? 4 : 2)}
-          </text>
-        ))}
-
-        {/* X-axis labels */}
-        {xLabels.map((label, i) => (
-          <text
-            key={`label-x-${i}`}
-            x={label.x}
-            y={PAD.top + CHART_H + 20}
-            textAnchor="middle"
-            fontSize="10"
-            fill="var(--text-dim)"
-          >
-            {label.time}
-          </text>
-        ))}
-
-        {/* Line chart */}
-        {effectiveChartType === "line" && linePath && (
-          <>
-            <polygon
-              points={`${linePath} ${W - PAD.right},${PAD.top + CHART_H} ${PAD.left},${PAD.top + CHART_H}`}
-              fill="url(#lineGradient)"
-            />
-            <polyline
-              points={linePath}
-              fill="none"
-              stroke={isUp ? "var(--long)" : "var(--short)"}
-              strokeWidth="2"
-              strokeLinejoin="round"
-            />
-          </>
-        )}
-
-        {/* Candlestick chart */}
-        {effectiveChartType === "candle" &&
-          candles.map((candle, i) => {
-            const timeRange = maxTime - minTime || 1;
-            const x = PAD.left + ((candle.timestamp - minTime) / timeRange) * CHART_W;
-            const safePriceRange = priceRange || 1;
-            const yOpen = PAD.top + ((maxPrice - candle.open) / safePriceRange) * CHART_H;
-            const yClose = PAD.top + ((maxPrice - candle.close) / safePriceRange) * CHART_H;
-            const yHigh = PAD.top + ((maxPrice - candle.high) / safePriceRange) * CHART_H;
-            const yLow = PAD.top + ((maxPrice - candle.low) / safePriceRange) * CHART_H;
-            const candleW = Math.max(2, CHART_W / candles.length - 2);
-            const isGreen = candle.close >= candle.open;
-            const color = isGreen ? "var(--long)" : "var(--short)";
-
-            return (
-              <g key={i}>
-                {/* Wick */}
-                <line x1={x} x2={x} y1={yHigh} y2={yLow} stroke={color} strokeWidth="1" />
-                {/* Body */}
-                <rect
-                  x={x - candleW / 2}
-                  y={Math.min(yOpen, yClose)}
-                  width={candleW}
-                  height={Math.max(1, Math.abs(yClose - yOpen))}
-                  fill={color}
-                  opacity="0.9"
-                />
-              </g>
-            );
-          })}
-      </svg>
+      {/* Chart container — lightweight-charts renders here.
+          GH#1625/GH#1628: explicit height required so autoSize has a non-zero
+          container to fill. flex-1 alone gives 0 height when parent is not flex. */}
+      <div ref={containerRef} className="w-full h-[300px] lg:h-[500px]" />
     </div>
   );
 };
