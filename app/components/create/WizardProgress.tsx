@@ -10,6 +10,15 @@ interface WizardProgressProps {
   onStepClick?: (step: 1 | 2 | 3 | 4) => void;
   /** Override step labels (e.g. Quick Launch swaps "Oracle" → "Slab Tier") */
   stepLabels?: readonly [string, string, string, string];
+  /**
+   * GH#1615: Display step number override for the mobile "Step N of M" counter.
+   * In Quick Launch, physical step 2 should display as "2", step 4 as "3".
+   */
+  displayStep?: number;
+  /** Display total override for mobile counter (e.g. 3 in Quick Launch mode). */
+  displayTotal?: number;
+  /** Display label for the current step (used in mobile counter). */
+  displayStepLabel?: string;
 }
 
 /**
@@ -22,7 +31,13 @@ export const WizardProgress: FC<WizardProgressProps> = ({
   completedSteps,
   onStepClick,
   stepLabels = DEFAULT_LABELS,
+  displayStep,
+  displayTotal,
+  displayStepLabel,
 }) => {
+  const mobileStepNum = displayStep ?? currentStep;
+  const mobileStepTotal = displayTotal ?? stepLabels.length;
+  const mobileStepLabel = displayStepLabel ?? stepLabels[currentStep - 1];
   return (
     <>
       {/* Desktop progress */}
@@ -94,9 +109,10 @@ export const WizardProgress: FC<WizardProgressProps> = ({
       </div>
 
       {/* Mobile progress */}
+      {/* GH#1615: use display overrides so Quick Launch shows "Step 2 of 3 — Slab Tier" not "Step 2 of 4 — Oracle ✓" */}
       <div className="flex sm:hidden items-center justify-between">
         <span className="text-[12px] font-medium text-white">
-          Step {currentStep} of 4 — {stepLabels[currentStep - 1]}
+          Step {mobileStepNum} of {mobileStepTotal} — {mobileStepLabel}
         </span>
         <div className="flex items-center gap-1">
           {[1, 2, 3, 4].map((s) => (
