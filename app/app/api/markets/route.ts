@@ -255,7 +255,10 @@ export async function GET(request: NextRequest) {
       const accountsCount = n_total_accounts ?? 0;
       const vaultBal = n_vault_balance ?? 0;
       const isPhantomOI = isPhantomOpenInterest(accountsCount, vaultBal);
-      const displayOiUsd = isPhantomOI ? null : total_open_interest_usd;
+      // GH#1599: When OI is genuinely 0, display 0 regardless of phantom status.
+      // The phantom guard only suppresses *positive* OI values that are stale/orphaned
+      // (no vault backing). Zero OI is always valid — it means "no positions".
+      const displayOiUsd = total_open_interest_usd === 0 ? 0 : (isPhantomOI ? null : total_open_interest_usd);
 
       // GH#1270: Pre-compute volume_24h in USD so consumers (e.g. Watchlist) don't need
       // to divide by 10^decimals manually. Mirrors the total_open_interest_usd pattern.
