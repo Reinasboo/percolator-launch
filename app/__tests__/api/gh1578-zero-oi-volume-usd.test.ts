@@ -111,9 +111,11 @@ describe("GH#1578: zero OI/volume → USD should be 0, not null", () => {
     expect(market.volume_24h_usd).toBe(0);           // zero volume → 0 regardless of price
   });
 
-  it("still returns null total_open_interest_usd for phantom OI market", async () => {
-    // Phantom: total_accounts=0, vault<1M even if OI>0 → should suppress
-    // Use include_zombie=true so the market isn't filtered from the response
+  it("returns 0 total_open_interest_usd for phantom OI market (GH#1606: atoms zeroed → USD=0)", async () => {
+    // GH#1606: Phantom markets zero all raw OI atom fields (total_open_interest,
+    // open_interest_long, open_interest_short → 0). USD must be consistent: 0.
+    // Previously returned null (creating { total_open_interest: 0, total_open_interest_usd: null }).
+    // Use include_zombie=true so the market isn't filtered from the response.
     mockRows = [makeZeroOiMarket({
       total_open_interest: "1000",
       total_accounts: "0",
@@ -123,7 +125,7 @@ describe("GH#1578: zero OI/volume → USD should be 0, not null", () => {
     const body = await res.json();
     const market = body.markets?.[0];
     expect(market).toBeDefined();
-    expect(market.total_open_interest_usd).toBeNull();
+    expect(market.total_open_interest_usd).toBe(0);
   });
 
   it("returns 0 for both OI and volume when market has real users but zero activity", async () => {
