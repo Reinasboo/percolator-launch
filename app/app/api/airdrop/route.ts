@@ -166,10 +166,11 @@ async function resolveServerOwnedMint(
   }
 
   // 2. Server does NOT own storedMint. Look for a server-owned mirror in devnet_mints.
+  // GH#1590: devnet_mints has no market_address column — use mainnet_ca with synthetic key
   const { data: mirror } = await supabase
     .from("devnet_mints")
     .select("devnet_mint")
-    .eq("market_address", marketAddress)
+    .eq("mainnet_ca", `__market_mirror__${marketAddress}`)
     .eq("creator_wallet", mintAuthPubkey)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -231,7 +232,6 @@ async function resolveServerOwnedMint(
     {
       mainnet_ca: `__market_mirror__${marketAddress}`, // synthetic key for market-owned mirrors
       devnet_mint: newMint,
-      market_address: marketAddress,
       symbol: "TOKEN", // will be overwritten by real symbol on next market info fetch
       name: `Mirror ${marketAddress.slice(0, 6)}`,
       decimals,
@@ -301,10 +301,11 @@ export async function POST(req: NextRequest) {
     // Fallback to devnet_mints table if markets table doesn't have the mint
     if (!mintAddress) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // GH#1590: devnet_mints has no market_address column — use mainnet_ca synthetic key
       const { data: devnetMintData, error: fallbackErr } = await (supabase as any)
         .from("devnet_mints")
         .select("devnet_mint, symbol")
-        .eq("market_address", marketAddress)
+        .eq("mainnet_ca", `__market_mirror__${marketAddress}`)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
