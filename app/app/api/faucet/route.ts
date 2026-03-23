@@ -31,6 +31,7 @@ import {
 import { getConfig } from "@/lib/config";
 import { getServiceClient } from "@/lib/supabase";
 import { getDevnetMintSigner } from "@/lib/devnet-signer";
+import { tryFaucetGate, releaseFaucetClaim } from "@/lib/faucet-rate-gate";
 import * as Sentry from "@sentry/nextjs";
 
 export const dynamic = "force-dynamic";
@@ -87,35 +88,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Rate limit check via Supabase — per wallet per type
+    // GH#1595: INSERT-as-gate rate limit — eliminates SELECT→INSERT TOCTOU window.
+    // Uses faucet_claims table with UNIQUE(wallet, fund_type).
     const supabase = getServiceClient();
-    const cutoff = new Date(
-      Date.now() - RATE_LIMIT_HOURS * 60 * 60 * 1000,
-    ).toISOString();
+    const gate = await tryFaucetGate(supabase, walletAddress, type);
 
-    const rateField = type === "sol" ? "sol_airdropped" : "usdc_minted";
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: recent } = await (supabase as any)
-      .from("auto_fund_log")
-      .select("id, created_at")
-      .eq("wallet", walletAddress)
-      .eq(rateField, true)
-      .gte("created_at", cutoff)
-      .order("created_at", { ascending: false })
-      .limit(1);
-
-    if (recent && recent.length > 0) {
-      const lastClaim = new Date(recent[0].created_at);
-      const nextClaimAt = new Date(
-        lastClaim.getTime() + RATE_LIMIT_HOURS * 60 * 60 * 1000,
-      ).toISOString();
-
+    if (!gate.allowed) {
       return NextResponse.json(
         {
           error: "Already claimed in the last 24 hours",
           funded: false,
-          nextClaimAt,
+          nextClaimAt: gate.nextClaimAt,
         },
         { status: 429 },
       );
@@ -141,7 +124,8 @@ export async function POST(req: NextRequest) {
         const isRateLimit =
           /429|too many requests|rate.?limit|airdrop.*limit|limit.*airdrop/i.test(msg);
         if (isRateLimit) {
-          // Do NOT capture rate-limit hits as Sentry exceptions — they're expected.
+          // GH#1595: release gate so user can retry after RPC rate limit clears
+          if (gate.claimId) await releaseFaucetClaim(supabase, gate.claimId);
           return NextResponse.json(
             {
               error:
@@ -152,10 +136,10 @@ export async function POST(req: NextRequest) {
           );
         }
         // GH#1392: Solana devnet returns "Internal error" for transient failures
-        // (throttling, recent airdrop, RPC overload). Return 503 so clients can retry.
         const isRetryable =
           /internal error|service unavailable|timeout|ECONNREFUSED/i.test(msg);
         if (isRetryable) {
+          if (gate.claimId) await releaseFaucetClaim(supabase, gate.claimId);
           return NextResponse.json(
             {
               error:
@@ -165,6 +149,7 @@ export async function POST(req: NextRequest) {
             { status: 503 },
           );
         }
+        if (gate.claimId) await releaseFaucetClaim(supabase, gate.claimId);
         Sentry.captureException(airdropErr, {
           tags: { endpoint: "/api/faucet", type: "sol" },
           extra: { walletAddress },
@@ -172,6 +157,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: msg }, { status: 500 });
       }
 
+      // GH#1595: claim already recorded by gate INSERT — also log to auto_fund_log for analytics
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase as any).from("auto_fund_log").insert({
         wallet: walletAddress,
@@ -199,6 +185,7 @@ export async function POST(req: NextRequest) {
       | undefined;
 
     if (!usdcMintAddr) {
+      if (gate.claimId) await releaseFaucetClaim(supabase, gate.claimId);
       return NextResponse.json(
         { error: "Test USDC mint not configured" },
         { status: 500 },
@@ -210,6 +197,7 @@ export async function POST(req: NextRequest) {
     // Load sealed mint authority signer (GH#1382: replaces raw Keypair.fromSecretKey)
     const mintSigner = getDevnetMintSigner();
     if (!mintSigner) {
+      if (gate.claimId) await releaseFaucetClaim(supabase, gate.claimId);
       return NextResponse.json(
         { error: "Server not configured for minting (DEVNET_MINT_AUTHORITY_KEYPAIR missing)" },
         { status: 500 },
@@ -225,6 +213,7 @@ export async function POST(req: NextRequest) {
     try {
       const mintInfo = await connection.getAccountInfo(usdcMint);
       if (!mintInfo) {
+        if (gate.claimId) await releaseFaucetClaim(supabase, gate.claimId);
         return NextResponse.json(
           { error: `Test USDC mint ${usdcMintAddr} does not exist on devnet` },
           { status: 500 },
@@ -236,6 +225,7 @@ export async function POST(req: NextRequest) {
         const hasAuthority =
           new DataView(mintData.buffer, mintData.byteOffset).getUint32(0, true) === 1;
         if (!hasAuthority) {
+          if (gate.claimId) await releaseFaucetClaim(supabase, gate.claimId);
           return NextResponse.json(
             { error: "Test USDC mint has no mint authority (fixed supply)" },
             { status: 500 },
@@ -249,6 +239,7 @@ export async function POST(req: NextRequest) {
             ),
             { tags: { endpoint: "/api/faucet", step: "authority_check" } },
           );
+          if (gate.claimId) await releaseFaucetClaim(supabase, gate.claimId);
           return NextResponse.json(
             {
               error:
@@ -269,6 +260,7 @@ export async function POST(req: NextRequest) {
         tags: { endpoint: "/api/faucet", step: "authority_check" },
         extra: { walletAddress },
       });
+      if (gate.claimId) await releaseFaucetClaim(supabase, gate.claimId);
       return NextResponse.json(
         { error: "Could not verify mint authority due to RPC error. Please retry.", retryable: true },
         { status: 503 },
@@ -344,7 +336,6 @@ export async function POST(req: NextRequest) {
     Sentry.captureException(error, {
       tags: { endpoint: "/api/faucet", method: "POST" },
     });
-    // GH#1474: ensure error is never empty string — fall back to toString() or generic message
     const errorMsg =
       error instanceof Error
         ? error.message || error.toString() || "Internal server error"
