@@ -648,6 +648,22 @@ export const CreateMarketWizard: FC<{ initialMint?: string }> = ({ initialMint }
       ? ["Token", "Oracle ✓", "Slab Tier", "Review"]
       : ["Token", "Oracle", "Parameters", "Review"];
 
+  // GH#1615: In Quick Launch mode, oracle (step 3) is auto-completed and never shown.
+  // Physical wizard.step goes 1 → 2 → 4.  Map to display step so the header reads
+  // "STEP 1 / 3 — Token", "STEP 2 / 3 — Slab Tier", "STEP 3 / 3 — Review".
+  // Quick mode step content labels (3 visible steps):
+  const quickStepDisplayLabel: Record<number, string> = { 1: "Token", 2: "Slab Tier", 4: "Review" };
+  const quickStepDisplayNum: Record<number, number> = { 1: 1, 2: 2, 4: 3 };
+  const headerStepLabel =
+    wizard.mode === "quick"
+      ? (quickStepDisplayLabel[wizard.step] ?? stepLabels[wizard.step - 1])
+      : stepLabels[wizard.step - 1];
+  const headerStepNum =
+    wizard.mode === "quick"
+      ? (quickStepDisplayNum[wizard.step] ?? wizard.step)
+      : wizard.step;
+  const headerStepTotal = wizard.mode === "quick" ? 3 : 4;
+
   return (
     <div className="space-y-6 p-4 sm:p-6">
       {/* Stuck slab recovery banner */}
@@ -706,6 +722,7 @@ export const CreateMarketWizard: FC<{ initialMint?: string }> = ({ initialMint }
       <ModeSelector mode={wizard.mode} onModeChange={handleModeChange} />
 
       {/* Progress indicator */}
+      {/* GH#1615: pass display overrides so mobile counter shows correct step/total in Quick Launch */}
       <WizardProgress
         currentStep={wizard.step}
         completedSteps={completedSteps}
@@ -713,14 +730,19 @@ export const CreateMarketWizard: FC<{ initialMint?: string }> = ({ initialMint }
         onStepClick={(step) => {
           if (completedSteps.has(step)) goToStep(step);
         }}
+        displayStep={headerStepNum}
+        displayTotal={headerStepTotal}
+        displayStepLabel={headerStepLabel}
       />
 
       {/* Step panel */}
       <div className="border border-[var(--border)] bg-[var(--panel-bg)] p-5 sm:p-6">
         {/* Step header */}
+        {/* GH#1615: Use display step/total/label so Quick Launch shows "STEP 2 / 3 — Slab Tier"
+            instead of the confusing "STEP 2 / 4 — Oracle ✓" while rendering slab content. */}
         <div className="mb-5 pb-4 border-b border-[var(--border)]">
           <p className="text-[10px] font-medium uppercase tracking-[0.15em] text-[var(--text-dim)]">
-            STEP {wizard.step} / 4 — {stepLabels[wizard.step - 1]}
+            STEP {headerStepNum} / {headerStepTotal} — {headerStepLabel}
           </p>
         </div>
 
