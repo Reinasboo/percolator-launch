@@ -5,10 +5,17 @@ import { createChart, IChartApi, ISeriesApi, LineStyle, ColorType, CrosshairMode
 import { useSlabState } from "@/components/providers/SlabProvider";
 import { useLivePrice } from "@/hooks/useLivePrice";
 import { useTokenChart } from "@/hooks/useTokenChart";
+import { useUserAccount } from "@/hooks/useUserAccount";
+import { useMarketConfig } from "@/hooks/useMarketConfig";
+import { useEngineState } from "@/hooks/useEngineState";
+import { useLiqPrice } from "@/hooks/useLiqPrice";
 import { ChartEmptyState } from "./ChartEmptyState";
+import { isMockMode } from "@/lib/mock-mode";
+import { isMockSlab, getMockUserAccount } from "@/lib/mock-trade-data";
 
 type ChartType = "line" | "candle";
-type Timeframe = "1m" | "5m" | "1h" | "4h" | "1d" | "7d" | "30d";
+// Phase 2: added 15m timeframe
+type Timeframe = "1m" | "5m" | "15m" | "1h" | "4h" | "1d" | "7d" | "30d";
 
 interface PricePoint {
   timestamp: number;
@@ -18,6 +25,7 @@ interface PricePoint {
 const TIMEFRAME_MS: Record<Timeframe, number> = {
   "1m": 60 * 1000,
   "5m": 5 * 60 * 1000,
+  "15m": 15 * 60 * 1000,
   "1h": 60 * 60 * 1000,
   "4h": 4 * 60 * 60 * 1000,
   "1d": 24 * 60 * 60 * 1000,
@@ -26,6 +34,9 @@ const TIMEFRAME_MS: Record<Timeframe, number> = {
 };
 
 const CANDLE_INTERVAL_MS = 5 * 60 * 1000;
+
+// Phase 2: timeframes that benefit from auto-polling
+const POLLING_TIMEFRAMES: Timeframe[] = ["1m", "5m", "15m", "1h", "4h", "1d"];
 
 function aggregateCandles(prices: PricePoint[], intervalMs: number) {
   if (prices.length === 0) return [];
@@ -46,6 +57,32 @@ function aggregateCandles(prices: PricePoint[], intervalMs: number) {
   return candles;
 }
 
+// Phase 2: compact position summary shown on chart when wallet is connected
+interface PositionSummaryProps {
+  slabAddress: string;
+}
+
+function PositionSummary({ slabAddress }: PositionSummaryProps) {
+  const realUserAccount = useUserAccount();
+  const mockMode = isMockMode() && isMockSlab(slabAddress);
+  const userAccount = realUserAccount ?? (mockMode ? getMockUserAccount(slabAddress) : null);
+
+  if (!userAccount) return null;
+  const { account } = userAccount;
+  if (account.positionSize === 0n) return null;
+
+  const isLong = account.positionSize > 0n;
+  const direction = isLong ? "LONG" : "SHORT";
+  const dirColor = isLong ? "text-green-400" : "text-red-400";
+
+  return (
+    <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5 rounded-none border border-[var(--border)]/60 bg-[var(--bg)]/90 px-2 py-1 backdrop-blur-sm">
+      <span className={`text-[9px] font-bold uppercase tracking-[0.12em] ${dirColor}`}>{direction}</span>
+      <span className="text-[9px] text-[var(--text-dim)]">position open</span>
+    </div>
+  );
+}
+
 export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = ({
   slabAddress,
   mintAddress,
@@ -55,11 +92,19 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
   const [chartType, setChartType] = useState<ChartType>("candle");
   const [timeframe, setTimeframe] = useState<Timeframe>("1d");
   const [oraclePrices, setOraclePrices] = useState<PricePoint[]>([]);
+
+  // Phase 2: liq price overlay
+  const realUserAccount = useUserAccount();
+  const marketConfig = useMarketConfig();
+  const { params } = useSlabState();
+  const liqPriceE6 = useLiqPrice();
+
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  const seriesRef = useRef<ISeriesApi<"Candlestick"> | ISeriesApi<"Line"> | null>(null);
+  const seriesRef = useRef<ISeriesApi<"Candlestick" | "Line"> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   const priceLineRef = useRef<ReturnType<ISeriesApi<"Candlestick">["createPriceLine"]> | null>(null);
+  const liqLineRef = useRef<ReturnType<ISeriesApi<"Candlestick">["createPriceLine"]> | null>(null);
 
   const {
     candles: externalCandles,
@@ -112,23 +157,18 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
 
   const totalDataPoints = candleData.length + lineData.length;
 
-  // GH#1625: sparse-data guard for lwc renderer.
-  // lightweight-charts renders a single candle with open=high=low=close as an
-  // invisible hairline, leaving the chart visually blank on uncranked markets.
-  // Mirror the SVG guard from PR #1624: if fewer than 2 data points, show ChartEmptyState.
+  // GH#1625: sparse-data guard
   const effectiveSparse =
     (chartType === "candle" && candleData.length < 2) ||
     (chartType === "line" && lineData.length < 2);
+
+  // Phase 2: volume has data (used to show empty state in volume pane)
+  const hasVolumeData = candleData.some((c) => (c.volume ?? 0) > 0);
 
   // Create/destroy chart
   useEffect(() => {
     if (!containerRef.current) return;
 
-    // GH#1625 / GH#1628: Use autoSize so lightweight-charts manages its own
-    // dimensions via an internal ResizeObserver. This prevents blank/black charts
-    // when clientWidth/clientHeight are 0 at mount time (no flex parent, or
-    // narrow mobile viewports like 375px). The container must have an explicit
-    // CSS height — see the div below (h-[300px] lg:h-[500px]).
     const chart = createChart(containerRef.current, {
       autoSize: true,
       layout: {
@@ -152,6 +192,7 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
       seriesRef.current = null;
       volumeSeriesRef.current = null;
       priceLineRef.current = null;
+      liqLineRef.current = null;
     };
   }, []);
 
@@ -170,6 +211,7 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
       volumeSeriesRef.current = null;
     }
     priceLineRef.current = null;
+    liqLineRef.current = null;
 
     if (chartType === "candle" && candleData.length > 0) {
       const series = chart.addCandlestickSeries({
@@ -191,17 +233,22 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
       series.setData(formatted);
       seriesRef.current = series;
 
-      // Volume histogram
+      // Phase 2: Volume histogram — always add series; use sentinel 0.001 when
+      // no real volume data exists so the pane renders (showing the "no data" label
+      // via the overlay div below, not via lwc itself).
       const volumeSeries = chart.addHistogramSeries({
         priceFormat: { type: "volume" },
         priceScaleId: "volume",
       });
       chart.priceScale("volume").applyOptions({
-        scaleMargins: { top: 0.85, bottom: 0 },
+        // Phase 2: increase top margin so volume pane is visually taller and
+        // clearly visible even at desktop 1440px. Was 0.85 — now 0.80 (20% height).
+        scaleMargins: { top: 0.80, bottom: 0 },
       });
       const volumeData = candleData.map((c) => ({
         time: (Math.floor(c.timestamp / 1000)) as import("lightweight-charts").UTCTimestamp,
-        value: c.volume ?? 0,
+        // Phase 2: use a tiny sentinel value so lwc renders the pane even when vol=0
+        value: (c.volume ?? 0) > 0 ? c.volume : 0.001,
         color: c.close >= c.open ? "rgba(34,211,238,0.6)" : "rgba(239,68,68,0.6)",
       }));
       volumeSeries.setData(volumeData);
@@ -218,6 +265,19 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
           title: "Mark",
         });
       }
+
+      // Phase 2: Liq price overlay — show orange dashed line when user has position
+      const liqPriceNum = liqPriceE6 != null && liqPriceE6 > 0n ? Number(liqPriceE6) / 1e6 : null;
+      if (liqPriceNum != null && liqPriceNum > 0) {
+        liqLineRef.current = series.createPriceLine({
+          price: liqPriceNum,
+          color: "#f97316",
+          lineWidth: 1,
+          lineStyle: LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: "Liq",
+        });
+      }
     } else if (chartType === "line" && lineData.length > 0) {
       const series = chart.addLineSeries({
         color: "#22d3ee",
@@ -228,7 +288,7 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
         value: p.price,
       }));
       series.setData(formatted);
-      seriesRef.current = series as unknown as ISeriesApi<"Candlestick">;
+      seriesRef.current = series as ISeriesApi<"Candlestick" | "Line">;
 
       // Mark price line on line series
       if (priceUsd != null) {
@@ -241,14 +301,27 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
           title: "Mark",
         });
       }
+
+      // Phase 2: Liq price on line chart too
+      const liqPriceNum = liqPriceE6 != null && liqPriceE6 > 0n ? Number(liqPriceE6) / 1e6 : null;
+      if (liqPriceNum != null && liqPriceNum > 0) {
+        liqLineRef.current = series.createPriceLine({
+          price: liqPriceNum,
+          color: "#f97316",
+          lineWidth: 1,
+          lineStyle: LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: "Liq",
+        });
+      }
     }
 
     chart.timeScale().fitContent();
-  }, [chartType, candleData, lineData, priceUsd]);
+  }, [chartType, candleData, lineData, priceUsd, liqPriceE6]);
 
   // Update mark price line when live price changes
   useEffect(() => {
-    if (priceLineRef.current && seriesRef.current && priceUsd != null) {
+    if (priceLineRef.current && priceUsd != null) {
       priceLineRef.current.applyOptions({ price: priceUsd });
     }
   }, [priceUsd]);
@@ -265,7 +338,7 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
     return (
       <ChartEmptyState
         currentPrice={priceUsd ?? undefined}
-        heightClass="h-[200px] sm:h-[400px]"
+        heightClass="h-[40svh] sm:h-[400px]"
       />
     );
   }
@@ -329,8 +402,9 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
             </button>
           </div>
 
+          {/* Phase 2: timeframe bar with 15m added */}
           <div className="flex gap-1 rounded-none border border-[var(--border)] bg-[var(--bg-elevated)] p-0.5">
-            {(["1m", "5m", "1h", "4h", "1d", "7d", "30d"] as Timeframe[]).map((tf) => (
+            {(["1m", "5m", "15m", "1h", "4h", "1d", "7d", "30d"] as Timeframe[]).map((tf) => (
               <button
                 key={tf}
                 onClick={() => setTimeframe(tf)}
@@ -347,10 +421,23 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
         </div>
       </div>
 
-      {/* Chart container — lightweight-charts renders here.
-          GH#1625/GH#1628: explicit height required so autoSize has a non-zero
-          container to fill. flex-1 alone gives 0 height when parent is not flex. */}
-      <div ref={containerRef} className="w-full h-[300px] lg:h-[500px]" />
+      {/* Chart container — relative so PositionSummary overlay can be absolute */}
+      {/* Phase 2: mobile uses 40svh, desktop keeps 500px */}
+      <div className="relative">
+        <div ref={containerRef} className="w-full h-[40svh] lg:h-[500px]" />
+
+        {/* Phase 2: Volume no-data overlay — shown when volume pane exists but all volumes are 0 */}
+        {chartType === "candle" && !hasVolumeData && (
+          <div className="pointer-events-none absolute bottom-0 left-0 right-0 flex h-[20%] items-center justify-center border-t border-[var(--border)]/30">
+            <span className="text-[9px] text-[var(--text-dim)] uppercase tracking-[0.12em]">
+              ── Volume (no data) ──
+            </span>
+          </div>
+        )}
+
+        {/* Phase 2: Position summary badge overlay */}
+        <PositionSummary slabAddress={slabAddress} />
+      </div>
     </div>
   );
 };
