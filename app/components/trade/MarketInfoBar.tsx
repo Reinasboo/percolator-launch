@@ -38,7 +38,20 @@ export const MarketInfoBar: FC<MarketInfoBarProps> = ({ slabAddress, symbol }) =
   const fundingColor = fundingHourly != null ? (fundingHourly < 0 ? "text-orange-400" : "text-green-400") : "text-[var(--text)]";
 
   const volume = market?.volume_24h as number | null | undefined;
-  const oi = market?.total_open_interest as number | null | undefined;
+
+  // GH#1626: total_open_interest is raw on-chain atoms (e.g. 4_000_000_000 for
+  // 4K USDC with 6 decimals). Convert to USD: rawAtoms / 10^decimals * priceUsd.
+  // volume_24h is already USD from the stats collector, so no conversion needed there.
+  const rawOiAtoms = market?.total_open_interest as number | null | undefined;
+  const decimals = (market?.decimals as number | null | undefined) ?? 6;
+  const oi: number | null | undefined = (() => {
+    if (rawOiAtoms == null) return null;
+    const tokenAmount = rawOiAtoms / Math.pow(10, decimals);
+    // Multiply by priceUsd if available; otherwise just show token amount as-is
+    // (which would be in token units, not USD, but better than showing raw atoms)
+    if (priceUsd != null && priceUsd > 0) return tokenAmount * priceUsd;
+    return tokenAmount;
+  })();
 
   return (
     <div className="bg-[var(--bg)]/95 border-b border-[var(--border)]/50 px-4 py-2 flex items-center gap-4 overflow-x-auto whitespace-nowrap">
