@@ -81,6 +81,12 @@ describe("GH#1615: wizard step header display in Quick Launch mode", () => {
   describe("mobile WizardProgress counter mirrors header", () => {
     // The mobile counter uses the same displayStep/displayTotal/displayStepLabel props
     // that CreateMarketWizard computes via headerStepNum/headerStepTotal/headerStepLabel.
+    it("Quick step 1: mobile shows 'Step 1 of 3 — Token'", () => {
+      const h = getHeaderDisplay("quick", 1);
+      const mobileText = `Step ${h.num} of ${h.total} — ${h.label}`;
+      expect(mobileText).toBe("Step 1 of 3 — Token");
+    });
+
     it("Quick step 2: mobile shows 'Step 2 of 3 — Slab Tier'", () => {
       const h = getHeaderDisplay("quick", 2);
       const mobileText = `Step ${h.num} of ${h.total} — ${h.label}`;
