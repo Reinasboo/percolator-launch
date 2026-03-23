@@ -7,7 +7,7 @@ import { getServiceClient } from "@/lib/supabase";
 import { getConfig } from "@/lib/config";
 import * as Sentry from "@sentry/nextjs";
 import { isSaneMarketValue, isActiveMarket, isZombieMarket } from "@/lib/activeMarketFilter";
-import { isPhantomOpenInterest } from "@/lib/phantom-oi";
+import { isPhantomOpenInterest, MIN_VAULT_FOR_OI } from "@/lib/phantom-oi";
 import { computeDisplayOiUsd } from "@/lib/oi-display";
 import { computeMarketHealthFromStats } from "@/lib/health";
 import { BLOCKED_SLAB_ADDRESSES } from "@/lib/blocklist";
@@ -461,6 +461,18 @@ export async function GET(request: NextRequest) {
     // Health sort uses a computed level rank, not a raw field value.
     const HEALTH_ORDER: Record<string, number> = { healthy: 0, caution: 1, warning: 2, empty: 3 };
     const healthRank = (m: Record<string, unknown>): number => {
+      // GH#1608: Markets with vault_balance < MIN_VAULT_FOR_OI have no LP liquidity.
+      // computeMarketHealthFromStats may return "healthy" for these because phantom OI
+      // is suppressed to 0 while c_tot > 0 remains — oi=0 + capital > 0 → "healthy".
+      // This caused vault=0 markets (with legacy c_tot from FF7K keeper pattern) to rank
+      // as best health (0) and appear first in sort=health results.
+      // Fix: treat no-vault markets as rank 3 (empty) directly, before health computation.
+      const vaultNum = typeof m.vault_balance === "number"
+        ? m.vault_balance
+        : (m.vault_balance != null ? Number(m.vault_balance) : null);
+      if (vaultNum !== null && !Number.isNaN(vaultNum) && vaultNum < MIN_VAULT_FOR_OI) {
+        return HEALTH_ORDER["empty"]; // 3 — no vault = no real LP market
+      }
       const h = computeMarketHealthFromStats({
         total_open_interest: m.total_open_interest as number | null,
         open_interest_long: m.open_interest_long as number | null,
@@ -468,7 +480,7 @@ export async function GET(request: NextRequest) {
         insurance_balance: m.insurance_balance as number | null,
         insurance_fund: m.insurance_fund as number | null,
         c_tot: m.c_tot as number | null,
-        vault_balance: m.vault_balance as number | null,
+        vault_balance: vaultNum,
         total_accounts: m.total_accounts as number | null,
       });
       return HEALTH_ORDER[h.level] ?? 5;
