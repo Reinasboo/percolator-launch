@@ -9,6 +9,11 @@
  * GH#1586 fix: if the stored mint was NOT created by DEVNET_MINT_AUTHORITY_KEYPAIR
  * (OwnerMismatch 0x4 would result), fall back to a server-owned mirror mint for
  * that market. If none exists, create one on-the-fly and record it in devnet_mints.
+ *
+ * GH#1588 fix: rate limit key is slab_address (marketAddress) — immutable, never
+ * changes after mint migration. Uses INSERT-as-gate pattern (unique index on
+ * wallet+market_address) to eliminate the TOCTOU race in the old SELECT→INSERT flow.
+ * Claim slot is released on mint failure so user isn't locked out 24h on transient errors.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -43,8 +48,93 @@ const NETWORK =
   process.env.NEXT_PUBLIC_SOLANA_NETWORK?.trim();
 const AIRDROP_USD_VALUE = 500;
 const RATE_LIMIT_HOURS = 24;
+const RATE_LIMIT_WINDOW_MS = RATE_LIMIT_HOURS * 60 * 60 * 1000;
 const MIN_SOL_THRESHOLD = 0.01 * LAMPORTS_PER_SOL;
 const REFILL_SOL = 2;
+
+/**
+ * GH#1588: Atomically reserve a claim slot using INSERT-as-gate.
+ *
+ * The airdrop_claims table has a UNIQUE INDEX on (wallet, market_address).
+ * Two concurrent requests for the same wallet+market will race to INSERT;
+ * exactly one wins — the other gets Postgres error 23505 and is denied.
+ * This eliminates the SELECT→INSERT TOCTOU window in the old rate-limit check.
+ *
+ * Re-claim after 24h: before the gate INSERT we delete any expired row so the
+ * unique slot is free again.
+ *
+ * Returns:
+ *   { allowed: true,  claimId }  — slot reserved; proceed with mint
+ *   { allowed: false, nextClaimAt } — within 24h window; return 429
+ */
+async function tryAirdropClaimGate(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  walletAddress: string,
+  marketAddress: string,
+): Promise<{ allowed: boolean; nextClaimAt: string | null; claimId?: number }> {
+  const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_MS).toISOString();
+
+  try {
+    // Step 1: Clear expired claim so unique slot is free for re-claim.
+    // Concurrent DELETEs on the same expired row are idempotent.
+    await supabase
+      .from("airdrop_claims")
+      .delete()
+      .eq("wallet", walletAddress)
+      .eq("market_address", marketAddress)
+      .lt("claimed_at", windowStart);
+
+    // Step 2: INSERT-as-gate — race winner records the claim; all others hit 23505.
+    const { data, error } = await supabase
+      .from("airdrop_claims")
+      .insert({ wallet: walletAddress, market_address: marketAddress, claimed_at: new Date().toISOString() })
+      .select("id, claimed_at")
+      .maybeSingle();
+
+    if (error) {
+      if (error.code === "23505") {
+        // Active claim within window — compute nextClaimAt from existing row.
+        const { data: existing } = await supabase
+          .from("airdrop_claims")
+          .select("claimed_at")
+          .eq("wallet", walletAddress)
+          .eq("market_address", marketAddress)
+          .maybeSingle();
+
+        const nextClaimAt = existing
+          ? new Date(new Date(existing.claimed_at as string).getTime() + RATE_LIMIT_WINDOW_MS).toISOString()
+          : null;
+        return { allowed: false, nextClaimAt };
+      }
+
+      // Unexpected DB error — fail open to avoid blocking users; log for alerting.
+      console.warn(`[airdrop] claim gate INSERT error (code=${error.code}): ${error.message}`);
+      return { allowed: true, nextClaimAt: null };
+    }
+
+    return { allowed: true, nextClaimAt: null, claimId: (data as { id: number; claimed_at: string } | null)?.id };
+  } catch (err) {
+    console.warn("[airdrop] tryAirdropClaimGate threw:", err instanceof Error ? err.message : String(err));
+    // Fail open — don't block users on unexpected errors
+    return { allowed: true, nextClaimAt: null };
+  }
+}
+
+/**
+ * Release an airdrop claim slot by row id.
+ * Called when the on-chain mint fails so user isn't locked out 24h on transient errors.
+ */
+async function releaseAirdropClaim(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  claimId: number,
+): Promise<void> {
+  const { error } = await supabase.from("airdrop_claims").delete().eq("id", claimId);
+  if (error) {
+    console.warn("[airdrop] failed to release claim slot:", error.message);
+  }
+}
 
 /**
  * GH#1586: Given a market's stored mintAddress, verify that the server keypair
@@ -182,35 +272,17 @@ export async function POST(req: NextRequest) {
 
     const supabase = getServiceClient();
 
-    // Rate limit check
-    const cutoff = new Date(Date.now() - RATE_LIMIT_HOURS * 60 * 60 * 1000).toISOString();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: recent } = await (supabase as any)
-      .from("airdrop_claims")
-      .select("id")
-      .eq("wallet", walletAddress)
-      .eq("market_address", marketAddress)
-      .gte("claimed_at", cutoff)
-      .limit(1);
-
-    if (recent && recent.length > 0) {
-      // Calculate time remaining
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: lastClaim } = await (supabase as any)
-        .from("airdrop_claims")
-        .select("claimed_at")
-        .eq("wallet", walletAddress)
-        .eq("market_address", marketAddress)
-        .order("claimed_at", { ascending: false })
-        .limit(1)
-        .single();
-
-      const nextClaimAt = lastClaim
-        ? new Date(new Date(lastClaim.claimed_at).getTime() + RATE_LIMIT_HOURS * 60 * 60 * 1000).toISOString()
-        : null;
-
+    // GH#1588: INSERT-as-gate rate limit (replaces old SELECT→INSERT TOCTOU pattern).
+    // Key: slab_address (marketAddress) — immutable even after resolveServerOwnedMint
+    // migrates markets.mint_address to a server-owned mirror.
+    const { allowed, nextClaimAt: rateLimitNextClaimAt, claimId } = await tryAirdropClaimGate(
+      supabase,
+      walletAddress,
+      marketAddress,
+    );
+    if (!allowed) {
       return NextResponse.json(
-        { error: "Already claimed in the last 24 hours", nextClaimAt },
+        { error: "Already claimed in the last 24 hours", nextClaimAt: rateLimitNextClaimAt },
         { status: 429 },
       );
     }
@@ -304,87 +376,104 @@ export async function POST(req: NextRequest) {
     // have a different authority and MintTo returns 0x4 OwnerMismatch.
     // resolveServerOwnedMint checks on-chain, falls back to a DB mirror, or creates
     // a new server-owned mint and updates the markets table for future requests.
+    //
+    // GH#1588: All code below runs AFTER the claim gate INSERT. If anything fails,
+    // we release the claim slot (releaseAirdropClaim) so the user isn't locked out
+    // for 24h due to a transient on-chain or resolver error.
+    let mintSucceeded = false;
     let resolvedMint: string;
+    let sig: string;
+    let tokensFloat: number;
     try {
-      resolvedMint = await resolveServerOwnedMint(
-        connection,
-        supabase,
-        marketAddress,
-        mintAddress,
-        mintAuthPubkey,
-        mintSigner,
-        decimals,
-      );
-    } catch (resolveErr) {
-      Sentry.captureException(resolveErr, {
-        tags: { endpoint: "/api/airdrop", step: "resolveServerOwnedMint" },
-        extra: { marketAddress, mintAddress, mintAuthPubkey },
-      });
-      return NextResponse.json(
-        { error: resolveErr instanceof Error ? resolveErr.message : "Failed to resolve mint authority" },
-        { status: 500 },
-      );
-    }
+      try {
+        resolvedMint = await resolveServerOwnedMint(
+          connection,
+          supabase,
+          marketAddress,
+          mintAddress,
+          mintAuthPubkey,
+          mintSigner,
+          decimals,
+        );
+      } catch (resolveErr) {
+        Sentry.captureException(resolveErr, {
+          tags: { endpoint: "/api/airdrop", step: "resolveServerOwnedMint" },
+          extra: { marketAddress, mintAddress, mintAuthPubkey },
+        });
+        // Release the claim slot so user can retry
+        if (claimId !== undefined) await releaseAirdropClaim(supabase, claimId);
+        return NextResponse.json(
+          { error: resolveErr instanceof Error ? resolveErr.message : "Failed to resolve mint authority" },
+          { status: 500 },
+        );
+      }
 
-    const mintPk = new PublicKey(resolvedMint);
+      const mintPk = new PublicKey(resolvedMint);
 
-    // Calculate airdrop amount
-    const tokensFloat = AIRDROP_USD_VALUE / priceUsd;
-    const airdropAmount = BigInt(Math.floor(tokensFloat * 10 ** decimals));
+      // Calculate airdrop amount
+      tokensFloat = AIRDROP_USD_VALUE / priceUsd;
+      const airdropAmount = BigInt(Math.floor(tokensFloat * 10 ** decimals));
 
-    const tx = new Transaction();
+      const tx = new Transaction();
 
-    // Create ATA if needed
-    const ata = await getAssociatedTokenAddress(mintPk, walletPk);
-    try {
-      await connection.getTokenAccountBalance(ata);
-    } catch {
+      // Create ATA if needed
+      const ata = await getAssociatedTokenAddress(mintPk, walletPk);
+      try {
+        await connection.getTokenAccountBalance(ata);
+      } catch {
+        tx.add(
+          createAssociatedTokenAccountInstruction(
+            mintAuthPk,
+            ata,
+            walletPk,
+            mintPk,
+          ),
+        );
+      }
+
+      // Mint tokens
       tx.add(
-        createAssociatedTokenAccountInstruction(
-          mintAuthPk,
-          ata,
-          walletPk,
+        createMintToInstruction(
           mintPk,
+          ata,
+          mintAuthPk,
+          airdropAmount,
         ),
       );
+
+      // Set blockhash and feePayer before signing
+      const { blockhash } = await connection.getLatestBlockhash();
+      tx.recentBlockhash = blockhash;
+      tx.feePayer = mintAuthPk;
+
+      const signedTx = mintSigner.signTransaction(tx) as Transaction;
+      sig = await connection.sendRawTransaction(signedTx.serialize());
+      await connection.confirmTransaction(sig, "confirmed");
+
+      mintSucceeded = true;
+
+      // Update claim row with amount + signature now that mint succeeded.
+      // The row was already inserted by tryAirdropClaimGate; we patch it in-place.
+      // Non-fatal if this fails — the claim gate already blocked re-use.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any)
+        .from("airdrop_claims")
+        .update({ amount_tokens: tokensFloat, amount_usd: AIRDROP_USD_VALUE, signature: sig })
+        .eq("id", claimId);
+    } finally {
+      // If mint failed for any reason, release the gate so user isn't locked out.
+      if (!mintSucceeded && claimId !== undefined) {
+        try { await releaseAirdropClaim(supabase, claimId); } catch { /* non-fatal */ }
+      }
     }
-
-    // Mint tokens
-    tx.add(
-      createMintToInstruction(
-        mintPk,
-        ata,
-        mintAuthPk,
-        airdropAmount,
-      ),
-    );
-
-    // Set blockhash and feePayer before signing
-    const { blockhash } = await connection.getLatestBlockhash();
-    tx.recentBlockhash = blockhash;
-    tx.feePayer = mintAuthPk;
-
-    const signedTx = mintSigner.signTransaction(tx) as Transaction;
-    const sig = await connection.sendRawTransaction(signedTx.serialize());
-    await connection.confirmTransaction(sig, "confirmed");
-
-    // Record claim
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any).from("airdrop_claims").insert({
-      wallet: walletAddress,
-      market_address: marketAddress,
-      amount_tokens: tokensFloat,
-      amount_usd: AIRDROP_USD_VALUE,
-      signature: sig,
-    });
 
     return NextResponse.json({
       status: "airdropped",
       symbol,
-      tokens: tokensFloat,
+      tokens: tokensFloat!,
       usdValue: AIRDROP_USD_VALUE,
-      signature: sig,
-      nextClaimAt: new Date(Date.now() + RATE_LIMIT_HOURS * 60 * 60 * 1000).toISOString(),
+      signature: sig!,
+      nextClaimAt: new Date(Date.now() + RATE_LIMIT_WINDOW_MS).toISOString(),
     });
   } catch (error) {
     Sentry.captureException(error, {
