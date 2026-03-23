@@ -315,10 +315,10 @@ describe("GET /api/markets — price sanitization (#856)", () => {
       const { GET } = await import("@/app/api/markets/route");
       const res = await GET();
       const body = (await res.json()) as { markets: { symbol: string; total_open_interest_usd: number | null }[] };
-      // vault < 1M → phantom OI suppressed
+      // vault < 1M → phantom OI suppressed (GH#1606: USD=0, not null, for consistency with zeroed atoms)
       for (const sym of ["DUST_1", "DUST_100", "DUST_999999"]) {
         const m = body.markets.find((m) => m.symbol === sym);
-        expect(m?.total_open_interest_usd).toBeNull(); // dust vault → phantom OI suppressed
+        expect(m?.total_open_interest_usd).toBe(0); // GH#1606: phantom → atoms zeroed → USD=0
       }
       // vault=1M → NOT phantom (strict <), OI passes through
       const creation1M = body.markets.find((m) => m.symbol === "CREATION_DEPOSIT_1M");
@@ -356,7 +356,8 @@ describe("GET /api/markets — price sanitization (#856)", () => {
       expect(realVault?.total_open_interest_usd).toBeCloseTo(0.001, 6);
     });
 
-    it("suppresses total_open_interest_usd when total_accounts = 0 regardless of vault_balance", async () => {
+    it("returns 0 total_open_interest_usd when total_accounts = 0 (GH#1606: phantom → atoms zeroed → USD=0)", async () => {
+      // GH#1606: phantom markets zero all OI atom fields; USD must match → 0 not null.
       mockMarkets = [
         mkMarket({ symbol: "NO_ACCOUNTS", total_accounts: 0, vault_balance: 500_000_000, total_open_interest: 2_000_000_000_000, last_price: 1.0 }),
       ];
@@ -365,7 +366,7 @@ describe("GET /api/markets — price sanitization (#856)", () => {
       const res = await GET();
       const body = (await res.json()) as { markets: { symbol: string; total_open_interest_usd: number | null }[] };
       const m = body.markets.find((m) => m.symbol === "NO_ACCOUNTS");
-      expect(m?.total_open_interest_usd).toBeNull();
+      expect(m?.total_open_interest_usd).toBe(0);
     });
   });
 });

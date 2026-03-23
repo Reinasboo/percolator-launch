@@ -21,17 +21,22 @@ describe("GH#1599 — zero OI with zero vault", () => {
     expect(computeDisplayOiUsd(0, false)).toBe(0);
   });
 
-  it("returns null for positive OI on phantom market", () => {
-    // Stale/orphaned OI on a market with no vault backing
-    expect(computeDisplayOiUsd(1234.56, true)).toBeNull();
+  it("returns 0 for positive OI on phantom market (GH#1606: atoms zeroed → USD must be 0)", () => {
+    // GH#1606: phantom markets zero all OI atom fields in the response,
+    // so USD must also be 0 for consistency (not null).
+    expect(computeDisplayOiUsd(1234.56, true)).toBe(0);
   });
 
   it("returns the value for positive OI on non-phantom market", () => {
     expect(computeDisplayOiUsd(1234.56, false)).toBe(1234.56);
   });
 
-  it("returns null when OI USD is null (no price available)", () => {
+  it("returns null when OI USD is null on non-phantom market (no price available)", () => {
     expect(computeDisplayOiUsd(null, false)).toBeNull();
-    expect(computeDisplayOiUsd(null, true)).toBeNull();
+  });
+
+  it("returns 0 when OI USD is null on phantom market (GH#1606: atoms zeroed)", () => {
+    // Phantom markets zero all OI atom fields, so USD must also be 0
+    expect(computeDisplayOiUsd(null, true)).toBe(0);
   });
 });

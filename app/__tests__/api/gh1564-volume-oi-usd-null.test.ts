@@ -132,7 +132,9 @@ describe("GH#1564: volume_24h_usd and total_open_interest_usd when Supabase retu
     expect(market.total_open_interest_usd).toBeNull();
   });
 
-  it("returns null total_open_interest_usd for phantom OI market (total_accounts=0, vault<1M)", async () => {
+  it("returns 0 total_open_interest_usd for phantom OI market (GH#1606: atoms zeroed → USD=0)", async () => {
+    // GH#1606: Phantom markets zero all raw OI atom fields in the response.
+    // USD must be consistent: atoms=0 → USD=0 (not null).
     mockRows = [makeMarket({
       total_accounts: "0",
       vault_balance: "0",
@@ -142,8 +144,8 @@ describe("GH#1564: volume_24h_usd and total_open_interest_usd when Supabase retu
     const body = await res.json();
     const market = body.markets[0];
 
-    // Phantom OI guard: total_accounts=0 → displayOiUsd = null
-    expect(market.total_open_interest_usd).toBeNull();
+    // Phantom OI guard: total_accounts=0, vault=0 → atoms zeroed → USD must also be 0
+    expect(market.total_open_interest_usd).toBe(0);
   });
 
   it("correctly computes USD fields for multiple markets with string NUMERIC fields", async () => {
