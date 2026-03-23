@@ -3,20 +3,65 @@
  * Percolator Insurance LP Staking program — instruction encoders, PDA derivation, and account specs.
  *
  * Program: percolator-stake (dcccrypto/percolator-stake)
- * Deployed devnet: 4mJ8Cas... (TODO: confirm full address from devops)
+ * Deployed devnet:  6aJb1F9CDCVWCNYFwj8aQsVb696YnW6J1FznteHq4Q6k
+ * Deployed mainnet: (pending deployment — DevOps must set STAKE_PROGRAM_ID env var or deploy and update STAKE_PROGRAM_IDS.mainnet)
  */
 
 import { PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY, SYSVAR_CLOCK_PUBKEY } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 
 // ═══════════════════════════════════════════════════════════════
-// Program ID
+// Program ID — network-conditional (mirrors program-ids.ts pattern)
 // ═══════════════════════════════════════════════════════════════
 
-/** Percolator Stake program ID (devnet). Update for mainnet. */
-export const STAKE_PROGRAM_ID = new PublicKey(
-  '6aJb1F9CDCVWCNYFwj8aQsVb696YnW6J1FznteHq4Q6k'
-);
+/** Known stake program addresses per network. Mainnet is empty until deployed. */
+export const STAKE_PROGRAM_IDS = {
+  devnet: '6aJb1F9CDCVWCNYFwj8aQsVb696YnW6J1FznteHq4Q6k',
+  mainnet: '', // TODO: populate once DevOps deploys percolator-stake to mainnet
+} as const;
+
+/**
+ * Resolve the stake program ID for the given network.
+ *
+ * Priority:
+ *  1. STAKE_PROGRAM_ID env var (explicit override — DevOps sets this for mainnet until constant is filled)
+ *  2. Network-specific constant from STAKE_PROGRAM_IDS
+ *
+ * Throws a clear error on mainnet when no address is available so callers
+ * surface the gap instead of silently hitting the devnet program.
+ */
+export function getStakeProgramId(network?: 'devnet' | 'mainnet'): PublicKey {
+  if (process.env.STAKE_PROGRAM_ID) {
+    return new PublicKey(process.env.STAKE_PROGRAM_ID);
+  }
+
+  const detectedNetwork =
+    network ??
+    (() => {
+      const n = process.env.NEXT_PUBLIC_DEFAULT_NETWORK?.toLowerCase() ??
+                process.env.NETWORK?.toLowerCase() ?? '';
+      return n === 'mainnet' || n === 'mainnet-beta' ? 'mainnet' : 'devnet';
+    })();
+
+  const id = STAKE_PROGRAM_IDS[detectedNetwork];
+  if (!id) {
+    throw new Error(
+      `Stake program not deployed on ${detectedNetwork}. ` +
+      `Set STAKE_PROGRAM_ID env var or wait for DevOps to deploy and update STAKE_PROGRAM_IDS.mainnet.`,
+    );
+  }
+  return new PublicKey(id);
+}
+
+/**
+ * Default export — resolves for the current runtime network.
+ * Use getStakeProgramId() with an explicit network argument where possible.
+ *
+ * @deprecated Direct use of STAKE_PROGRAM_ID is being phased out in favour of
+ *   getStakeProgramId() so mainnet callers get a clear error rather than silently
+ *   resolving to the devnet address.
+ */
+export const STAKE_PROGRAM_ID = new PublicKey(STAKE_PROGRAM_IDS.devnet);
 
 // ═══════════════════════════════════════════════════════════════
 // Instruction Tags (match src/instruction.rs)
@@ -52,26 +97,26 @@ export const STAKE_IX = {
 // ═══════════════════════════════════════════════════════════════
 
 /** Derive the stake pool PDA for a given slab (market). */
-export function deriveStakePool(slab: PublicKey, programId = STAKE_PROGRAM_ID) {
+export function deriveStakePool(slab: PublicKey, programId?: PublicKey) {
   return PublicKey.findProgramAddressSync(
     [Buffer.from('stake_pool'), slab.toBuffer()],
-    programId,
+    programId ?? getStakeProgramId(),
   );
 }
 
 /** Derive the vault authority PDA (signs CPI, owns LP mint + vault). */
-export function deriveStakeVaultAuth(pool: PublicKey, programId = STAKE_PROGRAM_ID) {
+export function deriveStakeVaultAuth(pool: PublicKey, programId?: PublicKey) {
   return PublicKey.findProgramAddressSync(
     [Buffer.from('vault_auth'), pool.toBuffer()],
-    programId,
+    programId ?? getStakeProgramId(),
   );
 }
 
 /** Derive the per-user deposit PDA (tracks cooldown, deposit time). */
-export function deriveDepositPda(pool: PublicKey, user: PublicKey, programId = STAKE_PROGRAM_ID) {
+export function deriveDepositPda(pool: PublicKey, user: PublicKey, programId?: PublicKey) {
   return PublicKey.findProgramAddressSync(
     [Buffer.from('deposit'), pool.toBuffer(), user.toBuffer()],
-    programId,
+    programId ?? getStakeProgramId(),
   );
 }
 
