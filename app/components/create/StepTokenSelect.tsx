@@ -209,10 +209,13 @@ export const StepTokenSelect: FC<StepTokenSelectProps> = ({
           // Step 2: Mint not found on devnet after retries — try mirror from mainnet
           if (cancelled) return;
           setMintNetworkStatus("mirroring");
+          // GH#1614: include walletAddress so /api/devnet-mirror-mint can associate
+          // the mirror with the connected wallet (required field — API returns 400 without it).
+          const mirrorWallet = publicKey?.toBase58() ?? null;
           const resp = await fetch("/api/devnet-mirror-mint", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ mainnetCA: mintAddr }),
+            body: JSON.stringify({ mainnetCA: mintAddr, walletAddress: mirrorWallet }),
           });
           if (cancelled) return;
           const data = await resp.json();
@@ -279,9 +282,10 @@ export const StepTokenSelect: FC<StepTokenSelectProps> = ({
     })();
     return () => { cancelled = true; };
     // GH#1258: intentionally exclude callback props — accessed via stable refs above.
-    // Only restart on genuine mint/network changes.
+    // GH#1614: publicKey added so effect re-runs when wallet connects after mint is entered,
+    // enabling mirror-mint to include walletAddress on the retry attempt.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mintPk, connection, isDevnet]);
+  }, [mintPk, connection, isDevnet, publicKey]);
 
   // Propagate token meta changes.
   // PERC-1093: Don't override an already-resolved devnet/mirror meta with null mainnet metadata.
