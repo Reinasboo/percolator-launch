@@ -8,6 +8,7 @@ import { getConfig } from "@/lib/config";
 import * as Sentry from "@sentry/nextjs";
 import { isSaneMarketValue, isActiveMarket, isZombieMarket } from "@/lib/activeMarketFilter";
 import { isPhantomOpenInterest } from "@/lib/phantom-oi";
+import { computeDisplayOiUsd } from "@/lib/oi-display";
 import { computeMarketHealthFromStats } from "@/lib/health";
 import { BLOCKED_SLAB_ADDRESSES } from "@/lib/blocklist";
 import { SLUG_ALIASES } from "@/lib/symbol-utils";
@@ -255,7 +256,10 @@ export async function GET(request: NextRequest) {
       const accountsCount = n_total_accounts ?? 0;
       const vaultBal = n_vault_balance ?? 0;
       const isPhantomOI = isPhantomOpenInterest(accountsCount, vaultBal);
-      const displayOiUsd = isPhantomOI ? null : total_open_interest_usd;
+      // GH#1599: When OI is genuinely 0, display 0 regardless of phantom status.
+      // The phantom guard only suppresses *positive* OI values that are stale/orphaned
+      // (no vault backing). Zero OI is always valid — it means "no positions".
+      const displayOiUsd = computeDisplayOiUsd(total_open_interest_usd, isPhantomOI);
 
       // GH#1270: Pre-compute volume_24h in USD so consumers (e.g. Watchlist) don't need
       // to divide by 10^decimals manually. Mirrors the total_open_interest_usd pattern.
