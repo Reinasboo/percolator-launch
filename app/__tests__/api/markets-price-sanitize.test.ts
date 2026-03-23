@@ -217,7 +217,7 @@ describe("GET /api/markets — price sanitization (#856)", () => {
     const fallback = body.markets.find((m) => m.symbol === "FALLBACK");
 
     expect(norm?.total_open_interest_usd).toBeCloseTo(0.001, 6);   // 1000 / 1e6 * 1.0
-    expect(sentinel?.total_open_interest_usd).toBeNull();           // sentinel rejected
+    expect(sentinel?.total_open_interest_usd).toBe(0);              // GH#1594: sentinel primary rejected, but long=0+short=0 → valid zero OI
     expect(noprice?.total_open_interest_usd).toBeNull();            // no price
     expect(fallback?.total_open_interest_usd).toBeCloseTo(0.001, 6); // (600+400) / 1e6 * 1.0
   });
