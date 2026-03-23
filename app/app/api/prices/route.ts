@@ -25,10 +25,23 @@ export const dynamic = "force-dynamic";
  *     }
  *   }
  *
- * Security note: this route is BLOCKED from serving on mainnet.
- * The cluster guard sits in TraderFleetBot.start() upstream.
+ * Network: this route is restricted to devnet only.
+ * On mainnet, `market_stats` will contain mainnet oracle data — this guard
+ * prevents accidental serving of stale devnet prices on production.
  */
 export async function GET() {
+  // ── Network guard: devnet only (GH#1574) ───────────────────
+  const network =
+    process.env.NEXT_PUBLIC_DEFAULT_NETWORK?.trim() ??
+    process.env.NEXT_PUBLIC_SOLANA_NETWORK?.trim();
+  if (network === "mainnet-beta" || network === "mainnet") {
+    return NextResponse.json(
+      { error: "prices endpoint not available on mainnet" },
+      { status: 403 }
+    );
+  }
+
+
   try {
     // ── Primary: Supabase market_stats ─────────────────────────
     const db = getServiceClient();

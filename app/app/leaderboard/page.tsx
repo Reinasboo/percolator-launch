@@ -8,6 +8,13 @@ import { useWalletCompat } from "@/hooks/useWalletCompat";
 /** S2 devnet trading competition end: March 21, 2026 00:00 UTC */
 const COMPETITION_END = new Date("2026-03-21T00:00:00Z");
 
+/** True when deployed against mainnet-beta (GH#1572, GH#1573) */
+const IS_MAINNET =
+  process.env.NEXT_PUBLIC_DEFAULT_NETWORK?.trim() === "mainnet-beta" ||
+  process.env.NEXT_PUBLIC_DEFAULT_NETWORK?.trim() === "mainnet" ||
+  process.env.NEXT_PUBLIC_SOLANA_NETWORK?.trim() === "mainnet-beta" ||
+  process.env.NEXT_PUBLIC_SOLANA_NETWORK?.trim() === "mainnet";
+
 /* ── Types ────────────────────────────────────────────────── */
 interface LeaderboardEntry {
   rank: number;
@@ -61,10 +68,13 @@ function pad(n: number): string {
 }
 
 /** Format raw bigint volume as a compact human-readable string */
-/** Base-unit divisor: 9 decimal places matching devnet market collateral (PERC token).
- *  Previous value (10^6) was incorrect — caused volumes to display 1000x too high.
- *  TODO: fetch actual collateral decimals per-market for multi-collateral support. */
-const BASE_UNIT_DIVISOR = 1_000_000_000;
+/**
+ * Base-unit divisor for collateral decimals (GH#1573):
+ * - Mainnet: USDC (6 decimals) → 10^6
+ * - Devnet:  PERC token (9 decimals) → 10^9
+ * TODO: fetch actual collateral decimals per-market for multi-collateral support.
+ */
+const BASE_UNIT_DIVISOR = IS_MAINNET ? 1_000_000 : 1_000_000_000;
 
 function fmtVolume(raw: string): string {
   try {
@@ -246,17 +256,19 @@ function buildShareText(entry: LeaderboardEntry): string {
   const medal = RANK_MEDALS[entry.rank];
   const rankStr = medal ? `${medal} #${entry.rank}` : `#${entry.rank}`;
   const vol = fmtVolume(entry.totalVolume);
+  const network = IS_MAINNET ? "mainnet" : "devnet";
   return (
-    `I'm ${rankStr} on the @percolatorlaunch devnet leaderboard with ${vol} volume!\n\n` +
-    `S2 devnet competition ends Mar 21 — top traders get beta access 🚀\n\n` +
+    `I'm ${rankStr} on the @percolatorlaunch ${network} leaderboard with ${vol} volume!\n\n` +
+    `Permissionless perps on Solana — join the beta 🚀\n\n` +
     LEADERBOARD_URL
   );
 }
 
 function buildGenericShareText(): string {
+  const network = IS_MAINNET ? "mainnet" : "devnet";
   return (
-    `Check out the @percolatorlaunch devnet trading competition!\n\n` +
-    `Permissionless perps on Solana — top traders get beta access 🚀\n\n` +
+    `Check out the @percolatorlaunch ${network} trading leaderboard!\n\n` +
+    `Permissionless perps on Solana — join the beta 🚀\n\n` +
     LEADERBOARD_URL
   );
 }
@@ -476,24 +488,30 @@ export default function LeaderboardPage() {
             >
               Leaderboard
             </h1>
-            <span
-              className="text-xs font-mono px-2 py-0.5 rounded-sm border"
-              style={{
-                color: "var(--accent)",
-                borderColor: "var(--accent)",
-                background: "rgba(153,69,255,0.07)",
-              }}
-            >
-              DEVNET
-            </span>
+            {/* Network badge: hidden on mainnet (GH#1572) */}
+            {!IS_MAINNET && (
+              <span
+                className="text-xs font-mono px-2 py-0.5 rounded-sm border"
+                style={{
+                  color: "var(--accent)",
+                  borderColor: "var(--accent)",
+                  background: "rgba(153,69,255,0.07)",
+                }}
+              >
+                DEVNET
+              </span>
+            )}
           </div>
           <p style={{ color: "var(--text-secondary)" }} className="text-sm font-mono">
-            Top traders by trade volume on the Percolator devnet (trade count as tiebreaker)
+            {IS_MAINNET
+              ? "Top traders by volume on Percolator (trade count as tiebreaker)"
+              : "Top traders by trade volume on the Percolator devnet (trade count as tiebreaker)"}
           </p>
         </div>
 
         {/* ── Competition Banner ──────────────────────────────────── */}
-        <CompetitionBanner />
+        {/* S2 devnet competition banner: only shown on devnet (GH#1572) */}
+        {!IS_MAINNET && <CompetitionBanner />}
 
         {/* ── Period Switcher ─────────────────────────────────────── */}
         <div className="flex gap-1 mb-6">
@@ -704,7 +722,9 @@ export default function LeaderboardPage() {
                 Want to climb the board?
               </p>
               <p className="text-xs font-mono" style={{ color: "var(--text-secondary)" }}>
-                Get free devnet tokens and start trading across 126+ markets.
+                {IS_MAINNET
+                  ? "Start trading permissionless perps across 126+ markets."
+                  : "Get free devnet tokens and start trading across 126+ markets."}
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -728,8 +748,9 @@ export default function LeaderboardPage() {
                   SHARE 𝕏
                 </button>
               )}
+              {/* On mainnet link to trade; on devnet link to faucet (GH#1572) */}
               <Link
-                href="/devnet-mint"
+                href={IS_MAINNET ? "/trade" : "/devnet-mint"}
                 className="shrink-0 px-4 py-2 text-xs font-mono font-semibold tracking-wide transition-all"
                 style={{
                   background: "var(--accent)",
@@ -737,7 +758,7 @@ export default function LeaderboardPage() {
                   border: "1px solid var(--accent)",
                 }}
               >
-                GET TOKENS →
+                {IS_MAINNET ? "TRADE NOW →" : "GET TOKENS →"}
               </Link>
             </div>
           </div>
