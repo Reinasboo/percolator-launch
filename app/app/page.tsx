@@ -500,7 +500,10 @@ export default function Home() {
                     <div className="text-right text-[12px] text-[var(--text-secondary)]">
                       {m.total_open_interest > 0 ? formatCompact(m.total_open_interest) : "—"}
                     </div>
-                    <div className="text-right text-[11px] text-[var(--long)]">LIVE</div>
+                    {/* GH#1622: show oracle status — "LIVE" only when price is available */}
+                    <div className={`text-right text-[11px] ${m.last_price != null ? "text-[var(--long)]" : "text-[var(--warning)]"}`}>
+                      {m.last_price != null ? "LIVE" : "NO ORACLE"}
+                    </div>
                   </Link>
                 ))}
               </div>

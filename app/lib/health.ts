@@ -1,6 +1,6 @@
 import type { EngineState } from "@percolator/sdk";
 
-export type HealthLevel = "healthy" | "caution" | "warning" | "empty";
+export type HealthLevel = "healthy" | "caution" | "warning" | "empty" | "oracle-down";
 
 export interface MarketHealth {
   level: HealthLevel;
