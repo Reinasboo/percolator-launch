@@ -15,6 +15,7 @@ import { EngineHealthCard } from "@/components/trade/EngineHealthCard";
 import { MarketStatsCard } from "@/components/trade/MarketStatsCard";
 import { MarketBookCard } from "@/components/trade/MarketBookCard";
 import { TradingChart } from "@/components/trade/TradingChart";
+import { MarketInfoBar } from "@/components/trade/MarketInfoBar";
 import { useIsLargeScreen } from "@/hooks/useIsLargeScreen";
 import { useAdvanceOraclePhase } from "@/hooks/useAdvanceOraclePhase";
 import { TradeHistory } from "@/components/trade/TradeHistory";
@@ -333,73 +334,9 @@ function TradePageInner({ slab }: { slab: string }) {
         </div>
       </div>
 
-      {/* ── DESKTOP: Compact header bar ── */}
-      <div className="hidden lg:flex items-center gap-3 border-b border-[var(--border)]/30 px-6 py-1.5">
-        {/* Left: pair selector */}
-        <MarketLogo logoUrl={logoUrl} mintAddress={config?.collateralMint?.toBase58()} symbol={symbol} size="sm" />
-        <MarketSelector
-          currentSlabAddress={slab}
-          symbol={symbol}
-          logoUrl={logoUrl}
-        />
-
-        <span className="h-3.5 w-px bg-[var(--border)]/40" />
-
-        {/* Price — show "—" if market loaded but no oracle price */}
-        {!slabLoading && (
-          <span className={`text-sm font-bold tabular-nums ${priceDisplay ? "text-[var(--text)]" : "text-[var(--text-dim)]"}`} style={{ fontFamily: "var(--font-mono)" }}>
-            {priceDisplay ?? "\u2014"}
-          </span>
-        )}
-
-        <span className="h-3.5 w-px bg-[var(--border)]/40" />
-
-        {/* Metadata */}
-        <span className="flex items-center text-[10px] text-[var(--text-dim)]" style={{ fontFamily: "var(--font-mono)" }}>
-          {shortAddress}
-          <CopyButton text={slab} />
-        </span>
-
-        {health && (
-          <>
-            <span className="h-3.5 w-px bg-[var(--border)]/40" />
-            <HealthBadge level={health.level} />
-          </>
-        )}
-
-        {oracleMode && (
-          <>
-            <span className="h-3.5 w-px bg-[var(--border)]/40" />
-            <OracleBadge
-              mode={oracleMode}
-              status={oracleBadgeStatus}
-            />
-          </>
-        )}
-
-        {header?.admin && (
-          <>
-            <span className="h-3.5 w-px bg-[var(--border)]/40" />
-            <span className={`text-[9px] font-medium uppercase tracking-[0.12em] px-1.5 py-0.5 rounded-sm border ${
-              header.admin.toBase58() === "11111111111111111111111111111111"
-                ? "border-[var(--long)]/30 bg-[var(--long)]/5 text-[var(--long)]"
-                : "border-[var(--warning)]/30 bg-[var(--warning)]/5 text-[var(--warning)]"
-            }`}>
-              {header.admin.toBase58() === "11111111111111111111111111111111" ? "Admin Renounced" : "Admin Active"}
-            </span>
-          </>
-        )}
-
-        {/* Right-aligned controls */}
-        <div className="ml-auto flex items-center gap-3">
-          <AirdropButton mintAddress={mintAddress} symbol={symbol} isDevnetMirror={supabaseMarket ? !!supabaseMarket.mainnet_ca : true} />
-          <UsdToggleButton />
-          <ShareButton
-            slabAddress={slab}
-            marketName={symbol}
-            price={BigInt(Math.round((priceUsd ?? 0) * 1e6))}
-          />
-        </div>
+      {/* ── DESKTOP: Market info bar ── */}
+      <div className="hidden lg:block">
+        <MarketInfoBar slabAddress={slab} symbol={symbol} logoUrl={logoUrl} />
       </div>
 
 
@@ -479,13 +416,15 @@ function TradePageInner({ slab }: { slab: string }) {
           DESKTOP LAYOUT  (≥ lg / 1024px)
           Two columns: left ~68%, right ~32%
           ════════════════════════════════════════════════════════ */}
-      <div className="hidden lg:grid grid-cols-[1fr_380px] gap-4 px-4 lg:px-6 pb-3 pt-2">
-        {/* ── Left column ── */}
-        <div className="min-w-0 space-y-1.5">
+      <div className="hidden lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,220px)_minmax(0,340px)] gap-4 px-4 lg:px-6 pb-3 pt-2">
+        {/* ── Left column: Chart + Positions ── */}
+        <div className="min-w-0 flex flex-col gap-1.5">
           {/* Chart — only mount on desktop to prevent dual ChartEmptyState stacking */}
           {isLargeScreen && (
             <ErrorBoundary label="TradingChart">
-              <TradingChart slabAddress={slab} mintAddress={mintAddress || undefined} />
+              <div className="flex-1 min-h-[500px]">
+                <TradingChart slabAddress={slab} mintAddress={mintAddress || undefined} />
+              </div>
             </ErrorBoundary>
           )}
 
@@ -496,7 +435,14 @@ function TradePageInner({ slab }: { slab: string }) {
           </Tabs>
         </div>
 
-        {/* ── Right column ── */}
+        {/* ── Middle column: Order Book ── */}
+        <div className="min-w-0">
+          <ErrorBoundary label="MarketBookCard">
+            <MarketBookCard />
+          </ErrorBoundary>
+        </div>
+
+        {/* ── Right column: Trade Panel ── */}
         <div className="min-w-0 space-y-1.5">
           <div className="sticky top-0 z-20 space-y-1.5">
             <ErrorBoundary label="DepositTrigger">
@@ -507,8 +453,8 @@ function TradePageInner({ slab }: { slab: string }) {
             </ErrorBoundary>
           </div>
 
-          {/* Market info tabs */}
-          <Tabs tabs={["Stats", "Trades", "Health", "Risk", "Book"]}>
+          {/* Market info tabs — Book removed (now in middle column) */}
+          <Tabs tabs={["Stats", "Trades", "Health", "Risk"]}>
             <ErrorBoundary label="MarketStatsCard"><MarketStatsCard /></ErrorBoundary>
             <ErrorBoundary label="TradeHistory"><TradeHistory slabAddress={slab} /></ErrorBoundary>
             <ErrorBoundary label="EngineHealthCard">
@@ -523,7 +469,6 @@ function TradePageInner({ slab }: { slab: string }) {
               <div className="mt-1.5"><LiquidationAnalytics /></div>
               <div className="mt-1.5"><SystemCapitalCard /></div>
             </ErrorBoundary>
-            <ErrorBoundary label="MarketBookCard"><MarketBookCard /></ErrorBoundary>
           </Tabs>
         </div>
       </div>

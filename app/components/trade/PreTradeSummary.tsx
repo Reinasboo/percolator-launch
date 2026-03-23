@@ -85,8 +85,15 @@ export const PreTradeSummary: FC<PreTradeSummaryProps> = ({
     ? formatNum((Number(margin) / Math.pow(10, decimals)) * priceUsd)
     : `${formatTokenAmount(margin, decimals)} ${symbol}`;
 
+  // Liq price warning: if within 15% of entry
+  const estEntryNum = Number(estEntry) / 1e6;
+  const liqPriceNum = Number(liqPrice) / 1e6;
+  const liqWarning = isLong
+    ? liqPriceNum > estEntryNum * 0.85
+    : liqPriceNum < estEntryNum * 1.15;
+
   return (
-    <div className="mb-4 rounded-none border border-[var(--border)]/50 bg-[var(--bg)]/80 px-3.5 py-3 text-xs">
+    <div className="mb-4 rounded-none border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.04)] px-3.5 py-3 text-xs">
       <div className="mb-2 flex items-center gap-2">
         <div className={`h-1.5 w-1.5 rounded-full ${isLong ? "bg-[var(--long)]" : "bg-[var(--short)]"}`} />
         <span className="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-muted)]">
@@ -116,8 +123,8 @@ export const PreTradeSummary: FC<PreTradeSummaryProps> = ({
         />
         <SummaryRow
           label="Est. Liq Price"
-          value={formatUsd(liqPrice)}
-          valueClass={isLong ? "text-[var(--short)]" : "text-[var(--long)]"}
+          value={`${liqWarning ? "⚠️ " : ""}${formatUsd(liqPrice)}`}
+          valueClass={liqWarning ? "text-orange-400" : isLong ? "text-[var(--short)]" : "text-[var(--long)]"}
         />
       </div>
     </div>
