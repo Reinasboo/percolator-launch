@@ -467,10 +467,8 @@ export async function GET(request: NextRequest) {
       // This caused vault=0 markets (with legacy c_tot from FF7K keeper pattern) to rank
       // as best health (0) and appear first in sort=health results.
       // Fix: treat no-vault markets as rank 3 (empty) directly, before health computation.
-      const vaultNum = typeof m.vault_balance === "number"
-        ? m.vault_balance
-        : (m.vault_balance != null ? Number(m.vault_balance) : null);
-      if (vaultNum !== null && !Number.isNaN(vaultNum) && vaultNum < MIN_VAULT_FOR_OI) {
+      const vaultNum = numericOrNull(m.vault_balance);
+      if (vaultNum !== null && vaultNum < MIN_VAULT_FOR_OI) {
         return HEALTH_ORDER["empty"]; // 3 — no vault = no real LP market
       }
       const h = computeMarketHealthFromStats({

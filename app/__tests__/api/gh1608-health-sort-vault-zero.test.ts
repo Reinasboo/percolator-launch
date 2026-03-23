@@ -127,8 +127,7 @@ describe("GH#1608 — health sort: vault=0 markets must not rank as healthy", ()
       // vault=null → guard doesn't fire → computeMarketHealthFromStats called
       // result depends on stats, but we just verify no crash and a valid rank
       const rank = healthRank(noVault);
-      expect(rank).toBeGreaterThanOrEqual(0);
-      expect(rank).toBeLessThanOrEqual(5);
+      expect([0, 1, 2, 3]).toContain(rank);
     });
 
     it("vault=999999 (dust, < MIN_VAULT_FOR_OI) → rank 3 (empty)", () => {
