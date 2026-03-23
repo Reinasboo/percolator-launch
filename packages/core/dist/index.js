@@ -2364,9 +2364,28 @@ function isStandardToken(tokenProgramId) {
 // src/solana/stake.ts
 import { PublicKey as PublicKey7, SystemProgram as SystemProgram2, SYSVAR_RENT_PUBKEY as SYSVAR_RENT_PUBKEY2, SYSVAR_CLOCK_PUBKEY as SYSVAR_CLOCK_PUBKEY2 } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID as TOKEN_PROGRAM_ID4 } from "@solana/spl-token";
-var STAKE_PROGRAM_ID = new PublicKey7(
-  "6aJb1F9CDCVWCNYFwj8aQsVb696YnW6J1FznteHq4Q6k"
-);
+var STAKE_PROGRAM_IDS = {
+  devnet: "6aJb1F9CDCVWCNYFwj8aQsVb696YnW6J1FznteHq4Q6k",
+  mainnet: ""
+  // TODO: populate once DevOps deploys percolator-stake to mainnet
+};
+function getStakeProgramId(network) {
+  if (process.env.STAKE_PROGRAM_ID) {
+    return new PublicKey7(process.env.STAKE_PROGRAM_ID);
+  }
+  const detectedNetwork = network ?? (() => {
+    const n = process.env.NEXT_PUBLIC_DEFAULT_NETWORK?.toLowerCase() ?? process.env.NETWORK?.toLowerCase() ?? "";
+    return n === "mainnet" || n === "mainnet-beta" ? "mainnet" : "devnet";
+  })();
+  const id = STAKE_PROGRAM_IDS[detectedNetwork];
+  if (!id) {
+    throw new Error(
+      `Stake program not deployed on ${detectedNetwork}. Set STAKE_PROGRAM_ID env var or wait for DevOps to deploy and update STAKE_PROGRAM_IDS.mainnet.`
+    );
+  }
+  return new PublicKey7(id);
+}
+var STAKE_PROGRAM_ID = new PublicKey7(STAKE_PROGRAM_IDS.devnet);
 var STAKE_IX = {
   InitPool: 0,
   Deposit: 1,
@@ -2391,22 +2410,22 @@ var STAKE_IX = {
   /** PERC-303: Deposit into junior (first-loss) tranche */
   DepositJunior: 16
 };
-function deriveStakePool(slab, programId = STAKE_PROGRAM_ID) {
+function deriveStakePool(slab, programId) {
   return PublicKey7.findProgramAddressSync(
     [Buffer.from("stake_pool"), slab.toBuffer()],
-    programId
+    programId ?? getStakeProgramId()
   );
 }
-function deriveStakeVaultAuth(pool, programId = STAKE_PROGRAM_ID) {
+function deriveStakeVaultAuth(pool, programId) {
   return PublicKey7.findProgramAddressSync(
     [Buffer.from("vault_auth"), pool.toBuffer()],
-    programId
+    programId ?? getStakeProgramId()
   );
 }
-function deriveDepositPda(pool, user, programId = STAKE_PROGRAM_ID) {
+function deriveDepositPda(pool, user, programId) {
   return PublicKey7.findProgramAddressSync(
     [Buffer.from("deposit"), pool.toBuffer(), user.toBuffer()],
-    programId
+    programId ?? getStakeProgramId()
   );
 }
 function readU64LE4(data, off) {
@@ -3367,6 +3386,7 @@ export {
   STAKE_IX,
   STAKE_POOL_SIZE,
   STAKE_PROGRAM_ID,
+  STAKE_PROGRAM_IDS,
   TOKEN_2022_PROGRAM_ID,
   VAMM_MAGIC,
   ValidationError,
@@ -3491,6 +3511,7 @@ export {
   getErrorName,
   getMatcherProgramId,
   getProgramId,
+  getStakeProgramId,
   initPoolAccounts,
   isAccountUsed,
   isStandardToken,
