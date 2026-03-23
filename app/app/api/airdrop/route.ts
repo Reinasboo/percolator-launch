@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   Connection,
   Keypair,
+  LAMPORTS_PER_SOL,
   PublicKey,
   Transaction,
   sendAndConfirmTransaction,
@@ -156,6 +157,33 @@ export async function POST(req: NextRequest) {
 
     const cfg = getConfig();
     const connection = new Connection(cfg.rpcUrl, "confirmed");
+
+    // GH#1583: Ensure mint authority has enough SOL to create ATAs (~0.002 SOL each).
+    // Auto-request devnet airdrop if balance is below threshold.
+    // Threshold: 0.01 SOL (covers ~5 ATA creations with headroom for tx fees).
+    const MIN_SOL_THRESHOLD = 0.01 * LAMPORTS_PER_SOL;
+    const REFILL_SOL = 2; // lamports requested per airdrop call (devnet only)
+    try {
+      const mintAuthBalance = await connection.getBalance(mintAuthority.publicKey);
+      if (mintAuthBalance < MIN_SOL_THRESHOLD) {
+        console.warn(
+          `airdrop: mint authority balance low (${mintAuthBalance} lamports). Requesting devnet airdrop...`,
+        );
+        // requestAirdrop is fire-and-confirm; if rate-limited this throws but we continue anyway
+        const sig = await connection.requestAirdrop(
+          mintAuthority.publicKey,
+          REFILL_SOL * LAMPORTS_PER_SOL,
+        );
+        await connection.confirmTransaction(sig, "confirmed");
+        console.info(`airdrop: mint authority refilled. sig=${sig}`);
+      }
+    } catch (refillErr) {
+      // Non-fatal: devnet faucet may be rate-limited. Log and continue; the main tx will
+      // fail with a clear lamport error if balance truly insufficient.
+      console.warn(
+        `airdrop: could not auto-refill mint authority: ${refillErr instanceof Error ? refillErr.message : refillErr}`,
+      );
+    }
 
     // Calculate airdrop amount
     const decimals = 6; // Standard for devnet mirrors
