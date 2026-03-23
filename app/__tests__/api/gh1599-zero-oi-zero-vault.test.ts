@@ -4,17 +4,12 @@
  *
  * The phantom OI guard (isPhantomOpenInterest) suppresses *positive* OI when
  * vault < MIN_VAULT_FOR_OI, but zero OI is always valid — it means "no positions".
+ *
+ * This test exercises the shared computeDisplayOiUsd helper used by the markets
+ * route so that route regressions are caught via a single source of truth.
  */
 import { describe, it, expect } from "vitest";
-
-// Inline the logic from route.ts to unit-test the displayOiUsd derivation
-function computeDisplayOiUsd(
-  totalOpenInterestUsd: number | null,
-  isPhantom: boolean,
-): number | null {
-  // GH#1599 fix: zero OI is always valid regardless of phantom status
-  return totalOpenInterestUsd === 0 ? 0 : (isPhantom ? null : totalOpenInterestUsd);
-}
+import { computeDisplayOiUsd } from "@/lib/oi-display";
 
 describe("GH#1599 — zero OI with zero vault", () => {
   it("returns 0 for zero-OI market with vault=0 (previously null)", () => {
