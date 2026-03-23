@@ -429,13 +429,17 @@ export async function GET(request: NextRequest) {
     //
     // GH#1566: sort=oi and sort=volume are named aliases matching the frontend SortKey enum.
     // Previously these fell through to no-sort (not in SORTABLE_FIELDS), returning DB order.
-    // - "oi"     → total_open_interest DESC (raw atom count; USD not reliable on devnet)
+    // - "oi"     → total_open_interest_usd DESC NULLS LAST (USD-denominated; nulls always last)
+    //              GH#1582: Was previously total_open_interest (raw atoms), causing no-price
+    //              markets with large atom counts (e.g. 2.66T atoms, null USD) to rank above
+    //              priced markets like usdEkK5G ($59,994 OI) and MOLTBOT ($4,620 OI).
+    //              The null-last logic in the sort comparator already handles NULLS LAST.
     // - "volume" → volume_24h DESC
     // - "health" → computed health level numeric sort via computeMarketHealthFromStats
     //              (healthy=0 < caution=1 < warning=2 < empty=3), ascending by default
     const NAMED_SORT_ALIASES: Record<string, { field: string; dir: number } | "health"> = {
       recent: { field: "created_at", dir: -1 },
-      oi: { field: "total_open_interest", dir: -1 },
+      oi: { field: "total_open_interest_usd", dir: -1 },
       volume: { field: "volume_24h", dir: -1 },
       health: "health",
     };
