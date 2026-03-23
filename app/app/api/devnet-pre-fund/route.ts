@@ -32,6 +32,7 @@ import {
 } from "@solana/spl-token";
 import { getConfig } from "@/lib/config";
 import { getServiceClient } from "@/lib/supabase";
+import { tryFaucetGate, releaseFaucetClaim } from "@/lib/faucet-rate-gate";
 import * as Sentry from "@sentry/nextjs";
 
 export const dynamic = "force-dynamic";
@@ -176,6 +177,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid walletAddress" }, { status: 400 });
     }
 
+    // GH#1601: per-wallet rate limit using INSERT-as-gate on faucet_claims.
+    // fund_type = `devnet-pre-fund:<mintAddress>` so each mint is gated independently.
+    // Concurrent requests for the same wallet+mint race on INSERT — loser gets 23505.
+    const supabaseForGate = getServiceClient();
+    const fundType = `devnet-pre-fund:${mintAddress}`;
+    const gate = await tryFaucetGate(supabaseForGate, walletAddress, fundType);
+    if (!gate.allowed) {
+      return NextResponse.json(
+        {
+          error: "Already pre-funded recently",
+          nextClaimAt: gate.nextClaimAt,
+        },
+        { status: 429 },
+      );
+    }
+
     // Load mint authority
     const mintAuthKeyJson = process.env.DEVNET_MINT_AUTHORITY_KEYPAIR;
     if (!mintAuthKeyJson) {
@@ -268,6 +285,8 @@ export async function POST(req: NextRequest) {
     }
 
     if (currentBalance >= FULL_MARKET_TOKEN_REQUIREMENT) {
+      // Release gate so concurrent requests (and future calls) aren't locked out
+      if (gate.claimId != null) await releaseFaucetClaim(supabaseForGate, gate.claimId);
       return NextResponse.json({
         status: "sufficient",
         balance: currentBalance.toString(),
@@ -302,10 +321,17 @@ export async function POST(req: NextRequest) {
       ),
     );
 
-    const sig = await withTimeout(
-      sendAndConfirmTransaction(connection, tx, [mintAuthority], { commitment: "confirmed" }),
-      30_000, // 30s — devnet RPC should confirm well within this
-    );
+    let sig: string;
+    try {
+      sig = await withTimeout(
+        sendAndConfirmTransaction(connection, tx, [mintAuthority], { commitment: "confirmed" }),
+        30_000, // 30s — devnet RPC should confirm well within this
+      );
+    } catch (txErr) {
+      // TX failed — release gate so user can retry
+      if (gate.claimId != null) await releaseFaucetClaim(supabaseForGate, gate.claimId);
+      throw txErr; // re-throw to outer catch for Sentry + 500 response
+    }
 
     return NextResponse.json({
       status: "funded",
