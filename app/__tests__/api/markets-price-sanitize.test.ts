@@ -193,15 +193,16 @@ describe("GET /api/markets — price sanitization (#856)", () => {
   });
 
   it("includes total_open_interest_usd — computed USD field from raw OI + decimals + price (#1160)", async () => {
-    // 1000 micro-units @ 6 decimals = 0.001 tokens; at $1.0/token = $0.001
+    // GH#1618: rawToUsd rounds to 2dp — use amounts that produce exact 2dp results.
+    // 1_000_000 micro-units @ 6 decimals = 1.0 tokens; at $1.0/token = $1.00
     mockMarkets = [
-      mkMarket({ symbol: "NORM", total_open_interest: 1_000, decimals: 6, last_price: 1.0 }),
+      mkMarket({ symbol: "NORM", total_open_interest: 1_000_000, decimals: 6, last_price: 1.0 }),
       // Sentinel value with no valid long/short fallback — should produce null USD
       mkMarket({ symbol: "SENTINEL", total_open_interest: 2e19, open_interest_long: 0, open_interest_short: 0, decimals: 6, last_price: 1.0 }),
       // No price — should produce null USD
-      mkMarket({ symbol: "NOPRICE", total_open_interest: 1_000, decimals: 6, last_price: null }),
-      // total_open_interest null but long+short available
-      mkMarket({ symbol: "FALLBACK", total_open_interest: null, open_interest_long: 600, open_interest_short: 400, decimals: 6, last_price: 1.0 }),
+      mkMarket({ symbol: "NOPRICE", total_open_interest: 1_000_000, decimals: 6, last_price: null }),
+      // total_open_interest null but long+short available: 600_000+400_000 = 1_000_000 atoms → $1.00
+      mkMarket({ symbol: "FALLBACK", total_open_interest: null, open_interest_long: 600_000, open_interest_short: 400_000, decimals: 6, last_price: 1.0 }),
     ];
 
     vi.resetModules();
@@ -216,10 +217,10 @@ describe("GET /api/markets — price sanitization (#856)", () => {
     const noprice = body.markets.find((m) => m.symbol === "NOPRICE");
     const fallback = body.markets.find((m) => m.symbol === "FALLBACK");
 
-    expect(norm?.total_open_interest_usd).toBeCloseTo(0.001, 6);   // 1000 / 1e6 * 1.0
-    expect(sentinel?.total_open_interest_usd).toBe(0);              // GH#1594: sentinel primary rejected, but long=0+short=0 → valid zero OI
-    expect(noprice?.total_open_interest_usd).toBe(0);               // GH#1610: atoms=1000 > 0, price=null → 0 not null (admin-oracle, unpriced)
-    expect(fallback?.total_open_interest_usd).toBeCloseTo(0.001, 6); // (600+400) / 1e6 * 1.0
+    expect(norm?.total_open_interest_usd).toBe(1.0);               // 1_000_000 / 1e6 * 1.0 = 1.00 (GH#1618: rounded to 2dp)
+    expect(sentinel?.total_open_interest_usd).toBe(0);             // GH#1594: sentinel primary rejected, but long=0+short=0 → valid zero OI
+    expect(noprice?.total_open_interest_usd).toBe(0);              // GH#1610: atoms > 0, price=null → 0 not null (admin-oracle, unpriced)
+    expect(fallback?.total_open_interest_usd).toBe(1.0);           // (600_000+400_000) / 1e6 * 1.0 = 1.00 (GH#1618: rounded to 2dp)
   });
 
   it("includes total field matching markets array length (#1168)", async () => {
@@ -335,14 +336,15 @@ describe("GET /api/markets — price sanitization (#856)", () => {
     });
 
     it("passes through total_open_interest_usd when vault_balance >= 1,000,000 (real liquidity)", async () => {
+      // GH#1618: rawToUsd rounds to 2dp — use 1_000_000 atoms (→ $1.00) instead of 1_000 (→ $0.001 rounds to $0.00)
       mockMarkets = [
         // GH#1438: vault=1M is the creation-deposit amount; strict < means it is NOT phantom.
         // Aligned with /api/stats which also uses strict < for the same boundary.
-        mkMarket({ symbol: "AT_THRESHOLD", vault_balance: 1_000_000, total_open_interest: 1_000, decimals: 6, last_price: 1.0 }),
+        mkMarket({ symbol: "AT_THRESHOLD", vault_balance: 1_000_000, total_open_interest: 1_000_000, decimals: 6, last_price: 1.0 }),
         // one above threshold — real liquidity
-        mkMarket({ symbol: "ABOVE_THRESHOLD", vault_balance: 1_000_001, total_open_interest: 1_000, decimals: 6, last_price: 1.0 }),
+        mkMarket({ symbol: "ABOVE_THRESHOLD", vault_balance: 1_000_001, total_open_interest: 1_000_000, decimals: 6, last_price: 1.0 }),
         // well above threshold — typical LP deposit
-        mkMarket({ symbol: "REAL_VAULT", vault_balance: 500_000_000, total_open_interest: 1_000, decimals: 6, last_price: 1.0 }),
+        mkMarket({ symbol: "REAL_VAULT", vault_balance: 500_000_000, total_open_interest: 1_000_000, decimals: 6, last_price: 1.0 }),
       ];
       vi.resetModules();
       const { GET } = await import("@/app/api/markets/route");
@@ -352,10 +354,10 @@ describe("GET /api/markets — price sanitization (#856)", () => {
       const aboveThreshold = body.markets.find((m) => m.symbol === "ABOVE_THRESHOLD");
       const realVault = body.markets.find((m) => m.symbol === "REAL_VAULT");
       // exactly at threshold (vault=1M) → NOT phantom (GH#1438: strict < aligns with /api/stats)
-      expect(atThreshold?.total_open_interest_usd).toBeCloseTo(0.001, 6); // 1000 / 1e6 * 1.0
+      expect(atThreshold?.total_open_interest_usd).toBe(1.0); // 1_000_000 / 1e6 * 1.0 = $1.00 (GH#1618: rounded to 2dp)
       // one above threshold → real liquidity, OI passes through
-      expect(aboveThreshold?.total_open_interest_usd).toBeCloseTo(0.001, 6); // 1000 / 1e6 * 1.0
-      expect(realVault?.total_open_interest_usd).toBeCloseTo(0.001, 6);
+      expect(aboveThreshold?.total_open_interest_usd).toBe(1.0); // 1_000_000 / 1e6 * 1.0 = $1.00
+      expect(realVault?.total_open_interest_usd).toBe(1.0);      // 1_000_000 / 1e6 * 1.0 = $1.00
     });
 
     it("returns 0 total_open_interest_usd when total_accounts = 0 (GH#1606: phantom → atoms zeroed → USD=0)", async () => {
