@@ -21,6 +21,7 @@ import {
 import { getConfig } from "@/lib/config";
 import { getServiceClient } from "@/lib/supabase";
 import { getDevnetMintSigner } from "@/lib/devnet-signer";
+import { tryFaucetGate, releaseFaucetClaim } from "@/lib/faucet-rate-gate";
 import * as Sentry from "@sentry/nextjs";
 
 export const dynamic = "force-dynamic";
@@ -70,20 +71,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Rate limit check via Supabase
+    // GH#1595: INSERT-as-gate rate limit — eliminates SELECT→INSERT TOCTOU window.
     const supabase = getServiceClient();
-    const cutoff = new Date(Date.now() - RATE_LIMIT_HOURS * 60 * 60 * 1000).toISOString();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: recent } = await (supabase as any)
-      .from("auto_fund_log")
-      .select("id")
-      .eq("wallet", walletAddress)
-      .gte("created_at", cutoff)
-      .limit(1);
+    const gate = await tryFaucetGate(supabase, walletAddress, "auto-fund");
 
-    if (recent && recent.length > 0) {
+    if (!gate.allowed) {
       return NextResponse.json(
-        { error: "Already funded in the last 24 hours", funded: false },
+        { error: "Already funded in the last 24 hours", funded: false, nextClaimAt: gate.nextClaimAt },
         { status: 429 },
       );
     }
@@ -181,7 +175,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Log the funding event
+    // Log the funding event (analytics — gate handles rate limiting)
     if (results.sol_airdropped || results.usdc_minted) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase as any).from("auto_fund_log").insert({
@@ -189,6 +183,9 @@ export async function POST(req: NextRequest) {
         sol_airdropped: results.sol_airdropped,
         usdc_minted: results.usdc_minted,
       });
+    } else {
+      // Nothing funded (already had sufficient balance) — release gate so user can retry
+      if (gate.claimId) await releaseFaucetClaim(supabase, gate.claimId);
     }
 
     return NextResponse.json({
