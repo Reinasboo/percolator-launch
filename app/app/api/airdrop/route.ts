@@ -26,7 +26,10 @@ import * as Sentry from "@sentry/nextjs";
 
 export const dynamic = "force-dynamic";
 
-const NETWORK = process.env.NEXT_PUBLIC_SOLANA_NETWORK;
+// GH#1571: align with canonical env var (NEXT_PUBLIC_DEFAULT_NETWORK), fallback to legacy name
+const NETWORK =
+  process.env.NEXT_PUBLIC_DEFAULT_NETWORK?.trim() ??
+  process.env.NEXT_PUBLIC_SOLANA_NETWORK?.trim();
 const AIRDROP_USD_VALUE = 500;
 const RATE_LIMIT_HOURS = 24;
 

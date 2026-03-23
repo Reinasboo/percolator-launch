@@ -155,7 +155,7 @@ export default function PortfolioPage() {
               },
               {
                 label: "LP Value",
-                value: !walletConnected ? "—" : lpPositions.loading ? "\u2026" : `$${lpPositions.totalRedeemable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                value: !walletConnected ? "—" : lpPositions.loading ? "\u2026" : lpPositions.totalRedeemable.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 }),
                 color: !walletConnected ? "text-white/40" : lpPositions.totalRedeemable > 0 ? "text-[var(--cyan)]" : "text-[var(--text-dim)]",
                 sub: walletConnected && lpPositions.positions.length > 0
                   ? `${lpPositions.positions.length} pool${lpPositions.positions.length > 1 ? "s" : ""}`
