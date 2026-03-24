@@ -45,6 +45,16 @@ const HIDE_ON_MOBILE_ROUTES = ["/trade", "/stake"];
  */
 const MOVE_TO_TOP_ROUTES = ["/stake"];
 
+/**
+ * Routes where the player must move to the bottom-LEFT at lg+ breakpoints
+ * to avoid overlapping a right-side panel.
+ * /trade: 3-column layout has a fixed 340px right STATS column — player at
+ * bottom-right bleeds over Oracle/Stats cells and is mis-read as lw-charts
+ * toolbar (GH#1662). Shift to bottom-left at ≥1024px so it sits below the
+ * chart, clear of the right panel entirely.
+ */
+const MOVE_TO_BOTTOM_LEFT_ROUTES_LG = ["/trade"];
+
 export function MusicPlayer() {
   const [playing, setPlaying] = useState(false);
   const [volume, setVolume] = useState(0.5);
@@ -94,6 +104,9 @@ export function MusicPlayer() {
 
   /* Determine if the player should move to top-right to avoid content overlap */
   const moveToTop = MOVE_TO_TOP_ROUTES.some((r) => pathname?.startsWith(r));
+
+  /* Determine if the player should move to bottom-left at lg+ to avoid right panel overlap */
+  const moveToBottomLeftLg = MOVE_TO_BOTTOM_LEFT_ROUTES_LG.some((r) => pathname?.startsWith(r));
 
   useEffect(() => {
     if (audioRef.current) audioRef.current.volume = volume;
@@ -158,6 +171,8 @@ export function MusicPlayer() {
       className={`fixed z-[90] gsap-fade${hideOnMobile ? " hidden sm:block" : ""}${
         moveToTop
           ? " top-[80px] right-3 sm:top-[72px] sm:right-5"
+          : moveToBottomLeftLg
+          ? " bottom-3 right-3 sm:bottom-5 sm:right-5 lg:bottom-5 lg:right-auto lg:left-5"
           : " bottom-3 right-3 sm:bottom-5 sm:right-5"
       }`}
       style={{ opacity: 0 }}
