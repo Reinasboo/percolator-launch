@@ -2040,7 +2040,7 @@ declare const PROGRAM_IDS: {
     };
     readonly mainnet: {
         readonly percolator: "GM8zjJ8LTBMv9xEsverh6H6wLyevgMHEJXcEzyY3rY24";
-        readonly matcher: "";
+        readonly matcher: "DHP6DtwXP1yJsz8YzfoeigRFPB979gzmumkmCxDLSkUX";
     };
 };
 type Network = "devnet" | "mainnet";
