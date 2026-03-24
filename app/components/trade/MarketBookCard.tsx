@@ -35,12 +35,14 @@ export const MarketBookCard: FC = () => {
 
   const oraclePrice = livePriceE6 ?? (mktConfig ? resolveMarketPriceE6(mktConfig) : 0n);
   const feeBps = Number(params.tradingFeeBps ?? 0n);
-  const bestBid = oraclePrice > 0n ? Number(oraclePrice) * (1 - feeBps / 10000) : 0;
-  const bestAsk = oraclePrice > 0n ? Number(oraclePrice) * (1 + feeBps / 10000) : 0;
+  const bestBidE6 = oraclePrice > 0n ? BigInt(Math.round(Number(oraclePrice) * (1 - feeBps / 10000))) : 0n;
+  const bestAskE6 = oraclePrice > 0n ? BigInt(Math.round(Number(oraclePrice) * (1 + feeBps / 10000))) : 0n;
 
-  // 2.2: Spread
-  const spread = bestAsk - bestBid;
-  const spreadPct = bestAsk > 0 ? (spread / bestAsk) * 100 : 0;
+  // 2.2: Spread (BigInt)
+  const spreadE6 = bestAskE6 - bestBidE6;
+  const spreadUsd = Number(spreadE6) / 1_000_000;
+  const oraclePriceUsd = Number(oraclePrice) / 1_000_000;
+  const spreadPct = oraclePriceUsd > 0 ? (spreadUsd / oraclePriceUsd) * 100 : 0;
 
   const lpTotalCapital = lps.reduce((sum, { account }) => sum + account.capital, 0n);
 
@@ -72,12 +74,7 @@ export const MarketBookCard: FC = () => {
         {/* Bid */}
         <div className="bg-[var(--bg)] p-2 text-center">
           <p className="text-[8px] uppercase tracking-[0.15em] text-[var(--text-dim)]">Bid</p>
-          <p
-            className="text-[13px] font-medium text-[var(--long)]"
-            style={{ fontFamily: "var(--font-mono)" }}
-          >
-            {bestBid > 0 ? `$${(bestBid / 1_000_000).toFixed(bestBid / 1_000_000 < 1 ? 6 : 2)}` : "—"}
-          </p>
+          <p className="text-[11px] font-medium text-[var(--long)]" style={{ fontFamily: "var(--font-mono)" }}>{formatUsd(bestBidE6)}</p>
         </div>
         {/* Oracle — subtle accent border + bg */}
         <div className="p-2 text-center border-x border-[var(--accent)]/20 bg-[var(--accent)]/[0.03]">
@@ -92,12 +89,7 @@ export const MarketBookCard: FC = () => {
         {/* Ask */}
         <div className="bg-[var(--bg)] p-2 text-center">
           <p className="text-[8px] uppercase tracking-[0.15em] text-[var(--text-dim)]">Ask</p>
-          <p
-            className="text-[13px] font-medium text-[var(--short)]"
-            style={{ fontFamily: "var(--font-mono)" }}
-          >
-            {bestAsk > 0 ? `$${(bestAsk / 1_000_000).toFixed(bestAsk / 1_000_000 < 1 ? 6 : 2)}` : "—"}
-          </p>
+          <p className="text-[11px] font-medium text-[var(--short)]" style={{ fontFamily: "var(--font-mono)" }}>{formatUsd(bestAskE6)}</p>
         </div>
       </div>
 
@@ -106,7 +98,7 @@ export const MarketBookCard: FC = () => {
         <div className="mb-3 flex items-center justify-between px-0.5">
           <span className="text-[9px] uppercase tracking-[0.12em] text-[var(--text-dim)] font-mono">Spread</span>
           <span className="text-[9px] text-[var(--text-dim)] font-mono">
-            ${(spread / 1_000_000).toFixed(spread / 1_000_000 < 0.001 ? 6 : 4)}{" "}
+            ${spreadUsd.toFixed(spreadUsd < 0.001 ? 6 : 4)}{" "}
             <span className="text-[var(--text-dim)]/60">({spreadPct.toFixed(3)}%)</span>
           </span>
         </div>
@@ -151,13 +143,10 @@ export const MarketBookCard: FC = () => {
       {/* 2.4: LP table — with UTILISATION column, capped at 5 */}
       {lps.length > 0 && (
         <div>
-          <p className="mb-1 text-[8px] uppercase tracking-[0.15em] text-[var(--text-dim)]">
-            Liquidity Providers
-          </p>
           {/* Header */}
-          <div className="mb-1 flex text-[8px] uppercase tracking-[0.15em] text-[var(--text-dim)]">
+          <div className="mb-1 flex gap-1 text-[8px] uppercase tracking-[0.1em] text-[var(--text-muted)] font-medium">
             <span className="w-5">#</span>
-            <span className="flex-1">LP</span>
+            <span className="flex-1">L.P.</span>
             <span className="w-20 text-right">Capital</span>
             <span className="w-20 text-right">Net Pos</span>
             <span className="w-16 text-right">Util</span>
@@ -179,20 +168,11 @@ export const MarketBookCard: FC = () => {
                   : "text-[var(--text-dim)]";
 
               return (
-                <div key={idx} className="flex items-center py-1 text-[10px]">
-                  <span className="w-5 text-[var(--text-dim)]" style={{ fontFamily: "var(--font-mono)" }}>
-                    {i + 1}
-                  </span>
-                  <span className="flex-1 text-[var(--text-secondary)]" style={{ fontFamily: "var(--font-mono)" }}>
-                    {shortenAddress(account.owner.toBase58())}
-                  </span>
-                  <span className="w-20 text-right text-[var(--text)]" style={{ fontFamily: "var(--font-mono)" }}>
-                    {formatTokenAmount(account.capital)}
-                  </span>
-                  <span
-                    className={`w-20 text-right ${account.positionSize >= 0n ? "text-[var(--long)]" : "text-[var(--short)]"}`}
-                    style={{ fontFamily: "var(--font-mono)" }}
-                  >
+                <div key={idx} className="flex items-center gap-1 py-1 text-[10px]">
+                  <span className="w-5 text-[var(--text-dim)]" style={{ fontFamily: "var(--font-mono)" }}>{i + 1}</span>
+                  <span className="flex-1 text-[var(--text-secondary)]" style={{ fontFamily: "var(--font-mono)" }}>{shortenAddress(account.owner.toBase58())}</span>
+                  <span className="w-20 text-right text-[var(--text)]" style={{ fontFamily: "var(--font-mono)" }}>{formatTokenAmount(account.capital)}</span>
+                  <span className={`w-20 text-right ${account.positionSize >= 0n ? "text-[var(--long)]" : "text-[var(--short)]"}`} style={{ fontFamily: "var(--font-mono)" }}>
                     {formatTokenAmount(account.positionSize < 0n ? -account.positionSize : account.positionSize)}
                   </span>
                   <span className={`w-16 text-right font-medium ${utilColor}`} style={{ fontFamily: "var(--font-mono)" }}>
