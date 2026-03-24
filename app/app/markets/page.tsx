@@ -359,9 +359,11 @@ function MarketsPageInner() {
           const hb = b.onChain
             ? computeMarketHealth(b.onChain.engine)
             : (b.supabase ? computeMarketHealthFromStats(b.supabase) : { level: "empty" as const });
-          // GH#1631: oracle-down sort rank — after empty=3, before total unknowns.
-          // Uses the same isOracleDown logic as the render path (both on-chain + Supabase).
-          const order: Record<string, number> = { healthy: 0, caution: 1, warning: 2, empty: 3, "oracle-down": 4 };
+          // GH#1637: oracle-down sort rank — below Warning but above Empty.
+          // Corrected from GH#1631 which had oracle-down=4 (after empty=3), causing
+          // oracle-down markets (null price, vault>0) to rank last instead of 4th.
+          // New order: healthy=0 < caution=1 < warning=2 < oracle-down=3 < empty=4.
+          const order: Record<string, number> = { healthy: 0, caution: 1, warning: 2, "oracle-down": 3, empty: 4 };
           const numericOrNullForSort = (v: unknown): number | null => {
             if (v == null) return null;
             const n = Number(v);
