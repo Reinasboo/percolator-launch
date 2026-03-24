@@ -16,6 +16,15 @@ import { OnboardingIcon } from "@/components/icons/OnboardingIcons";
 import { HeroSection } from "@/components/marketing/HeroSection";
 import { ShimmerSkeleton } from "@/components/ui/ShimmerSkeleton";
 
+/**
+ * GH#1666: Validate a symbol is a real ticker (1-10 uppercase alpha chars).
+ * Rejects base58 fragments like "uskiEkK5Q" that end up in the symbol column
+ * when the indexer hasn't resolved the mint metadata yet.
+ */
+function isValidSymbol(s: string | null | undefined): s is string {
+  return typeof s === "string" && /^[A-Z]{1,10}$/.test(s);
+}
+
 /** Format large numbers compactly: 1.2T / 3.4B / 5.6M / 7.8K */
 function formatCompact(n: number): string {
   const abs = Math.abs(n);
@@ -475,7 +484,8 @@ export default function Home() {
               </div>
 
               <div className="overflow-x-auto border border-[var(--border)] bg-[var(--panel-bg)]">
-                <div className="grid min-w-[480px] grid-cols-5 gap-2 sm:gap-4 border-b border-[var(--border)] bg-[var(--bg-surface)] px-3 sm:px-5 py-3 text-[9px] font-medium uppercase tracking-[0.2em] text-[var(--text-muted)]">
+                {/* GH#1666: column headers upgraded from text-muted (#454B5F) to text-secondary (#7A7F96) for WCAG AA contrast */}
+                <div className="grid min-w-[480px] grid-cols-5 gap-2 sm:gap-4 border-b border-[var(--border)] bg-[var(--bg-surface)] px-3 sm:px-5 py-3 text-[9px] font-medium uppercase tracking-[0.2em] text-[var(--text-secondary)]">
                   <div>Token</div>
                   <div className="text-right">Price</div>
                   <div className="text-right">Volume</div>
@@ -487,11 +497,12 @@ export default function Home() {
                     key={m.slab_address}
                     href={`/trade/${m.slab_address}`}
                     className="group relative grid min-w-[480px] grid-cols-5 gap-2 sm:gap-4 border-b border-[var(--border-subtle)] px-3 sm:px-5 py-3.5 text-sm transition-all duration-150 last:border-b-0 hover:bg-[var(--accent)]/[0.03] min-h-[48px]"
-                    aria-label={`Trade ${m.symbol ? `${m.symbol}/USD` : `market ${m.slab_address.slice(0, 6)}`}`}
+                    aria-label={`Trade ${isValidSymbol(m.symbol) ? `${m.symbol}/USD` : `market ${m.slab_address.slice(0, 6)}`}`}
                   >
                     <div className="absolute left-0 top-0 bottom-0 w-px bg-[var(--accent)] opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
                     <div className="text-[13px] font-semibold text-white">
-                      {m.symbol ? `${m.symbol}/USD` : `${m.slab_address.slice(0, 6)}...`}
+                      {/* GH#1666: isValidSymbol rejects base58 fragments from unresolved mint metadata */}
+                      {isValidSymbol(m.symbol) ? `${m.symbol}/USD` : `${m.slab_address.slice(0, 6)}...`}
                     </div>
                     <div className="text-right text-[12px] text-[var(--text-secondary)]">
                       {m.last_price != null
