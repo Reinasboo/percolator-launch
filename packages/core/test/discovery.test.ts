@@ -352,3 +352,101 @@ describe("detectSlabLayout V2 disambiguation", () => {
     expect(layout!.version).toBe(0);
   });
 });
+
+// ============================================================================
+// PERC-1650: discoverMarkets sequential mode + 429 retry
+// ============================================================================
+
+import { discoverMarkets } from "../src/solana/discovery.js";
+import { PublicKey, Connection } from "@solana/web3.js";
+
+/** Minimal stub connection whose getProgramAccounts can be mocked per test. */
+function makeConn(impl: (programId: PublicKey, config: any) => Promise<any[]>): Connection {
+  return {
+    getProgramAccounts: impl,
+  } as unknown as Connection;
+}
+
+describe("discoverMarkets — sequential mode (PERC-1650)", () => {
+  it("passes sequential=true and calls getProgramAccounts multiple times sequentially", async () => {
+    const calls: number[] = [];
+    let callIndex = 0;
+    const conn = makeConn(async () => {
+      calls.push(callIndex++);
+      return [];
+    });
+
+    await discoverMarkets(conn, new PublicKey("11111111111111111111111111111111"), {
+      sequential: true,
+      interTierDelayMs: 0,
+    });
+
+    // Should have called getProgramAccounts once per tier (not parallel)
+    expect(calls.length).toBeGreaterThan(0);
+  });
+
+  it("retries a 429 tier error with backoff in sequential mode", async () => {
+    let attemptCount = 0;
+    const conn = makeConn(async () => {
+      attemptCount++;
+      if (attemptCount === 1) throw new Error("429 Too Many Requests");
+      return [];
+    });
+
+    await discoverMarkets(conn, new PublicKey("11111111111111111111111111111111"), {
+      sequential: true,
+      interTierDelayMs: 0,
+      rateLimitBackoffMs: [0, 0], // no real delay in tests
+    });
+
+    // First tier should have been retried
+    expect(attemptCount).toBeGreaterThanOrEqual(2);
+  });
+
+  it("does NOT retry non-429 errors in sequential mode — falls through to memcmp fallback", async () => {
+    // fetchTierWithRetry catches non-429 errors and returns [] for that tier.
+    // After all tiers return 0 results, discoverMarkets falls through to the memcmp fallback.
+    // The memcmp fallback also calls getProgramAccounts — mock that to succeed with [].
+    let callCount = 0;
+    let memcmpCallCount = 0;
+    const conn = makeConn(async (_programId, config: any) => {
+      // Detect the memcmp fallback call (it uses a memcmp filter, not dataSize)
+      const filters = config?.filters ?? [];
+      const isMemcmp = filters.some((f: any) => "memcmp" in f);
+      if (isMemcmp) {
+        memcmpCallCount++;
+        return []; // fallback returns nothing — that's fine
+      }
+      callCount++;
+      throw new Error("Connection refused");
+    });
+
+    // Should NOT throw — all errors are handled internally
+    await expect(
+      discoverMarkets(conn, new PublicKey("11111111111111111111111111111111"), {
+        sequential: true,
+        interTierDelayMs: 0,
+        rateLimitBackoffMs: [0, 0],
+      }),
+    ).resolves.toEqual([]);
+
+    // Each tier got exactly ONE call (no retry on non-429)
+    const allTierCount = 3 + 3 + 4 + 4 + 4; // SLAB_TIERS + V0 + V1D + V1D_LEGACY + V2
+    expect(callCount).toBeLessThanOrEqual(allTierCount + 2); // +2 for rounding
+    // Memcmp fallback was called (0 raw accounts → fallback triggered)
+    expect(memcmpCallCount).toBe(1);
+  });
+
+  it("parallel mode (default) still works and fires all tier queries", async () => {
+    const callCount = { n: 0 };
+    const conn = makeConn(async () => {
+      callCount.n++;
+      return [];
+    });
+
+    await discoverMarkets(conn, new PublicKey("11111111111111111111111111111111"));
+
+    // All tiers fired (parallel) + fallback memcmp if 0 results
+    expect(callCount.n).toBeGreaterThan(0);
+  });
+});

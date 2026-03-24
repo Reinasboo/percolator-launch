@@ -118,23 +118,70 @@ export class CrankService {
     return this._isRunning;
   }
 
+  /**
+   * PERC-1650: Per-program 429 retry backoff for discoverMarkets calls.
+   * Escalating delays: 2s → 6s → 18s → 54s before giving up.
+   * Applied at the program level (outer loop) in addition to the per-tier 429 retry
+   * inside discoverMarkets itself (when sequential=true).
+   */
+  private static readonly DISCOVER_429_BACKOFF_MS = [2_000, 6_000, 18_000, 54_000];
+
+  /** Add up to 25% jitter to avoid thundering herd on retry. */
+  private static jitter(ms: number): number {
+    return ms + Math.floor(Math.random() * ms * 0.25);
+  }
+
   async discover(): Promise<DiscoveredMarket[]> {
     const programIds = config.allProgramIds;
     logger.info("Discovering markets", { programCount: programIds.length });
-    // Use fallback RPC for discovery (Helius rate-limits getProgramAccounts)
-    // Sequential calls with delay to avoid 429 from public RPC
+    // Use fallback RPC for discovery (Helius rate-limits getProgramAccounts).
+    // PERC-1650: Pass sequential=true so the SDK fires one tier query at a time with
+    // per-tier 429 retry + inter-tier spacing (200ms), avoiding the 14-query parallel
+    // burst that caused repeated 429s on every scan cycle.
     const discoveryConn = getFallbackConnection();
     const allFound: DiscoveredMarket[] = [];
-    for (const id of programIds) {
-      try {
-        const found = await discoverMarkets(discoveryConn, new PublicKey(id));
-        logger.debug("Program scan complete", { programId: id, marketCount: found.length });
-        allFound.push(...found);
-      } catch (e) {
-        logger.warn("Program scan failed", { programId: id, error: e });
+    for (let progIdx = 0; progIdx < programIds.length; progIdx++) {
+      const id = programIds[progIdx];
+      let found: DiscoveredMarket[] = [];
+      let programSuccess = false;
+
+      for (let attempt = 0; attempt <= CrankService.DISCOVER_429_BACKOFF_MS.length; attempt++) {
+        try {
+          found = await discoverMarkets(discoveryConn, new PublicKey(id), {
+            sequential: true,
+            interTierDelayMs: 200,
+            rateLimitBackoffMs: [1_000, 3_000, 9_000, 27_000],
+          });
+          programSuccess = true;
+          logger.debug("Program scan complete", { programId: id, marketCount: found.length });
+          break;
+        } catch (e) {
+          const is429 =
+            e instanceof Error &&
+            (e.message.includes("429") ||
+              e.message.toLowerCase().includes("rate limit") ||
+              e.message.toLowerCase().includes("too many requests"));
+          if (is429 && attempt < CrankService.DISCOVER_429_BACKOFF_MS.length) {
+            const delay = CrankService.jitter(CrankService.DISCOVER_429_BACKOFF_MS[attempt]);
+            logger.warn("429 on discoverMarkets — backing off at program level", {
+              programId: id,
+              attempt: attempt + 1,
+              delayMs: delay,
+            });
+            await new Promise(r => setTimeout(r, delay));
+            continue;
+          }
+          logger.warn("Program scan failed", { programId: id, error: e, attempt: attempt + 1 });
+          break;
+        }
       }
-      // 2s delay between programs to avoid rate limits
-      if (programIds.indexOf(id) < programIds.length - 1) {
+
+      if (programSuccess) {
+        allFound.push(...found);
+      }
+
+      // Inter-program spacing: 2s base, helps avoid consecutive 429s on multi-program configs.
+      if (progIdx < programIds.length - 1) {
         await new Promise((r) => setTimeout(r, 2_000));
       }
     }
