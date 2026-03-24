@@ -334,14 +334,10 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
   const priceChangePercent = firstPrice > 0 ? (priceChange / firstPrice) * 100 : 0;
   const isUp = priceChange >= 0;
 
-  if (totalDataPoints === 0 || effectiveSparse) {
-    return (
-      <ChartEmptyState
-        currentPrice={priceUsd ?? undefined}
-        heightClass="h-[40svh] sm:h-[400px]"
-      />
-    );
-  }
+  // GH#1652: do NOT early-return here — the chart container must always mount
+  // so that lightweight-charts can create its canvas. Sparse/empty state is
+  // rendered as an overlay inside the container below.
+  const showEmptyOverlay = totalDataPoints === 0 || effectiveSparse;
 
   return (
     <div className="rounded-none border border-[var(--border)] bg-[var(--bg)] p-3">
@@ -427,10 +423,69 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
           cannot escape the chart boundary and bleed into adjacent stat grid cells
           (GH#1647: ◀ 32 ▶ ✕ appearing in ACCOUNTS cell of STATS tab) */}
       <div className="relative overflow-hidden">
+        {/* GH#1652: always mount the container so lightweight-charts canvas initialises.
+            The chart ref is always created in useEffect; empty-state is overlaid on top
+            when candles=[] so the canvas element exists in the DOM on first render. */}
         <div ref={containerRef} className="w-full h-[40svh] lg:h-[500px]" />
 
+        {/* GH#1652: empty-state overlay — shown when no data yet, sits above canvas */}
+        {showEmptyOverlay && (
+          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center bg-[#0D0D0F]/90 backdrop-blur-[1px]">
+            {priceUsd != null && priceUsd > 0 ? (
+              <>
+                <div
+                  className="text-2xl font-bold text-[var(--text)] drop-shadow-sm"
+                  style={{ fontFamily: "var(--font-mono)" }}
+                >
+                  ${priceUsd < 0.01 ? priceUsd.toFixed(6) : priceUsd.toFixed(2)}
+                </div>
+                <div className="mt-1 text-[10px] uppercase tracking-[0.15em] text-[var(--text-dim)]">
+                  Price chart building…
+                </div>
+              </>
+            ) : (
+              <>
+                <svg
+                  width="28"
+                  height="28"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="mb-2 text-[#475569]"
+                  aria-hidden="true"
+                >
+                  <line x1="18" y1="3" x2="18" y2="6" />
+                  <line x1="18" y1="11" x2="18" y2="21" />
+                  <rect x="15" y="6" width="6" height="5" rx="1" />
+                  <line x1="12" y1="6" x2="12" y2="8" />
+                  <line x1="12" y1="15" x2="12" y2="21" />
+                  <rect x="9" y="8" width="6" height="7" rx="1" />
+                  <line x1="6" y1="3" x2="6" y2="10" />
+                  <line x1="6" y1="17" x2="6" y2="21" />
+                  <rect x="3" y="10" width="6" height="7" rx="1" />
+                </svg>
+                <div
+                  className="text-[15px] font-semibold text-[#94a3b8]"
+                  style={{ fontFamily: "'Space Grotesk', system-ui, sans-serif" }}
+                >
+                  No chart data yet
+                </div>
+                <div
+                  className="mt-1 text-xs text-[#475569]"
+                  style={{ fontFamily: "'Space Grotesk', system-ui, sans-serif" }}
+                >
+                  Price history will appear once trading begins
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
         {/* Phase 2: Volume no-data overlay — shown when volume pane exists but all volumes are 0 */}
-        {chartType === "candle" && !hasVolumeData && (
+        {!showEmptyOverlay && chartType === "candle" && !hasVolumeData && (
           <div className="pointer-events-none absolute bottom-0 left-0 right-0 flex h-[20%] items-center justify-center border-t border-[var(--border)]/30">
             <span className="text-[9px] text-[var(--text-dim)] uppercase tracking-[0.12em]">
               ── Volume (no data) ──
