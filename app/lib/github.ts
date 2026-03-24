@@ -55,12 +55,11 @@ export interface RepoCIStatus {
 /** Hardcoded repo list — order determines fallback display order */
 export const REPOS = [
   "percolator-launch",
-  "percolator",
   "percolator-prog",
-  "percolator-matcher",
-  "percolator-stake",
+  "percolator",
   "percolator-sdk",
-  "percolator-ops",
+  "percolator-stake",
+  "percolator-nft",
   "percolator-mobile",
 ] as const;
 
@@ -68,15 +67,15 @@ export const REPOS = [
 export const REPO_DESCRIPTIONS: Record<string, string> = {
   "percolator-launch":
     "Permissionless perpetual futures launcher — deploy a perp market for any Solana token",
-  percolator: "Core on-chain program",
+  percolator:
+    "No-std Rust risk engine — H + A/K mechanics, formally verified with Kani",
   "percolator-prog": "Percolator programs",
-  "percolator-matcher":
-    "Prediction market matcher program (Solana on-chain)",
   "percolator-stake":
     "Insurance LP staking — PDA admin architecture, Kani formal verification",
   "percolator-sdk":
     "TypeScript SDK for interacting with Percolator on-chain programs",
-  "percolator-ops": "AI-powered ops dashboard",
+  "percolator-nft":
+    "Token2022 Position NFTs — transfer your perpetual futures positions via Transfer Hooks",
   "percolator-mobile": "Solana Seeker mobile app",
 };
 
@@ -85,10 +84,9 @@ export const REPO_LANGUAGES: Record<string, string> = {
   "percolator-launch": "TypeScript",
   percolator: "Rust",
   "percolator-prog": "Rust",
-  "percolator-matcher": "Rust",
   "percolator-stake": "Rust",
   "percolator-sdk": "TypeScript",
-  "percolator-ops": "TypeScript",
+  "percolator-nft": "Rust",
   "percolator-mobile": "TypeScript",
 };
 

@@ -95,6 +95,54 @@ export const DevelopersClient: FC<Props> = ({
         {/* Repo Grid (with CI statuses for health badges) */}
         <RepoGrid repos={repos} isLive={isLive} ciStatuses={ciStatuses} />
 
+        {/* ★ H + A/K Risk Engine Formulas */}
+        <section className="mt-16 mb-12">
+          <h2
+            className="mb-2 text-2xl font-bold tracking-tight text-[var(--text)] sm:text-3xl"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
+            Risk Engine — H&nbsp;+&nbsp;A/K
+          </h2>
+          <p className="mb-6 max-w-2xl text-sm leading-relaxed text-[var(--text-secondary)]">
+            516 formally verified proofs across the codebase (Kani). H gates
+            profit extraction when the vault is stressed. A/K socialises
+            liquidation deficits pro-rata with O(1) settlement. Together: no
+            user can withdraw more than exists, no user is singled out for
+            forced closure, markets always recover.
+          </p>
+
+          <div className="grid gap-6 sm:grid-cols-2">
+            {/* H — Haircut Ratio */}
+            <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-6">
+              <h3 className="mb-1 font-mono text-xs font-semibold uppercase tracking-widest text-violet-400">
+                H — Fair Exits (Haircut Ratio)
+              </h3>
+              <pre className="mt-3 overflow-x-auto rounded-lg bg-black/40 p-4 font-mono text-[13px] leading-relaxed text-[var(--text-secondary)]">
+{`Residual = max(0, V − C_tot − I)
+
+h = min(Residual, PNL_matured_pos_tot)
+    / PNL_matured_pos_tot
+
+effective_pnl_i = ⌊max(PNL_i, 0) × h⌋`}
+              </pre>
+            </div>
+
+            {/* A/K — Lazy Side Indices */}
+            <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-6">
+              <h3 className="mb-1 font-mono text-xs font-semibold uppercase tracking-widest text-violet-400">
+                A/K — Fair Overhang Clearing
+              </h3>
+              <pre className="mt-3 overflow-x-auto rounded-lg bg-black/40 p-4 font-mono text-[13px] leading-relaxed text-[var(--text-secondary)]">
+{`effective_pos(i) = ⌊basis_i × A / a_basis_i⌋
+
+pnl_delta(i) = ⌊|basis_i|
+  × (K − k_snap_i)
+  / (a_basis_i × POS_SCALE)⌋`}
+              </pre>
+            </div>
+          </div>
+        </section>
+
         {/* ★ Commit Activity Heatmap */}
         {commitActivity && Object.keys(commitActivity).length > 0 && (
           <CommitHeatmap commitActivity={commitActivity} />
