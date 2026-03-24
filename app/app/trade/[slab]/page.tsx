@@ -422,7 +422,8 @@ function TradePageInner({ slab }: { slab: string }) {
           {/* Chart — only mount on desktop to prevent dual ChartEmptyState stacking */}
           {isLargeScreen && (
             <ErrorBoundary label="TradingChart">
-              <div className="flex-1 min-h-[500px]">
+              {/* overflow-hidden prevents lightweight-charts toolbar from escaping chart bounds (GH#1647) */}
+              <div className="flex-1 min-h-[500px] overflow-hidden">
                 <TradingChart slabAddress={slab} mintAddress={mintAddress || undefined} />
               </div>
             </ErrorBoundary>
