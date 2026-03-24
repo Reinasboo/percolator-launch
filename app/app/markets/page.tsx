@@ -388,7 +388,14 @@ function MarketsPageInner() {
           // Guard: return false (not oracle-down) for sub-threshold markets so they sort as "empty".
           const computeIsOracleDown = (m: MergedMarket): boolean => {
             // Vault guard — mirrors route.ts MIN_VAULT_FOR_OI check (PERC-816 / GH#1639)
-            const vaultBal = numericOrNullForSort(m.supabase?.vault_balance);
+            // GH#1658: vault_balance may be 0/null when indexer hasn't populated it yet.
+            //   Fallback to c_tot (total vault capacity) so oracle-down markets with a real
+            //   c_tot don't get incorrectly excluded by the guard.
+            const rawVault = m.supabase?.vault_balance;
+            const rawCtot  = m.supabase?.c_tot;
+            const vaultBal = numericOrNullForSort(
+              rawVault != null && Number(rawVault) > 0 ? rawVault : rawCtot
+            );
             if (vaultBal !== null && vaultBal < MIN_VAULT_FOR_OI) {
               // Sub-threshold vault: phantom OI suppressed server-side → treat as empty, not oracle-down
               return false;
