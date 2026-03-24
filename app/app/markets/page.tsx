@@ -372,7 +372,14 @@ function MarketsPageInner() {
             const n = Number(v);
             return Number.isFinite(n) ? n : null;
           };
-          // For on-chain markets: isOracleDown when resolveMarketPriceE6 returns 0
+          // For on-chain markets: isOracleDown when resolveMarketPriceE6 returns 0 OR
+          //   when Supabase confirms oracle is stale (mark_price AND index_price both null/zero).
+          //   GH#1646: 3 SOL markets (EkQty/DD9Ym/8Wxmx) floated to top of health sort because
+          //   their authorityPriceE6 stored a stale non-zero price (last pushed before oracle stopped).
+          //   resolveMarketPriceE6 returned non-zero → computeIsOracleDown=false → rank=healthy.
+          //   Fix: cross-check with Supabase mark_price+index_price as a secondary oracle-down signal.
+          //   If Supabase shows no mark or index price (keeper hasn't indexed an oracle crank),
+          //   treat as oracle-down regardless of the stale on-chain authorityPriceE6.
           // For Supabase-only markets: isOracleDown when both mark_price and index_price are null/zero
           // GH#1639: Apply the same MIN_VAULT_FOR_OI guard as route.ts.
           // Markets with vault_balance < MIN_VAULT_FOR_OI have phantom OI zeroed out
@@ -388,7 +395,18 @@ function MarketsPageInner() {
             }
             if (m.onChain) {
               const priceE6 = resolveMarketPriceE6(m.onChain.config);
-              return priceE6 === 0n;
+              // Primary: on-chain price is 0 → keeper not cranking
+              if (priceE6 === 0n) return true;
+              // GH#1646: Secondary: Supabase shows no mark_price + no index_price.
+              // A non-zero authorityPriceE6 may be stale (last pushed before oracle stopped).
+              // If the Supabase indexer also hasn't recorded any oracle prices for this market,
+              // treat it as oracle-down so the sort rank matches the badge.
+              if (m.supabase) {
+                const mp = numericOrNullForSort(m.supabase.mark_price);
+                const ip = numericOrNullForSort(m.supabase.index_price);
+                if ((mp == null || mp <= 0) && (ip == null || ip <= 0)) return true;
+              }
+              return false;
             }
             if (m.supabase) {
               const mp = numericOrNullForSort(m.supabase.mark_price);
