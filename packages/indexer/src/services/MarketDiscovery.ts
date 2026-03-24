@@ -1,6 +1,6 @@
 import { PublicKey } from "@solana/web3.js";
 import { discoverMarkets, type DiscoveredMarket } from "@percolator/sdk";
-import { config, getConnection, getFallbackConnection, createLogger, captureException } from "@percolator/shared";
+import { config, getPrimaryConnection, getFallbackConnection, createLogger, captureException } from "@percolator/shared";
 
 const logger = createLogger("indexer:market-discovery");
 
@@ -34,32 +34,44 @@ export class MarketDiscovery {
   
   async discover(): Promise<DiscoveredMarket[]> {
     const programIds = config.allProgramIds;
-    const conn = getFallbackConnection();
+    // Use Helius primary RPC (primaryConn) for all discovery attempts.
+    // fallbackConn is tried exactly once — only after all HELIUS_429_BACKOFF_MS retries are
+    // exhausted due to 429 rate-limit responses. Non-429 errors (transport, auth) cause an
+    // immediate per-program failure without falling back.
+    const primaryConn = getPrimaryConnection();
+    const fallbackConn = getFallbackConnection();
     const all: DiscoveredMarket[] = [];
     let failedPrograms = 0;
     
     for (const id of programIds) {
       let discovered = false;
       for (let attempt = 0; attempt <= HELIUS_429_BACKOFF_MS.length; attempt++) {
+        // After exhausting all retries on primary, try public fallback once before giving up
+        const conn = attempt === HELIUS_429_BACKOFF_MS.length ? fallbackConn : primaryConn;
+        const connLabel = conn === fallbackConn ? "fallback" : "primary";
         try {
           const found = await discoverMarkets(conn, new PublicKey(id));
           all.push(...found);
           discovered = true;
+          if (conn === fallbackConn) {
+            logger.warn("discoverMarkets succeeded on fallback RPC after primary 429s", { programId: id });
+          }
           break;
         } catch (e) {
           if (isRateLimitError(e) && attempt < HELIUS_429_BACKOFF_MS.length) {
             const delay = withJitter(HELIUS_429_BACKOFF_MS[attempt]);
             logger.warn("Helius 429 on discoverMarkets — backing off", {
               programId: id,
+              conn: connLabel,
               attempt: attempt + 1,
               delayMs: delay,
             });
             await new Promise(r => setTimeout(r, delay));
             continue;
           }
-          // Non-429 error or exhausted retries
+          // Non-429 error or exhausted retries (including fallback)
           failedPrograms++;
-          logger.warn("Failed to discover on program", { programId: id, error: e, attempt: attempt + 1 });
+          logger.warn("Failed to discover on program", { programId: id, conn: connLabel, error: e, attempt: attempt + 1 });
           break;
         }
       }
