@@ -384,14 +384,63 @@ function parseEngineLight(
   };
 }
 
+/** Options for `discoverMarkets`. */
+export interface DiscoverMarketsOptions {
+  /**
+   * Run tier queries sequentially with per-tier retry on HTTP 429 instead of
+   * firing all in parallel.  Reduces RPC rate-limit pressure at the cost of
+   * slightly slower discovery (~14 round-trips instead of 1 concurrent batch).
+   * Default: false (preserves original parallel behaviour).
+   *
+   * PERC-1650: keeper uses this flag to avoid 429 storms on its fallback RPC
+   * (Helius starter tier).  Pass `sequential: true` from CrankService.discover().
+   */
+  sequential?: boolean;
+  /**
+   * Delay in ms between sequential tier queries (only used when sequential=true).
+   * Default: 200 ms.
+   */
+  interTierDelayMs?: number;
+  /**
+   * Per-tier retry backoff delays on 429 (ms).  Jitter of up to +25% is applied.
+   * Only used when sequential=true.  Default: [1_000, 3_000, 9_000, 27_000].
+   */
+  rateLimitBackoffMs?: number[];
+}
+
+/** Return true if the error looks like an HTTP 429 / rate-limit response. */
+function isRateLimitError(err: unknown): boolean {
+  if (!err) return false;
+  const msg = err instanceof Error ? err.message : String(err);
+  return (
+    msg.includes("429") ||
+    msg.toLowerCase().includes("rate limit") ||
+    msg.toLowerCase().includes("too many requests")
+  );
+}
+
+/** Add up to 25% random jitter to avoid thundering-herd on retry. */
+function withJitter(delayMs: number): number {
+  return delayMs + Math.floor(Math.random() * delayMs * 0.25);
+}
+
 /**
  * Discover all Percolator markets owned by the given program.
  * Uses getProgramAccounts with dataSize filter + dataSlice to download only ~1400 bytes per slab.
+ *
+ * @param options.sequential - Run tier queries sequentially with 429 retry (PERC-1650).
  */
 export async function discoverMarkets(
   connection: Connection,
   programId: PublicKey,
+  options: DiscoverMarketsOptions = {},
 ): Promise<DiscoveredMarket[]> {
+  const {
+    sequential = false,
+    interTierDelayMs = 200,
+    rateLimitBackoffMs = [1_000, 3_000, 9_000, 27_000],
+  } = options;
+
   // Query all known slab sizes in parallel — V0, V1D (deployed devnet), V1D legacy, and V1 (upgraded) tiers.
   // We track the actual dataSize per entry so detectSlabLayout can determine the correct layout,
   // and pass that layout to all parse functions (avoids wrong-version offsets on partial slices).
@@ -409,28 +458,78 @@ export async function discoverMarkets(
   ];
   type RawEntry = { pubkey: PublicKey; account: { data: Buffer | Uint8Array }; maxAccounts: number; dataSize: number };
   let rawAccounts: RawEntry[] = [];
-  try {
-    const queries = ALL_TIERS.map(tier =>
-      connection.getProgramAccounts(programId, {
-        filters: [{ dataSize: tier.dataSize }],
-        dataSlice: { offset: 0, length: HEADER_SLICE_LENGTH },
-      }).then(results => results.map(entry => ({ ...entry, maxAccounts: tier.maxAccounts, dataSize: tier.dataSize })))
-    );
-    const results = await Promise.allSettled(queries);
-    let hadRejection = false;
-    for (const result of results) {
-      if (result.status === "fulfilled") {
-        for (const entry of result.value) {
-          rawAccounts.push(entry as RawEntry);
+
+  /**
+   * Fetch one tier with per-attempt 429 retry (sequential mode only).
+   * Returns an array of RawEntry on success, or an empty array after exhausting retries.
+   */
+  async function fetchTierWithRetry(
+    tier: { dataSize: number; maxAccounts: number },
+  ): Promise<RawEntry[]> {
+    for (let attempt = 0; attempt <= rateLimitBackoffMs.length; attempt++) {
+      try {
+        const results = await connection.getProgramAccounts(programId, {
+          filters: [{ dataSize: tier.dataSize }],
+          dataSlice: { offset: 0, length: HEADER_SLICE_LENGTH },
+        });
+        return results.map(entry => ({ ...entry, maxAccounts: tier.maxAccounts, dataSize: tier.dataSize }));
+      } catch (err) {
+        if (isRateLimitError(err) && attempt < rateLimitBackoffMs.length) {
+          const delay = withJitter(rateLimitBackoffMs[attempt]);
+          console.warn(
+            `[discoverMarkets] 429 on tier dataSize=${tier.dataSize} attempt=${attempt + 1}, backing off ${delay}ms`,
+          );
+          await new Promise(r => setTimeout(r, delay));
+          continue;
         }
-      } else {
-        hadRejection = true;
+        // Non-429 or exhausted retries
         console.warn(
-          "[discoverMarkets] Tier query rejected:",
-          result.reason instanceof Error ? result.reason.message : result.reason,
+          `[discoverMarkets] Tier query failed (dataSize=${tier.dataSize}, attempt=${attempt + 1}):`,
+          err instanceof Error ? err.message : err,
         );
+        return [];
       }
     }
+    return [];
+  }
+
+  try {
+    if (sequential) {
+      // PERC-1650: sequential mode — one tier at a time with inter-tier spacing + per-tier 429 retry.
+      for (let i = 0; i < ALL_TIERS.length; i++) {
+        const tier = ALL_TIERS[i];
+        const entries = await fetchTierWithRetry(tier);
+        rawAccounts.push(...entries);
+        if (i < ALL_TIERS.length - 1) {
+          await new Promise(r => setTimeout(r, interTierDelayMs));
+        }
+      }
+    } else {
+      // Original parallel mode: fire all tier queries simultaneously.
+      const queries = ALL_TIERS.map(tier =>
+        connection.getProgramAccounts(programId, {
+          filters: [{ dataSize: tier.dataSize }],
+          dataSlice: { offset: 0, length: HEADER_SLICE_LENGTH },
+        }).then(results => results.map(entry => ({ ...entry, maxAccounts: tier.maxAccounts, dataSize: tier.dataSize })))
+      );
+      const results = await Promise.allSettled(queries);
+      let hadRejection = false;
+      for (const result of results) {
+        if (result.status === "fulfilled") {
+          for (const entry of result.value) {
+            rawAccounts.push(entry as RawEntry);
+          }
+        } else {
+          hadRejection = true;
+          console.warn(
+            "[discoverMarkets] Tier query rejected:",
+            result.reason instanceof Error ? result.reason.message : result.reason,
+          );
+        }
+      }
+      void hadRejection; // intentionally unused — see NOTE below
+    }
+
     // NOTE: hadRejection guard removed — dataSize filters silently return 0 when on-chain
     // account size changed; RPC returns no error, so we must fallback on empty results too.
     if (rawAccounts.length === 0) {

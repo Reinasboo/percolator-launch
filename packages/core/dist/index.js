@@ -2059,7 +2059,20 @@ function parseEngineLight(data, layout, maxAccounts = 4096) {
     nextAccountId: canReadNextId ? readU64LE2(data, base + nextAccountIdOff) : 0n
   };
 }
-async function discoverMarkets(connection, programId) {
+function isRateLimitError(err) {
+  if (!err) return false;
+  const msg = err instanceof Error ? err.message : String(err);
+  return msg.includes("429") || msg.toLowerCase().includes("rate limit") || msg.toLowerCase().includes("too many requests");
+}
+function withJitter(delayMs) {
+  return delayMs + Math.floor(Math.random() * delayMs * 0.25);
+}
+async function discoverMarkets(connection, programId, options = {}) {
+  const {
+    sequential = false,
+    interTierDelayMs = 200,
+    rateLimitBackoffMs = [1e3, 3e3, 9e3, 27e3]
+  } = options;
   const ALL_TIERS = [
     ...Object.values(SLAB_TIERS),
     ...Object.values(SLAB_TIERS_V0),
@@ -2068,27 +2081,65 @@ async function discoverMarkets(connection, programId) {
     ...Object.values(SLAB_TIERS_V2)
   ];
   let rawAccounts = [];
-  try {
-    const queries = ALL_TIERS.map(
-      (tier) => connection.getProgramAccounts(programId, {
-        filters: [{ dataSize: tier.dataSize }],
-        dataSlice: { offset: 0, length: HEADER_SLICE_LENGTH }
-      }).then((results2) => results2.map((entry) => ({ ...entry, maxAccounts: tier.maxAccounts, dataSize: tier.dataSize })))
-    );
-    const results = await Promise.allSettled(queries);
-    let hadRejection = false;
-    for (const result of results) {
-      if (result.status === "fulfilled") {
-        for (const entry of result.value) {
-          rawAccounts.push(entry);
+  async function fetchTierWithRetry(tier) {
+    for (let attempt = 0; attempt <= rateLimitBackoffMs.length; attempt++) {
+      try {
+        const results = await connection.getProgramAccounts(programId, {
+          filters: [{ dataSize: tier.dataSize }],
+          dataSlice: { offset: 0, length: HEADER_SLICE_LENGTH }
+        });
+        return results.map((entry) => ({ ...entry, maxAccounts: tier.maxAccounts, dataSize: tier.dataSize }));
+      } catch (err) {
+        if (isRateLimitError(err) && attempt < rateLimitBackoffMs.length) {
+          const delay = withJitter(rateLimitBackoffMs[attempt]);
+          console.warn(
+            `[discoverMarkets] 429 on tier dataSize=${tier.dataSize} attempt=${attempt + 1}, backing off ${delay}ms`
+          );
+          await new Promise((r) => setTimeout(r, delay));
+          continue;
         }
-      } else {
-        hadRejection = true;
         console.warn(
-          "[discoverMarkets] Tier query rejected:",
-          result.reason instanceof Error ? result.reason.message : result.reason
+          `[discoverMarkets] Tier query failed (dataSize=${tier.dataSize}, attempt=${attempt + 1}):`,
+          err instanceof Error ? err.message : err
         );
+        return [];
       }
+    }
+    return [];
+  }
+  try {
+    if (sequential) {
+      for (let i = 0; i < ALL_TIERS.length; i++) {
+        const tier = ALL_TIERS[i];
+        const entries = await fetchTierWithRetry(tier);
+        rawAccounts.push(...entries);
+        if (i < ALL_TIERS.length - 1) {
+          await new Promise((r) => setTimeout(r, interTierDelayMs));
+        }
+      }
+    } else {
+      const queries = ALL_TIERS.map(
+        (tier) => connection.getProgramAccounts(programId, {
+          filters: [{ dataSize: tier.dataSize }],
+          dataSlice: { offset: 0, length: HEADER_SLICE_LENGTH }
+        }).then((results2) => results2.map((entry) => ({ ...entry, maxAccounts: tier.maxAccounts, dataSize: tier.dataSize })))
+      );
+      const results = await Promise.allSettled(queries);
+      let hadRejection = false;
+      for (const result of results) {
+        if (result.status === "fulfilled") {
+          for (const entry of result.value) {
+            rawAccounts.push(entry);
+          }
+        } else {
+          hadRejection = true;
+          console.warn(
+            "[discoverMarkets] Tier query rejected:",
+            result.reason instanceof Error ? result.reason.message : result.reason
+          );
+        }
+      }
+      void hadRejection;
     }
     if (rawAccounts.length === 0) {
       console.warn("[discoverMarkets] dataSize filters returned 0 markets, falling back to memcmp");

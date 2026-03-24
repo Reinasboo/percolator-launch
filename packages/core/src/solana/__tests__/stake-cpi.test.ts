@@ -36,6 +36,11 @@ import {
   encodeStakeAdminResolveMarket,
   encodeStakeAdminWithdrawInsurance,
   encodeStakeAdminSetInsurancePolicy,
+  encodeStakeAccrueFees,
+  encodeStakeInitTradingPool,
+  encodeStakeAdminSetHwmConfig,
+  encodeStakeAdminSetTrancheConfig,
+  encodeStakeDepositJunior,
   initPoolAccounts,
   depositAccounts,
   withdrawAccounts,
@@ -442,9 +447,9 @@ describe('Stake PDA Chain — Multi-Market Isolation', () => {
 // ═══════════════════════════════════════════════════════════════
 
 describe('Stake Instruction Tags — No Gaps or Conflicts', () => {
-  it('tags are contiguous 0..11', () => {
+  it('tags are contiguous 0..16', () => {
     const tags = Object.values(STAKE_IX);
-    expect(tags).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+    expect(tags).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
   });
 
   it('each encoder produces the correct tag byte', () => {
@@ -461,6 +466,11 @@ describe('Stake Instruction Tags — No Gaps or Conflicts', () => {
       [STAKE_IX.AdminResolveMarket, encodeStakeAdminResolveMarket()],
       [STAKE_IX.AdminWithdrawInsurance, encodeStakeAdminWithdrawInsurance(0n)],
       [STAKE_IX.AdminSetInsurancePolicy, encodeStakeAdminSetInsurancePolicy(PublicKey.default, 0n, 0, 0n)],
+      [STAKE_IX.AccrueFees, encodeStakeAccrueFees()],
+      [STAKE_IX.InitTradingPool, encodeStakeInitTradingPool(0n, 0n)],
+      [STAKE_IX.AdminSetHwmConfig, encodeStakeAdminSetHwmConfig(false, 0)],
+      [STAKE_IX.AdminSetTrancheConfig, encodeStakeAdminSetTrancheConfig(0)],
+      [STAKE_IX.DepositJunior, encodeStakeDepositJunior(0n)],
     ];
 
     for (const [expectedTag, data] of tagMap) {

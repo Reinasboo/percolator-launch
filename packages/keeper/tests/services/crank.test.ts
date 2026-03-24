@@ -879,4 +879,102 @@ describe('CrankService', () => {
       expect(crankService.isRunning).toBe(false);
     });
   });
+
+  // PERC-1650: Keeper RPC 429 retry + sequential mode
+  describe('PERC-1650: discover() 429 retry', () => {
+    it('passes sequential=true to discoverMarkets', async () => {
+      vi.mocked(core.discoverMarkets).mockResolvedValue([]);
+      await crankService.discover();
+      expect(core.discoverMarkets).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.objectContaining({ sequential: true }),
+      );
+    });
+
+    it('retries on 429 at the program level and succeeds on second attempt', async () => {
+      const market = {
+        slabAddress: { toBase58: () => 'Slab429111111111111111111111111111111111', equals: () => false },
+        programId: { toBase58: () => '11111111111111111111111111111111' },
+        config: {
+          collateralMint: { toBase58: () => 'Mint111111111111111111111111111111111111' },
+          indexFeedId: { toBytes: () => new Uint8Array(32).fill(1), equals: () => false },
+          oracleAuthority: { toBase58: () => 'Auth1111111111111111111111111111111111', equals: () => false },
+          authorityPriceE6: BigInt(0),
+          lastEffectivePriceE6: BigInt(0),
+        },
+        params: { maintenanceMarginBps: 500n },
+        header: { admin: { toBase58: () => 'Admin111111111111111111111111111111111' } },
+      };
+
+      let callCount = 0;
+      vi.mocked(core.discoverMarkets).mockImplementation(async () => {
+        callCount++;
+        if (callCount === 1) throw new Error('429 Too Many Requests');
+        return [market as any];
+      });
+
+      await crankService.discover();
+
+      // Should have retried: callCount >= 2
+      expect(callCount).toBeGreaterThanOrEqual(2);
+      // Market should be registered after retry success
+      expect(crankService.getMarkets().size).toBeGreaterThanOrEqual(1);
+    });
+
+    it('skips program after exhausting 429 retries and continues to next program', async () => {
+      // Use fake timers so the exponential backoff delays don't actually wait.
+      vi.useFakeTimers();
+
+      // 2 programs configured in mock; first always 429s, second succeeds
+      let firstProgramCalls = 0;
+      const market = {
+        slabAddress: { toBase58: () => 'SlabGood111111111111111111111111111111111', equals: () => false },
+        programId: { toBase58: () => 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' },
+        config: {
+          collateralMint: { toBase58: () => 'Mint222222222222222222222222222222222222' },
+          indexFeedId: { toBytes: () => new Uint8Array(32).fill(2), equals: () => false },
+          oracleAuthority: { toBase58: () => 'Auth222222222222222222222222222222222222', equals: () => false },
+          authorityPriceE6: BigInt(0),
+          lastEffectivePriceE6: BigInt(0),
+        },
+        params: { maintenanceMarginBps: 500n },
+        header: { admin: { toBase58: () => 'Admin222222222222222222222222222222222222' } },
+      };
+
+      vi.mocked(core.discoverMarkets).mockImplementation(async (_conn, programId: any) => {
+        const id = typeof programId.toBase58 === 'function' ? programId.toBase58() : String(programId);
+        if (id === '11111111111111111111111111111111') {
+          firstProgramCalls++;
+          throw new Error('429 Too Many Requests');
+        }
+        return [market as any];
+      });
+
+      // Run discover() concurrently and advance fake timers to skip all backoff delays.
+      const discoverPromise = crankService.discover();
+      // Advance past all possible backoff delays (sum of DISCOVER_429_BACKOFF_MS * 1.25 jitter + inter-program delay)
+      await vi.runAllTimersAsync();
+      await discoverPromise;
+
+      vi.useRealTimers();
+
+      // First program should have been attempted multiple times (retries)
+      expect(firstProgramCalls).toBeGreaterThan(1);
+      // Second program's market should still be found
+      expect(crankService.getMarkets().has('SlabGood111111111111111111111111111111111')).toBe(true);
+    }, 15_000);
+
+    it('does not retry on non-429 errors', async () => {
+      let callCount = 0;
+      vi.mocked(core.discoverMarkets).mockImplementation(async () => {
+        callCount++;
+        throw new Error('Connection refused');
+      });
+
+      await crankService.discover();
+      // Should only have been called once per program (2 programs × 1 attempt = 2)
+      expect(callCount).toBe(2);
+    });
+  });
 });
