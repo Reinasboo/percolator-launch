@@ -55,6 +55,17 @@ const MOVE_TO_TOP_ROUTES = ["/stake"];
  */
 const MOVE_TO_BOTTOM_LEFT_ROUTES_LG = ["/trade"];
 
+/**
+ * Match a pathname against a route prefix using exact-or-child semantics:
+ * - exact: pathname === route  (e.g. "/trade" matches "/trade")
+ * - child: pathname.startsWith(route + "/")  (e.g. "/trade/BTC-PERP" matches "/trade")
+ * This prevents false positives like "/trader" matching the prefix "/trade".
+ */
+function matchesRoute(pathname: string | null | undefined, route: string): boolean {
+  if (!pathname) return false;
+  return pathname === route || pathname.startsWith(route + "/");
+}
+
 export function MusicPlayer() {
   const [playing, setPlaying] = useState(false);
   const [volume, setVolume] = useState(0.5);
@@ -100,13 +111,13 @@ export function MusicPlayer() {
   }, []);
 
   /* Determine if the player should be hidden on mobile for this route */
-  const hideOnMobile = HIDE_ON_MOBILE_ROUTES.some((r) => pathname?.startsWith(r));
+  const hideOnMobile = HIDE_ON_MOBILE_ROUTES.some((r) => matchesRoute(pathname, r));
 
   /* Determine if the player should move to top-right to avoid content overlap */
-  const moveToTop = MOVE_TO_TOP_ROUTES.some((r) => pathname?.startsWith(r));
+  const moveToTop = MOVE_TO_TOP_ROUTES.some((r) => matchesRoute(pathname, r));
 
   /* Determine if the player should move to bottom-left at lg+ to avoid right panel overlap */
-  const moveToBottomLeftLg = MOVE_TO_BOTTOM_LEFT_ROUTES_LG.some((r) => pathname?.startsWith(r));
+  const moveToBottomLeftLg = MOVE_TO_BOTTOM_LEFT_ROUTES_LG.some((r) => matchesRoute(pathname, r));
 
   useEffect(() => {
     if (audioRef.current) audioRef.current.volume = volume;
