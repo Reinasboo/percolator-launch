@@ -210,8 +210,16 @@ const DevnetMintContent: FC = () => {
       setAirdropFailed(false);
       await refreshBalance();
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setAirdropStatus(`Airdrop failed: ${msg}`);
+      const raw = e instanceof Error ? e.message : String(e);
+      // GH#1668: Translate opaque Solana devnet RPC errors to user-friendly copy.
+      // The devnet faucet returns "Internal error" when the wallet has already
+      // claimed within its rate-limit window (1 airdrop per wallet per 24h on devnet).
+      const isRateLimit =
+        /internal error|429|too many requests|rate.?limit|airdrop.*limit|limit.*airdrop/i.test(raw);
+      const friendly = isRateLimit
+        ? "Devnet faucet rate-limited — you can only airdrop SOL once per wallet per day. Try again tomorrow or use faucet.solana.com."
+        : `Airdrop failed: ${raw}`;
+      setAirdropStatus(friendly);
       setAirdropFailed(true);
     } finally {
       setAirdropping(false);
@@ -564,8 +572,9 @@ const DevnetMintContent: FC = () => {
                   className={`${inputClass} ${faucetMint && !isFaucetMintValid ? "border-[var(--short)]/60" : ""}`}
                   disabled={faucetLoading}
                 />
+                {/* GH#1667: use PublicKey-derived validity, not char-length hint */}
                 {faucetMint && !isFaucetMintValid && (
-                  <p className="mt-1 text-[11px] text-[var(--short)]/80">Not a valid Solana address (base58, 32–44 chars)</p>
+                  <p className="mt-1 text-[11px] text-[var(--short)]/80">Not a valid Solana address</p>
                 )}
               </div>
               {/* Inline status */}

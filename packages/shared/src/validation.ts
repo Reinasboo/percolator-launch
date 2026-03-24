@@ -1,7 +1,11 @@
 import { z } from "zod";
 
 /**
- * Base58 address schema (32-44 chars, base58 charset only)
+ * Base58 address schema for Solana public keys.
+ * GH#1667: string-length bounds (32-44) are sufficient because a 32-byte
+ * key cannot exceed 44 base58 chars mathematically. The regex rejects
+ * non-base58 characters. Actual 32-byte decode validation happens at the
+ * API layer via `new PublicKey(addr)`.
  */
 export const slabAddressSchema = z
   .string()
