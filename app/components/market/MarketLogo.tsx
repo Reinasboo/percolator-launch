@@ -8,14 +8,16 @@ interface MarketLogoProps {
   mintAddress?: string | null;
   symbol?: string;
   size?: "sm" | "md" | "lg";
+  /** Override pixel size directly, bypassing the size preset. */
+  pixelOverride?: number;
 }
 
 const sizes = { sm: 24, md: 32, lg: 48 };
 
-export const MarketLogo: FC<MarketLogoProps> = ({ logoUrl, mintAddress, symbol, size = "md" }) => {
+export const MarketLogo: FC<MarketLogoProps> = ({ logoUrl, mintAddress, symbol, size = "md", pixelOverride }) => {
   const [error, setError] = useState(false);
   const [cdnError, setCdnError] = useState(false);
-  const px = sizes[size];
+  const px = pixelOverride ?? sizes[size];
 
   // Try CDN logo when DB logoUrl is unavailable
   const cdnUrl = mintAddress ? `https://img.fotofolio.xyz/?url=https%3A%2F%2Fraw.githubusercontent.com%2Fsolana-labs%2Ftoken-list%2Fmain%2Fassets%2Fmainnet%2F${mintAddress}%2Flogo.png&w=${px * 2}&h=${px * 2}` : null;
