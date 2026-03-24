@@ -10,6 +10,8 @@ import { formatUsd, formatTokenAmount, shortenAddress } from "@/lib/format";
 import { resolveMarketPriceE6 } from "@/lib/oraclePrice";
 import { AccountKind } from "@percolator/sdk";
 
+const LP_TABLE_CAP = 5;
+
 export const MarketBookCard: FC = () => {
   const { engine, params, loading } = useEngineState();
   const config = useMarketConfig();
@@ -35,69 +37,176 @@ export const MarketBookCard: FC = () => {
   const feeBps = Number(params.tradingFeeBps ?? 0n);
   const bestBid = oraclePrice > 0n ? Number(oraclePrice) * (1 - feeBps / 10000) : 0;
   const bestAsk = oraclePrice > 0n ? Number(oraclePrice) * (1 + feeBps / 10000) : 0;
+
+  // 2.2: Spread
+  const spread = bestAsk - bestBid;
+  const spreadPct = bestAsk > 0 ? (spread / bestAsk) * 100 : 0;
+
   const lpTotalCapital = lps.reduce((sum, { account }) => sum + account.capital, 0n);
+
+  // 2.3: Depth — bid side = total LP capital; ask side = LP capital - open long positions (clamped ≥ 0)
+  const openLongPositions = engine.totalOpenInterest > 0n ? engine.totalOpenInterest : 0n;
+  const askDepth = lpTotalCapital > openLongPositions
+    ? lpTotalCapital - openLongPositions
+    : 0n;
+
+  // Pool utilisation for fill bars: openLong / totalCapital
+  const bidUtilPct = lpTotalCapital > 0n
+    ? Math.min(100, Number(openLongPositions * 100n / lpTotalCapital))
+    : 0;
+  const askUtilPct = lpTotalCapital > 0n
+    ? Math.min(100, Number((lpTotalCapital - askDepth) * 100n / lpTotalCapital))
+    : 0;
+
+  // 2.4: Per-LP utilisation = positionSize / capital
   const maxLpCapital = lps.length > 0
     ? lps.reduce((max, { account }) => account.capital > max ? account.capital : max, 0n) : 1n;
 
+  const displayedLps = lps.slice(0, LP_TABLE_CAP);
+  const hiddenLpCount = Math.max(0, lps.length - LP_TABLE_CAP);
+
   return (
     <div className="p-3">
-      {/* Price ladder */}
-      <div className="mb-3 grid grid-cols-3 gap-px border border-[var(--border)]/30">
+      {/* 2.1: Price ladder — bigger fonts */}
+      <div className="mb-2 grid grid-cols-3 gap-px border border-[var(--border)]/30">
+        {/* Bid */}
         <div className="bg-[var(--bg)] p-2 text-center">
           <p className="text-[8px] uppercase tracking-[0.15em] text-[var(--text-dim)]">Bid</p>
-          <p className="text-[11px] font-medium text-[var(--long)]" style={{ fontFamily: "var(--font-mono)" }}>${(bestBid / 1_000_000).toFixed(6)}</p>
+          <p
+            className="text-[13px] font-medium text-[var(--long)]"
+            style={{ fontFamily: "var(--font-mono)" }}
+          >
+            {bestBid > 0 ? `$${(bestBid / 1_000_000).toFixed(bestBid / 1_000_000 < 1 ? 6 : 2)}` : "—"}
+          </p>
         </div>
-        <div className="bg-[var(--bg)] p-2 text-center border-x border-[var(--border)]/20">
+        {/* Oracle — subtle accent border + bg */}
+        <div className="p-2 text-center border-x border-[var(--accent)]/20 bg-[var(--accent)]/[0.03]">
           <p className="text-[8px] uppercase tracking-[0.15em] text-[var(--text-dim)]">Oracle</p>
-          <p className="text-[11px] font-medium text-[var(--text)]" style={{ fontFamily: "var(--font-mono)" }}>{formatUsd(oraclePrice)}</p>
+          <p
+            className="text-[13px] font-medium text-[var(--text)]"
+            style={{ fontFamily: "var(--font-mono)" }}
+          >
+            {formatUsd(oraclePrice)}
+          </p>
         </div>
+        {/* Ask */}
         <div className="bg-[var(--bg)] p-2 text-center">
           <p className="text-[8px] uppercase tracking-[0.15em] text-[var(--text-dim)]">Ask</p>
-          <p className="text-[11px] font-medium text-[var(--short)]" style={{ fontFamily: "var(--font-mono)" }}>${(bestAsk / 1_000_000).toFixed(6)}</p>
+          <p
+            className="text-[13px] font-medium text-[var(--short)]"
+            style={{ fontFamily: "var(--font-mono)" }}
+          >
+            {bestAsk > 0 ? `$${(bestAsk / 1_000_000).toFixed(bestAsk / 1_000_000 < 1 ? 6 : 2)}` : "—"}
+          </p>
         </div>
       </div>
 
-      {/* Depth bars */}
+      {/* 2.2: Spread row */}
+      {oraclePrice > 0n && (
+        <div className="mb-3 flex items-center justify-between px-0.5">
+          <span className="text-[9px] uppercase tracking-[0.12em] text-[var(--text-dim)] font-mono">Spread</span>
+          <span className="text-[9px] text-[var(--text-dim)] font-mono">
+            ${(spread / 1_000_000).toFixed(spread / 1_000_000 < 0.001 ? 6 : 4)}{" "}
+            <span className="text-[var(--text-dim)]/60">({spreadPct.toFixed(3)}%)</span>
+          </span>
+        </div>
+      )}
+
+      {/* 2.3: Depth bars — differentiated bid/ask with fill bar */}
       <div className="mb-3 grid grid-cols-2 gap-1">
-        <div className="rounded-none border border-[var(--long)]/10 bg-[var(--long)]/5 p-2 text-center">
+        <div className="rounded-none border border-[var(--long)]/10 bg-[var(--long)]/5 p-2">
           <p className="text-[8px] uppercase tracking-[0.15em] text-[var(--long)]/60">Bid Depth</p>
-          <p className="text-[11px] font-semibold text-[var(--long)]" style={{ fontFamily: "var(--font-mono)" }}>{formatTokenAmount(lpTotalCapital)}</p>
+          <p
+            className="text-[11px] font-semibold text-[var(--long)]"
+            style={{ fontFamily: "var(--font-mono)" }}
+          >
+            {formatTokenAmount(lpTotalCapital)}
+          </p>
+          {/* 3px utilisation fill bar */}
+          <div className="mt-1.5 h-[3px] w-full bg-[var(--border)]/20 overflow-hidden">
+            <div
+              className="h-full bg-[var(--long)]/40 transition-all duration-500"
+              style={{ width: `${bidUtilPct}%` }}
+            />
+          </div>
         </div>
-        <div className="rounded-none border border-[var(--short)]/10 bg-[var(--short)]/5 p-2 text-center">
+        <div className="rounded-none border border-[var(--short)]/10 bg-[var(--short)]/5 p-2">
           <p className="text-[8px] uppercase tracking-[0.15em] text-[var(--short)]/60">Ask Depth</p>
-          <p className="text-[11px] font-semibold text-[var(--short)]" style={{ fontFamily: "var(--font-mono)" }}>{formatTokenAmount(lpTotalCapital)}</p>
+          <p
+            className="text-[11px] font-semibold text-[var(--short)]"
+            style={{ fontFamily: "var(--font-mono)" }}
+          >
+            {formatTokenAmount(askDepth)}
+          </p>
+          {/* 3px utilisation fill bar */}
+          <div className="mt-1.5 h-[3px] w-full bg-[var(--border)]/20 overflow-hidden">
+            <div
+              className="h-full bg-[var(--short)]/40 transition-all duration-500"
+              style={{ width: `${askUtilPct}%` }}
+            />
+          </div>
         </div>
       </div>
 
-      {/* LP table */}
+      {/* 2.4: LP table — with UTILISATION column, capped at 5 */}
       {lps.length > 0 && (
         <div>
+          <p className="mb-1 text-[8px] uppercase tracking-[0.15em] text-[var(--text-dim)]">
+            Liquidity Providers
+          </p>
+          {/* Header */}
           <div className="mb-1 flex text-[8px] uppercase tracking-[0.15em] text-[var(--text-dim)]">
             <span className="w-5">#</span>
             <span className="flex-1">LP</span>
             <span className="w-20 text-right">Capital</span>
             <span className="w-20 text-right">Net Pos</span>
-            <span className="w-16" />
+            <span className="w-16 text-right">Util</span>
           </div>
           <div className="divide-y divide-[var(--border)]/15">
-            {lps.map(({ idx, account }, i) => {
-              const pct = maxLpCapital > 0n ? Number(account.capital * 100n / maxLpCapital) : 0;
+            {displayedLps.map(({ idx, account }, i) => {
+              const capPct = maxLpCapital > 0n ? Number(account.capital * 100n / maxLpCapital) : 0;
+              // Utilisation = abs(positionSize) / capital
+              const utilPct = account.capital > 0n
+                ? Math.min(100, Number(
+                    (account.positionSize < 0n ? -account.positionSize : account.positionSize)
+                    * 100n / account.capital
+                  ))
+                : 0;
+              const utilColor = utilPct > 80
+                ? "text-[var(--short)]"
+                : utilPct > 50
+                  ? "text-amber-400"
+                  : "text-[var(--text-dim)]";
+
               return (
                 <div key={idx} className="flex items-center py-1 text-[10px]">
-                  <span className="w-5 text-[var(--text-dim)]" style={{ fontFamily: "var(--font-mono)" }}>{i + 1}</span>
-                  <span className="flex-1 text-[var(--text-secondary)]" style={{ fontFamily: "var(--font-mono)" }}>{shortenAddress(account.owner.toBase58())}</span>
-                  <span className="w-20 text-right text-[var(--text)]" style={{ fontFamily: "var(--font-mono)" }}>{formatTokenAmount(account.capital)}</span>
-                  <span className={`w-20 text-right ${account.positionSize >= 0n ? "text-[var(--long)]" : "text-[var(--short)]"}`} style={{ fontFamily: "var(--font-mono)" }}>
+                  <span className="w-5 text-[var(--text-dim)]" style={{ fontFamily: "var(--font-mono)" }}>
+                    {i + 1}
+                  </span>
+                  <span className="flex-1 text-[var(--text-secondary)]" style={{ fontFamily: "var(--font-mono)" }}>
+                    {shortenAddress(account.owner.toBase58())}
+                  </span>
+                  <span className="w-20 text-right text-[var(--text)]" style={{ fontFamily: "var(--font-mono)" }}>
+                    {formatTokenAmount(account.capital)}
+                  </span>
+                  <span
+                    className={`w-20 text-right ${account.positionSize >= 0n ? "text-[var(--long)]" : "text-[var(--short)]"}`}
+                    style={{ fontFamily: "var(--font-mono)" }}
+                  >
                     {formatTokenAmount(account.positionSize < 0n ? -account.positionSize : account.positionSize)}
                   </span>
-                  <span className="w-16 pl-2">
-                    <div className="h-[2px] bg-[var(--border)]/30">
-                      <div className="h-[2px] bg-[var(--long)]/50" style={{ width: `${pct}%` }} />
-                    </div>
+                  <span className={`w-16 text-right font-medium ${utilColor}`} style={{ fontFamily: "var(--font-mono)" }}>
+                    {utilPct.toFixed(1)}%
                   </span>
                 </div>
               );
             })}
+            {/* +N more row */}
+            {hiddenLpCount > 0 && (
+              <div className="py-1 text-center">
+                <span className="text-[9px] text-[var(--text-dim)]">+{hiddenLpCount} more</span>
+              </div>
+            )}
           </div>
         </div>
       )}
