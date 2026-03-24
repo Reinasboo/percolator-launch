@@ -26,12 +26,12 @@ export const Footer: FC = () => {
               alt="Percolator"
               className="h-4 w-auto"
             />
-            <span className="text-[var(--text-dim)]">/</span>
-            <span className="text-[11px] text-[var(--text-muted)]">perpetual futures engine</span>
+            <span className="text-[var(--text-muted)]">/</span>
+            <span className="text-[11px] text-[var(--text-secondary)]">perpetual futures engine</span>
           </div>
 
           {/* Center - links */}
-          <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-5 text-[11px] text-[var(--text-muted)]">
+          <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-5 text-[11px] text-[var(--text-secondary)]">
             <button
               onClick={copyCA}
               className="group flex items-center gap-1.5 transition-colors hover:text-[var(--text-secondary)]"
@@ -99,9 +99,9 @@ export const Footer: FC = () => {
           </div>
 
           {/* Right - powered by */}
-          <div className="flex items-center gap-2 text-[11px] text-[var(--text-dim)]">
+          <div className="flex items-center gap-2 text-[11px] text-[var(--text-muted)]">
             <span>powered by</span>
-            <span className="font-semibold text-[var(--text-muted)]">solana</span>
+            <span className="font-semibold text-[var(--text-secondary)]">solana</span>
           </div>
         </div>
       </div>

@@ -239,10 +239,14 @@ export default function Home() {
           // with zeroed OI and null price are excluded from Active Markets display.
           // Without this, DfLoAzny (vault=1M=MIN_VAULT, OI zeroed by phantom guard,
           // price=null after sanitization) still appeared in the sorted featured list.
+          // Designer audit 2026-03-24: filter markets with no oracle price from homepage
+          // display — showing "NO ORACLE" in red on the homepage is bad UX. Markets
+          // without a live price should not appear in the top-5 featured list.
           const converted = phantomAwareData
             .filter((m) => m.slab_address != null)
             .filter((m) => !isBlockedSlab(m.slab_address!))
             .filter(isActiveMarket)
+            .filter((m) => m.last_price != null && m.last_price > 0 && m.last_price <= MAX_SANE_PRICE_USD)
             .map((m) => ({
             slab_address: m.slab_address!,
             symbol: m.symbol,
@@ -471,7 +475,7 @@ export default function Home() {
               </div>
 
               <div className="overflow-x-auto border border-[var(--border)] bg-[var(--panel-bg)]">
-                <div className="grid min-w-[480px] grid-cols-5 gap-2 sm:gap-4 border-b border-[var(--border)] bg-[var(--bg-surface)] px-3 sm:px-5 py-3 text-[9px] font-medium uppercase tracking-[0.2em] text-[var(--text-dim)]">
+                <div className="grid min-w-[480px] grid-cols-5 gap-2 sm:gap-4 border-b border-[var(--border)] bg-[var(--bg-surface)] px-3 sm:px-5 py-3 text-[9px] font-medium uppercase tracking-[0.2em] text-[var(--text-muted)]">
                   <div>Token</div>
                   <div className="text-right">Price</div>
                   <div className="text-right">Volume</div>
