@@ -421,8 +421,11 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
       {/* Phase 2: mobile uses 40svh, desktop keeps 500px */}
       {/* overflow-hidden clips lightweight-charts toolbar/navigation buttons so they
           cannot escape the chart boundary and bleed into adjacent stat grid cells
-          (GH#1647: ◀ 32 ▶ ✕ appearing in ACCOUNTS cell of STATS tab) */}
-      <div className="relative overflow-hidden">
+          (GH#1647: ◀ 32 ▶ ✕ appearing in ACCOUNTS cell of STATS tab)
+          GH#1660: `contain: paint` creates a new paint containment boundary so lw-charts
+          absolutely-positioned nav buttons are painted within this element only,
+          preventing them from bleeding into sibling DOM at 1440px desktop. */}
+      <div className="relative overflow-hidden [contain:paint]">
         {/* GH#1652: always mount the container so lightweight-charts canvas initialises.
             The chart ref is always created in useEffect; empty-state is overlaid on top
             when candles=[] so the canvas element exists in the DOM on first render. */}
