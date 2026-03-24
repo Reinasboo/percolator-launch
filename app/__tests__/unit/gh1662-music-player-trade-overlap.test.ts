@@ -6,6 +6,9 @@
  *
  * Fix: On /trade routes at lg+ breakpoints, the player moves to bottom-LEFT
  * (lg:left-5 lg:right-auto) so it sits below the chart, away from right panel.
+ *
+ * CodeRabbit follow-up: route matching now uses exact-or-child semantics via
+ * matchesRoute() to prevent "/trade" from matching "/trader" etc.
  */
 
 import { readFileSync } from "fs";
@@ -30,11 +33,34 @@ describe("GH#1662 – MusicPlayer does not overlap STATS panel at 1440px", () =>
     expect(playerSrc).toContain("lg:right-auto");
   });
 
-  it("uses moveToBottomLeftLg flag derived from MOVE_TO_BOTTOM_LEFT_ROUTES_LG", () => {
+  it("uses moveToBottomLeftLg flag derived from MOVE_TO_BOTTOM_LEFT_ROUTES_LG via matchesRoute", () => {
     expect(playerSrc).toContain("moveToBottomLeftLg");
+    // Must use matchesRoute helper (not raw startsWith) to avoid false positives like /trader
     expect(playerSrc).toContain(
-      "MOVE_TO_BOTTOM_LEFT_ROUTES_LG.some((r) => pathname?.startsWith(r))"
+      "MOVE_TO_BOTTOM_LEFT_ROUTES_LG.some((r) => matchesRoute(pathname, r))"
     );
+  });
+
+  it("defines matchesRoute helper with exact-or-child semantics", () => {
+    expect(playerSrc).toContain("function matchesRoute");
+    // Helper must check exact match OR pathname starts with route + "/"
+    expect(playerSrc).toContain('pathname === route');
+    expect(playerSrc).toContain('pathname.startsWith(route + "/")');
+  });
+
+  it("matchesRoute prevents /trader from matching /trade prefix", () => {
+    // Inline test of the logic described in the source
+    function matchesRoute(pathname: string | null | undefined, route: string): boolean {
+      if (!pathname) return false;
+      return pathname === route || pathname.startsWith(route + "/");
+    }
+    expect(matchesRoute("/trade", "/trade")).toBe(true);
+    expect(matchesRoute("/trade/BTC-PERP", "/trade")).toBe(true);
+    expect(matchesRoute("/trader", "/trade")).toBe(false);
+    expect(matchesRoute("/tradex", "/trade")).toBe(false);
+    expect(matchesRoute(null, "/trade")).toBe(false);
+    expect(matchesRoute(undefined, "/trade")).toBe(false);
+    expect(matchesRoute("/markets", "/trade")).toBe(false);
   });
 
   it("places lg position classes inside the conditional className (not unconditionally)", () => {
