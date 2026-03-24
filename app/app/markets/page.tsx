@@ -25,6 +25,7 @@ import { MarketLogo } from "@/components/market/MarketLogo";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 import { detectOracleMode, resolveMarketPriceE6, priceE6ToUsd } from "@/lib/oraclePrice";
 import { formatStatValue } from "@/lib/format";
+import { MIN_VAULT_FOR_OI } from "@/lib/phantom-oi";
 
 /** Max sane price (USD) for both active-market filtering and display capping.
  *  Mirrors /api/stats sanitizePrice() cap. Corrupt oracle prices (e.g. $7.9T)
@@ -371,7 +372,18 @@ function MarketsPageInner() {
           };
           // For on-chain markets: isOracleDown when resolveMarketPriceE6 returns 0
           // For Supabase-only markets: isOracleDown when both mark_price and index_price are null/zero
+          // GH#1639: Apply the same MIN_VAULT_FOR_OI guard as route.ts.
+          // Markets with vault_balance < MIN_VAULT_FOR_OI have phantom OI zeroed out
+          // server-side; calling isOracleDown on them may produce "oracle-down" sort rank
+          // instead of "empty", causing client/server sort disagreement at the threshold boundary.
+          // Guard: return false (not oracle-down) for sub-threshold markets so they sort as "empty".
           const computeIsOracleDown = (m: MergedMarket): boolean => {
+            // Vault guard — mirrors route.ts MIN_VAULT_FOR_OI check (PERC-816 / GH#1639)
+            const vaultBal = numericOrNullForSort(m.supabase?.vault_balance);
+            if (vaultBal !== null && vaultBal < MIN_VAULT_FOR_OI) {
+              // Sub-threshold vault: phantom OI suppressed server-side → treat as empty, not oracle-down
+              return false;
+            }
             if (m.onChain) {
               const priceE6 = resolveMarketPriceE6(m.onChain.config);
               return priceE6 === 0n;
