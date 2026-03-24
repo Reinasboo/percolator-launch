@@ -306,9 +306,6 @@ function TradePageInner({ slab }: { slab: string }) {
             <UsdToggleButton />
             {health && <HealthBadge level={health.level} />}
             {oracleMode && <OracleBadge mode={oracleMode} status={oracleBadgeStatus} />}
-            {!slabLoading && (
-              <span className={`shrink-0 text-sm font-bold ${priceDisplay ? "text-[var(--text)]" : "text-[var(--text-dim)]"}`} style={{ fontFamily: "var(--font-mono)" }}>{priceDisplay ?? "\u2014"}</span>
-            )}
           </div>
         </div>
         <div className="mt-1 flex items-center gap-2 flex-wrap">
@@ -334,10 +331,8 @@ function TradePageInner({ slab }: { slab: string }) {
         </div>
       </div>
 
-      {/* ── DESKTOP: Market info bar ── */}
-      <div className="hidden lg:block">
-        <MarketInfoBar slabAddress={slab} symbol={symbol} logoUrl={logoUrl} />
-      </div>
+      {/* ── Market info bar (all breakpoints — horizontally scrollable on mobile) ── */}
+      <MarketInfoBar slabAddress={slab} symbol={symbol} logoUrl={logoUrl} mintAddress={mintAddress} />
 
 
       {/* ── Quick start guide — desktop only, hidden after first trade ── */}
