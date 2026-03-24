@@ -462,17 +462,30 @@ export async function GET(request: NextRequest) {
         : sortParam === "recent" ? -1 : sortDir;
 
     // Health sort uses a computed level rank, not a raw field value.
-    const HEALTH_ORDER: Record<string, number> = { healthy: 0, caution: 1, warning: 2, empty: 3 };
+    // GH#1637: oracle-down markets (has capital but no price) rank below Caution/Warning
+    // but above Empty. Sort order: healthy=0 < caution=1 < warning=2 < oracle-down=3 < empty=4.
+    const HEALTH_ORDER: Record<string, number> = { healthy: 0, caution: 1, warning: 2, "oracle-down": 3, empty: 4 };
     const healthRank = (m: Record<string, unknown>): number => {
       // GH#1608: Markets with vault_balance < MIN_VAULT_FOR_OI have no LP liquidity.
       // computeMarketHealthFromStats may return "healthy" for these because phantom OI
       // is suppressed to 0 while c_tot > 0 remains — oi=0 + capital > 0 → "healthy".
       // This caused vault=0 markets (with legacy c_tot from FF7K keeper pattern) to rank
       // as best health (0) and appear first in sort=health results.
-      // Fix: treat no-vault markets as rank 3 (empty) directly, before health computation.
+      // Fix: treat no-vault markets as rank 4 (empty) directly, before health computation.
       const vaultNum = numericOrNull(m.vault_balance);
       if (vaultNum !== null && vaultNum < MIN_VAULT_FOR_OI) {
-        return HEALTH_ORDER["empty"]; // 3 — no vault = no real LP market
+        return HEALTH_ORDER["empty"]; // 4 — no vault = no real LP market
+      }
+      // GH#1637: Detect oracle-down markets (has capital/vault but no price data).
+      // mark_price and index_price both null/zero → oracle is down.
+      // These markets have c_tot>0 and vault>0, so computeMarketHealthFromStats returns
+      // "healthy" (capital > OI with no price → ratio = Infinity). We must check for
+      // missing price BEFORE calling computeMarketHealthFromStats.
+      const mp = numericOrNull(m.mark_price);
+      const ip = numericOrNull(m.index_price);
+      const isOracleDown = (mp == null || mp <= 0) && (ip == null || ip <= 0);
+      if (isOracleDown && vaultNum != null && vaultNum >= MIN_VAULT_FOR_OI) {
+        return HEALTH_ORDER["oracle-down"]; // 3 — has capital but no price
       }
       const h = computeMarketHealthFromStats({
         total_open_interest: m.total_open_interest as number | null,
