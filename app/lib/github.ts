@@ -309,13 +309,30 @@ export async function getGoodFirstIssues(): Promise<GoodFirstIssue[]> {
   }
 }
 
-/** Fetch CI status for a repo */
+/** Fetch CI status for a repo.
+ *
+ * We fetch the last 10 completed runs and skip any that were cancelled —
+ * a cancelled run is not a signal of failure, just an interrupted run.
+ * We look for the first run with a meaningful conclusion (success/failure/
+ * timed_out/action_required/startup_failure) to determine CI health.
+ * If all recent runs are cancelled (or no runs exist), we return null
+ * ("unknown") rather than falsely reporting failure.
+ */
 export async function getRepoCIStatus(
   repo: string
 ): Promise<RepoCIStatus> {
+  /** Conclusions that actually represent a real CI result */
+  const MEANINGFUL_CONCLUSIONS = new Set([
+    "success",
+    "failure",
+    "timed_out",
+    "action_required",
+    "startup_failure",
+  ]);
+
   try {
     const res = await fetch(
-      `https://api.github.com/repos/dcccrypto/${repo}/actions/runs?per_page=1&status=completed`,
+      `https://api.github.com/repos/dcccrypto/${repo}/actions/runs?per_page=10&status=completed`,
       { headers: githubHeaders, next: { revalidate: 600 } }
     );
     if (!res.ok) return { passing: null };
@@ -323,9 +340,18 @@ export async function getRepoCIStatus(
     if (!data.workflow_runs || data.workflow_runs.length === 0) {
       return { passing: null };
     }
-    return {
-      passing: data.workflow_runs[0].conclusion === "success",
-    };
+
+    // Find the first run that has a meaningful conclusion (skip cancelled)
+    const meaningful = (
+      data.workflow_runs as Array<{ conclusion: string }>
+    ).find((run) => MEANINGFUL_CONCLUSIONS.has(run.conclusion));
+
+    if (!meaningful) {
+      // All recent runs were cancelled — treat as unknown, not failing
+      return { passing: null };
+    }
+
+    return { passing: meaningful.conclusion === "success" };
   } catch {
     return { passing: null };
   }
