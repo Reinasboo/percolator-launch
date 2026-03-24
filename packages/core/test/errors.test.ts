@@ -12,8 +12,8 @@ import {
 // ============================================================================
 
 describe("PERCOLATOR_ERRORS table", () => {
-  it("has contiguous error codes from 0 to 33", () => {
-    for (let i = 0; i <= 33; i++) {
+  it("has contiguous error codes from 0 to 44", () => {
+    for (let i = 0; i <= 44; i++) {
       expect(PERCOLATOR_ERRORS[i]).toBeDefined();
       expect(PERCOLATOR_ERRORS[i].name).toBeTruthy();
       expect(PERCOLATOR_ERRORS[i].hint).toBeTruthy();
@@ -46,6 +46,8 @@ describe("PERCOLATOR_ERRORS table", () => {
     expect(PERCOLATOR_ERRORS[22].name).toBe("EngineRiskReductionOnlyMode");
     expect(PERCOLATOR_ERRORS[27].name).toBe("HyperpTradeNoCpiDisabled");
     expect(PERCOLATOR_ERRORS[33].name).toBe("MarketPaused");
+    expect(PERCOLATOR_ERRORS[34].name).toBe("AdminRenounceNotAllowed");
+    expect(PERCOLATOR_ERRORS[44].name).toBe("LpVaultNoNewFees");
   });
 });
 
@@ -66,10 +68,16 @@ describe("decodeError", () => {
     expect(info!.name).toBe("MarketPaused");
   });
 
+  it("returns error info for code 34 (AdminRenounceNotAllowed)", () => {
+    const info = decodeError(34);
+    expect(info).toBeDefined();
+    expect(info!.name).toBe("AdminRenounceNotAllowed");
+  });
+
   it("returns undefined for unknown code", () => {
     expect(decodeError(999)).toBeUndefined();
     expect(decodeError(-1)).toBeUndefined();
-    expect(decodeError(34)).toBeUndefined();
+    expect(decodeError(45)).toBeUndefined();
   });
 });
 
