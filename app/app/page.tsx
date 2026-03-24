@@ -500,10 +500,11 @@ export default function Home() {
                     <div className="text-right text-[12px] text-[var(--text-secondary)]">
                       {m.total_open_interest > 0 ? formatCompact(m.total_open_interest) : "—"}
                     </div>
-                    {/* GH#1622: show oracle status — "LIVE" only when price is available */}
-                    <div className={`text-right text-[11px] ${m.last_price != null ? "text-[var(--long)]" : "text-[var(--warning)]"}`}>
-                      {m.last_price != null ? "LIVE" : "NO ORACLE"}
-                    </div>
+                    {/* GH#1622: show NO ORACLE (amber) when keeper hasn't pushed a price */}
+                    {m.last_price != null
+                      ? <div className="text-right text-[11px] text-[var(--long)]">LIVE</div>
+                      : <div className="text-right text-[11px] text-[var(--warning)] animate-pulse">NO ORACLE</div>
+                    }
                   </Link>
                 ))}
               </div>

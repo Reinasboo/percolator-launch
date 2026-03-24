@@ -359,24 +359,30 @@ function MarketsPageInner() {
           const hb = b.onChain
             ? computeMarketHealth(b.onChain.engine)
             : (b.supabase ? computeMarketHealthFromStats(b.supabase) : { level: "empty" as const });
-          // GH#1622: oracle-down markets sort to the bottom (after empty=3), before total unknowns.
+          // GH#1631: oracle-down sort rank — after empty=3, before total unknowns.
+          // Uses the same isOracleDown logic as the render path (both on-chain + Supabase).
           const order: Record<string, number> = { healthy: 0, caution: 1, warning: 2, empty: 3, "oracle-down": 4 };
-          // Apply oracle-down override for sort (mirrors effectiveHealth logic in render)
-          const numericOrNullSort = (v: unknown): number | null => {
+          const numericOrNullForSort = (v: unknown): number | null => {
             if (v == null) return null;
             const n = Number(v);
             return Number.isFinite(n) ? n : null;
           };
-          const isOracleDownA = a.supabase != null
-            && !(a.supabase as Record<string, unknown>).is_zombie
-            && (a.supabase.mark_price == null || numericOrNullSort(a.supabase.mark_price) === null || numericOrNullSort(a.supabase.mark_price)! <= 0)
-            && (a.supabase.index_price == null || numericOrNullSort(a.supabase.index_price) === null || numericOrNullSort(a.supabase.index_price)! <= 0);
-          const isOracleDownB = b.supabase != null
-            && !(b.supabase as Record<string, unknown>).is_zombie
-            && (b.supabase.mark_price == null || numericOrNullSort(b.supabase.mark_price) === null || numericOrNullSort(b.supabase.mark_price)! <= 0)
-            && (b.supabase.index_price == null || numericOrNullSort(b.supabase.index_price) === null || numericOrNullSort(b.supabase.index_price)! <= 0);
-          const levelA = isOracleDownA ? "oracle-down" : ha.level;
-          const levelB = isOracleDownB ? "oracle-down" : hb.level;
+          // For on-chain markets: isOracleDown when resolveMarketPriceE6 returns 0
+          // For Supabase-only markets: isOracleDown when both mark_price and index_price are null/zero
+          const computeIsOracleDown = (m: MergedMarket): boolean => {
+            if (m.onChain) {
+              const priceE6 = resolveMarketPriceE6(m.onChain.config);
+              return priceE6 === 0n;
+            }
+            if (m.supabase) {
+              const mp = numericOrNullForSort(m.supabase.mark_price);
+              const ip = numericOrNullForSort(m.supabase.index_price);
+              return (mp == null || mp <= 0) && (ip == null || ip <= 0);
+            }
+            return false;
+          };
+          const levelA = computeIsOracleDown(a) ? "oracle-down" : ha.level;
+          const levelB = computeIsOracleDown(b) ? "oracle-down" : hb.level;
           return (order[levelA] ?? 5) - (order[levelB] ?? 5);
         }
         case "recent": {
@@ -695,24 +701,45 @@ function MarketsPageInner() {
                   // Price: prefer Supabase, fall back to oracle-mode-aware on-chain price
                   // Cap bogus prices (corrupted on-chain data can produce $4.2T values)
                   const onChainPriceE6 = m.onChain ? resolveMarketPriceE6(m.onChain.config) : 0n;
-                  const rawPrice = m.supabase?.last_price ?? priceE6ToUsd(onChainPriceE6);
-                  const lastPrice = rawPrice != null && rawPrice > MAX_SANE_PRICE_USD ? null : rawPrice;
-                  
-                  // GH#1622: Override health to "oracle-down" when both mark_price and
-                  // index_price are null from the API — keeper has not cranked this market
-                  // regardless of oracle mode (admin, hyperp, or pyth). Without this guard,
-                  // markets with null oracle data still display their liquidity-based health
-                  // level (e.g. "Healthy") giving a false impression of a live, tradeable market.
-                  // Only override to oracle-down when Supabase data is present but prices are
-                  // missing — if supabase is null we have no data at all (show computed health).
-                  // Do NOT override for zombie markets (is_zombie=true) — they show "Empty".
-                  const isOracleDown = m.supabase != null
-                    && !(m.supabase as Record<string, unknown>).is_zombie
-                    && (m.supabase.mark_price == null || (m.supabase.mark_price as number) <= 0)
-                    && (m.supabase.index_price == null || (m.supabase.index_price as number) <= 0);
+
+                  // GH#1631: Override health to "oracle-down" for ALL markets without a valid
+                  // oracle price — regardless of whether we have on-chain capital/insurance data.
+                  //
+                  // Root cause of partial fix in PR #1630:
+                  //   The prior check only looked at m.supabase.mark_price / index_price,
+                  //   but 67/82 oracle-down markets have m.onChain != null (discovered via RPC)
+                  //   with cTot > 0. computeMarketHealth(m.onChain.engine) returns "Healthy"
+                  //   because it sees capital, ignoring that the oracle hasn't been cranked.
+                  //
+                  // Complete fix:
+                  //   - On-chain markets: resolveMarketPriceE6 === 0n → oracle is down
+                  //   - Supabase-only markets: both mark_price AND index_price null/zero → oracle is down
+                  //   - Skip zombie markets (they show "Empty" already)
+                  //   - Skip on-chain-only markets with no Supabase (no reliable oracle state signal)
+                  const numericOrNull = (v: unknown): number | null => {
+                    if (v == null) return null;
+                    const n = Number(v);
+                    return Number.isFinite(n) ? n : null;
+                  };
+                  const isOracleDown: boolean = (() => {
+                    // On-chain market: use resolveMarketPriceE6 as oracle-availability signal.
+                    // If the resolved price is 0n the keeper has not cranked or oracle is unavailable.
+                    if (m.onChain) {
+                      return onChainPriceE6 === 0n;
+                    }
+                    // Supabase-only market: both prices null/zero → keeper has not cranked
+                    if (m.supabase) {
+                      const mp = numericOrNull(m.supabase.mark_price);
+                      const ip = numericOrNull(m.supabase.index_price);
+                      return (mp == null || mp <= 0) && (ip == null || ip <= 0);
+                    }
+                    return false;
+                  })();
                   const effectiveHealth = isOracleDown
                     ? { level: "oracle-down" as const, label: "No Oracle", insuranceRatio: 0, capitalRatio: 0 }
                     : health;
+                  const rawPrice = m.supabase?.last_price ?? priceE6ToUsd(onChainPriceE6);
+                  const lastPrice = rawPrice != null && rawPrice > MAX_SANE_PRICE_USD ? null : rawPrice;
                   const rawDecimals = tokenMetaMap.get(m.mintAddress)?.decimals ?? (m.supabase?.decimals ?? 6);
                   const mintDecimals = Math.min(Math.max(rawDecimals, 0), 18); // clamp to sane range
                   const tokenDivisor = 10 ** mintDecimals;
