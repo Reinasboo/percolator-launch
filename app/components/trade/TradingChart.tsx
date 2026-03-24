@@ -423,7 +423,10 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
 
       {/* Chart container — relative so PositionSummary overlay can be absolute */}
       {/* Phase 2: mobile uses 40svh, desktop keeps 500px */}
-      <div className="relative">
+      {/* overflow-hidden clips lightweight-charts toolbar/navigation buttons so they
+          cannot escape the chart boundary and bleed into adjacent stat grid cells
+          (GH#1647: ◀ 32 ▶ ✕ appearing in ACCOUNTS cell of STATS tab) */}
+      <div className="relative overflow-hidden">
         <div ref={containerRef} className="w-full h-[40svh] lg:h-[500px]" />
 
         {/* Phase 2: Volume no-data overlay — shown when volume pane exists but all volumes are 0 */}
