@@ -361,10 +361,12 @@ function MarketsPageInner() {
             ? computeMarketHealth(b.onChain.engine)
             : (b.supabase ? computeMarketHealthFromStats(b.supabase) : { level: "empty" as const });
           // GH#1637: oracle-down sort rank — below Warning but above Empty.
-          // Corrected from GH#1631 which had oracle-down=4 (after empty=3), causing
-          // oracle-down markets (null price, vault>0) to rank last instead of 4th.
-          // New order: healthy=0 < caution=1 < warning=2 < oracle-down=3 < empty=4.
-          const order: Record<string, number> = { healthy: 0, caution: 1, warning: 2, "oracle-down": 3, empty: 4 };
+          // GH#1643: Markets with valid oracle but c_tot=0 (health="empty") were ranking
+          // after oracle-down markets because "empty"=4 > "oracle-down"=3. Fix: add a
+          // "empty-oracle-up" rank (3) for markets that have a working oracle but no capital.
+          // These have working oracle feeds so they should rank above oracle-down markets.
+          // New order: healthy=0 < caution=1 < warning=2 < empty-oracle-up=3 < oracle-down=4 < empty=5.
+          const order: Record<string, number> = { healthy: 0, caution: 1, warning: 2, "empty-oracle-up": 3, "oracle-down": 4, empty: 5 };
           const numericOrNullForSort = (v: unknown): number | null => {
             if (v == null) return null;
             const n = Number(v);
@@ -395,8 +397,15 @@ function MarketsPageInner() {
             }
             return false;
           };
-          const levelA = computeIsOracleDown(a) ? "oracle-down" : ha.level;
-          const levelB = computeIsOracleDown(b) ? "oracle-down" : hb.level;
+          // GH#1643: Markets with a working oracle but c_tot=0 should sort above oracle-down.
+          // Use "empty-oracle-up" rank for empty markets that are NOT oracle-down.
+          const getEffectiveSortLevel = (m: MergedMarket, baseLevel: string): string => {
+            if (computeIsOracleDown(m)) return "oracle-down";
+            if (baseLevel === "empty") return "empty-oracle-up";
+            return baseLevel;
+          };
+          const levelA = getEffectiveSortLevel(a, ha.level);
+          const levelB = getEffectiveSortLevel(b, hb.level);
           return (order[levelA] ?? 5) - (order[levelB] ?? 5);
         }
         case "recent": {
@@ -741,11 +750,17 @@ function MarketsPageInner() {
                     if (m.onChain) {
                       return onChainPriceE6 === 0n;
                     }
-                    // Supabase-only market: both prices null/zero → keeper has not cranked
+                    // GH#1644: Supabase-only market: last_price=null MUST force "No Oracle" badge.
+                    // Previously only mark_price+index_price were checked — but markets like
+                    // HKeVEQt3 (8u2PCh5J) had last_price=null (no trades, no oracle crank)
+                    // yet showed "Caution" because their OI/collateral triggered computeMarketHealthFromStats.
+                    // Fix: any of last_price, mark_price, or index_price being present signals oracle-up;
+                    // all three null/zero → oracle is down.
                     if (m.supabase) {
+                      const lp = numericOrNull(m.supabase.last_price);
                       const mp = numericOrNull(m.supabase.mark_price);
                       const ip = numericOrNull(m.supabase.index_price);
-                      return (mp == null || mp <= 0) && (ip == null || ip <= 0);
+                      return (lp == null || lp <= 0) && (mp == null || mp <= 0) && (ip == null || ip <= 0);
                     }
                     return false;
                   })();
