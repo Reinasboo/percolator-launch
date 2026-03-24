@@ -19,6 +19,9 @@ vi.mock('@percolator/shared', () => ({
   getConnection: vi.fn(() => ({
     getProgramAccounts: vi.fn(),
   })),
+  getPrimaryConnection: vi.fn(() => ({
+    getProgramAccounts: vi.fn(),
+  })),
   getFallbackConnection: vi.fn(() => ({
     getProgramAccounts: vi.fn(),
   })),
