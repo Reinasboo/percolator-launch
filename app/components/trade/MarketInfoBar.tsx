@@ -37,8 +37,10 @@ export const MarketInfoBar: FC<MarketInfoBarProps> = ({ slabAddress, symbol }) =
     ? `$${priceUsd < 0.01 ? priceUsd.toFixed(6) : priceUsd < 1 ? priceUsd.toFixed(4) : priceUsd.toFixed(2)}`
     : "—";
 
-  const has24hChange = change24h != null;
-  const isUp = (change24h ?? 0) >= 0;
+  // Always show badge — display "0.00%" when no change data is available (devnet null/0)
+  const has24hChange = true;
+  const change24hDisplay = change24h ?? 0;
+  const isUp = change24hDisplay >= 0;
 
   // Phase 2: use 8h rate to match UI label (was hourly, label said /8h — now consistent)
   const funding8h = fundingRate != null ? fundingRateBpsTo8h(fundingRate) : null;
@@ -74,12 +76,10 @@ export const MarketInfoBar: FC<MarketInfoBarProps> = ({ slabAddress, symbol }) =
         {priceDisplay}
       </span>
 
-      {/* Phase 2: 24h change badge — always visible next to price (was already here, kept prominent) */}
-      {has24hChange && (
-        <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-sm ${isUp ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}>
-          {isUp ? "+" : ""}{change24h!.toFixed(2)}%
-        </span>
-      )}
+      {/* 24h change badge — always visible; shows "0.00%" when devnet price data returns null */}
+      <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-sm ${change24h == null ? "bg-[var(--border)]/30 text-[var(--text-dim)]" : isUp ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}>
+        {change24h == null ? "0.00%" : `${isUp ? "+" : ""}${change24hDisplay.toFixed(2)}%`}
+      </span>
 
       <span className="h-3.5 w-px bg-[var(--border)]/40 shrink-0" />
 

@@ -37,12 +37,13 @@ function formatPriceE6(priceE6: bigint): string {
 }
 
 /**
- * Convert fundingRateBpsPerSlotLast (i64) to hourly percentage.
- * Solana slots ≈ 400ms → 9000 slots/hr
- * hourlyRate% = (rateBpsPerSlot * 9000) / 10000
+ * Convert fundingRateBpsPerSlotLast (i64) to 8-hour percentage.
+ * Solana slots ≈ 400ms → 9000 slots/hr → 72000 slots/8h
+ * 8h rate% = (rateBpsPerSlot * 9000 * 8) / 10000 / 100
+ * Consistent with MarketInfoBar label "/ 8h".
  */
-function fundingRateBpsToHourly(rateBps: bigint): number {
-  return (Number(rateBps) * 9000) / 10000;
+function fundingRateBpsTo8h(rateBps: bigint): number {
+  return ((Number(rateBps) * 9000 * 8) / 10000) / 100;
 }
 
 export const MarketStatsCard: FC = () => {
@@ -101,7 +102,7 @@ export const MarketStatsCard: FC = () => {
   // offset reads on old devnet slabs) that would render as e.g. "+1.6e15%/hr".
   // Valid range matches the on-chain guard: abs(rate) <= 10_000 bps/slot.
   const fundingHourlyPct = sanitizeFundingRateBps(fundingRate) !== null
-    ? fundingRateBpsToHourly(sanitizeFundingRateBps(fundingRate)!)
+    ? fundingRateBpsTo8h(sanitizeFundingRateBps(fundingRate)!)
     : null;
 
   if (loading || !engine || !config || !params) {
@@ -155,9 +156,9 @@ export const MarketStatsCard: FC = () => {
     return "text-[var(--text-dim)]";
   })();
 
-  // Funding rate display: "+0.0081%/hr"
+  // Funding rate display: "+0.0081%/8h" — consistent with MarketInfoBar label
   const fundingDisplay = fundingHourlyPct !== null
-    ? `${fundingHourlyPct >= 0 ? "+" : ""}${fundingHourlyPct.toFixed(4)}%/hr`
+    ? `${fundingHourlyPct >= 0 ? "+" : ""}${fundingHourlyPct.toFixed(4)}%/8h`
     : "—";
   const fundingColor = fundingHourlyPct === null
     ? "text-[var(--text-dim)]"
@@ -197,9 +198,9 @@ export const MarketStatsCard: FC = () => {
     { label: "Open Interest", value: oiDisplay, tooltip: oiFullDisplay },
     { label: "Vault", value: vaultDisplay, tooltip: vaultFullDisplay },
     {
-      label: "Funding/hr",
+      label: "Funding/8h",
       value: fundingDisplay,
-      tooltip: "Hourly funding rate. Positive: longs pay shorts.",
+      tooltip: "8-hour funding rate. Positive: longs pay shorts.",
       valueClass: fundingColor,
     },
     // Row 3 — Market parameters
