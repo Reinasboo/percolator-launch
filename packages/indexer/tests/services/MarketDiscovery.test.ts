@@ -5,6 +5,15 @@ vi.mock('@percolator/sdk', () => ({
   discoverMarkets: vi.fn(),
 }));
 
+// Stable mock connection objects so tests can script and assert connection switching.
+const mockPrimaryConnection = {
+  getProgramAccounts: vi.fn(),
+};
+
+const mockFallbackConnection = {
+  getProgramAccounts: vi.fn(),
+};
+
 vi.mock('@percolator/shared', () => ({
   config: {
     allProgramIds: ['11111111111111111111111111111111', 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'],
@@ -16,15 +25,9 @@ vi.mock('@percolator/shared', () => ({
     debug: vi.fn(),
   })),
   captureException: vi.fn(),
-  getConnection: vi.fn(() => ({
-    getProgramAccounts: vi.fn(),
-  })),
-  getPrimaryConnection: vi.fn(() => ({
-    getProgramAccounts: vi.fn(),
-  })),
-  getFallbackConnection: vi.fn(() => ({
-    getProgramAccounts: vi.fn(),
-  })),
+  getConnection: vi.fn(() => mockPrimaryConnection),
+  getPrimaryConnection: vi.fn(() => mockPrimaryConnection),
+  getFallbackConnection: vi.fn(() => mockFallbackConnection),
 }));
 
 import { MarketDiscovery } from '../../src/services/MarketDiscovery.js';
@@ -166,6 +169,45 @@ describe('MarketDiscovery', () => {
       expect(result).toHaveLength(0);
       expect(marketDiscovery.getMarkets().size).toBe(0);
     });
+
+    it('should fall back to fallbackConn after exhausting all primary 429 retries', async () => {
+      const { getPrimaryConnection, getFallbackConnection } = await import('@percolator/shared');
+      const primaryConn = getPrimaryConnection();
+      const fallbackConn = getFallbackConnection();
+
+      const mockMarket = {
+        slabAddress: { toBase58: () => 'MarketFallback11111111111111111111111111' },
+        programId: { toBase58: () => '11111111111111111111111111111111' },
+        config: {},
+        params: {},
+        header: {},
+      };
+
+      // Program 1: exhaust all primary retries (4) with 429, then succeed on fallback.
+      // Program 2: succeed immediately on primary.
+      let program1Calls = 0;
+      vi.mocked(core.discoverMarkets).mockImplementation(async (conn, _programId) => {
+        if (conn === primaryConn) {
+          program1Calls++;
+          // Fail with 429 until all retries are exhausted (HELIUS_429_BACKOFF_MS has 4 entries)
+          if (program1Calls <= 4) {
+            throw new Error('429 Too Many Requests');
+          }
+          // Should not reach here — fallback takes over
+          return [];
+        }
+        // Called with fallbackConn — succeed
+        return [mockMarket] as any;
+      });
+
+      const result = await marketDiscovery.discover();
+
+      // Fallback connection must have been used
+      expect(getPrimaryConnection).toHaveBeenCalled();
+      expect(getFallbackConnection).toHaveBeenCalled();
+      // Market discovered via fallback should be in the results
+      expect(result.some(m => m.slabAddress.toBase58() === 'MarketFallback11111111111111111111111111')).toBe(true);
+    }, 120_000); // generous timeout — 4 backoff delays sum to ~52 s with max jitter
 
     it('should update existing markets on rediscovery', async () => {
       const marketAddress = 'Market511111111111111111111111111111111';

@@ -34,7 +34,10 @@ export class MarketDiscovery {
   
   async discover(): Promise<DiscoveredMarket[]> {
     const programIds = config.allProgramIds;
-    // Use Helius primary RPC for discovery — fallback to public devnet only when primary is down
+    // Use Helius primary RPC (primaryConn) for all discovery attempts.
+    // fallbackConn is tried exactly once — only after all HELIUS_429_BACKOFF_MS retries are
+    // exhausted due to 429 rate-limit responses. Non-429 errors (transport, auth) cause an
+    // immediate per-program failure without falling back.
     const primaryConn = getPrimaryConnection();
     const fallbackConn = getFallbackConnection();
     const all: DiscoveredMarket[] = [];
