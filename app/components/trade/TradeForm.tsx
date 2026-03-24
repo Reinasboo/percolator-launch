@@ -403,7 +403,7 @@ export const TradeForm: FC<{ slabAddress: string }> = ({ slabAddress }) => {
       <div className="mb-2">
         <div className="mb-1 flex items-center justify-between">
           <label className="text-[10px] uppercase tracking-[0.15em] text-[var(--text-dim)]">Margin ({symbol})<InfoIcon tooltip="The amount of collateral you're putting up for this trade. If your position loses more than your margin, you get liquidated." /></label>
-          <span className="text-[10px] text-[var(--text-dim)]" style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>
+          <span className="text-[10px] text-[var(--text-dim)] whitespace-nowrap min-w-0 shrink-0" style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>
             {/* GH#1133: When no trading account exists yet, show wallet ATA balance (not 0) */}
             Bal: {userAccount ? formatPerc(capital, decimals) : (walletAtaBalance !== null ? formatPerc(walletAtaBalance, decimals) : "—")}
           </span>
@@ -574,10 +574,10 @@ export const TradeForm: FC<{ slabAddress: string }> = ({ slabAddress }) => {
 
       {/* Coin-margined info */}
       <div className="mt-3 rounded-none border border-[var(--border)]/20 bg-[var(--bg)]/50 p-2.5">
-        <p className="text-[9px] font-medium uppercase tracking-[0.15em] text-[var(--text-muted)]">
+        <p className="text-[9px] font-medium uppercase tracking-[0.15em] text-[var(--text-secondary)]">
           Coin-Margined Market
         </p>
-        <p className="mt-1 text-[9px] leading-relaxed text-[var(--text-muted)]">
+        <p className="mt-1 text-[10px] leading-relaxed text-[var(--text-secondary)]">
           Margined in <strong className="text-[var(--text-secondary)]">{symbol}</strong>, not USD. Position value and liquidation risk are affected by the collateral token&apos;s price movements.
           Effective USD leverage: <span className="font-mono text-[var(--text-secondary)]">{leverage > 0 ? `~${leverage * 2}x` : "—"}</span> (nominal {leverage}x × 2 for coin exposure).
         </p>

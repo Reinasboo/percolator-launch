@@ -1,7 +1,6 @@
 "use client";
 
 import { FC } from "react";
-import Image from "next/image";
 
 interface ChartEmptyStateProps {
   /** Optional current price to display alongside the empty state */
@@ -22,17 +21,16 @@ export const ChartEmptyState: FC<ChartEmptyStateProps> = ({
     <div
       className={`relative flex ${heightClass} flex-col items-center justify-center rounded-none border border-[var(--border)]/50 bg-[var(--bg)]/80 overflow-hidden`}
     >
-      {/* Background SVG illustration */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <Image
-          src="/chart-empty-state.svg"
-          alt=""
-          width={600}
-          height={320}
-          className="w-full h-full object-contain opacity-80"
-          priority={false}
-          aria-hidden="true"
-        />
+      {/* Subtle grid lines background — no phantom candles */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden opacity-10" aria-hidden="true">
+        <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+              <path d="M 48 0 L 0 0 0 48" fill="none" stroke="currentColor" strokeWidth="0.5"/>
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#grid)" className="text-[var(--border)]" />
+        </svg>
       </div>
 
       {/* Overlay content — sits above the SVG */}

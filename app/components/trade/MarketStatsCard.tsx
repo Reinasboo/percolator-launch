@@ -245,9 +245,9 @@ export const MarketStatsCard: FC = () => {
               /* min-w-0 prevents the grid cell from overflowing its track (#864) */
               className="min-w-0 px-1.5 py-1 overflow-hidden border-b border-r border-[var(--border)]/20 [&:nth-child(3n)]:border-r-0 [&:nth-last-child(-n+3)]:border-b-0"
             >
-              <p className="text-[8px] uppercase tracking-[0.05em] text-[var(--text-muted)] truncate" title={s.label}>{s.label}</p>
+              <p className="text-[7px] uppercase tracking-[0.02em] text-[var(--text-muted)] leading-tight" style={{ wordBreak: "break-word", overflowWrap: "anywhere" }} title={s.label}>{s.label}</p>
               <p
-                className={`text-[11px] font-medium truncate ${s.valueClass ?? "text-[var(--text)]"}`}
+                className={`text-[10px] font-medium truncate ${s.valueClass ?? "text-[var(--text)]"}`}
                 title={s.tooltip ?? s.value}
                 style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}
               >
