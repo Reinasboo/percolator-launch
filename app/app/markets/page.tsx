@@ -770,6 +770,22 @@ function MarketsPageInner() {
                     return Number.isFinite(n) ? n : null;
                   };
                   const isOracleDown: boolean = (() => {
+                    // GH#1638 / CodeRabbit MAJOR: Apply the same MIN_VAULT_FOR_OI vault guard
+                    // as the sort comparator (computeIsOracleDown). Without this guard, markets
+                    // with vault_balance < MIN_VAULT_FOR_OI (phantom OI zeroed server-side)
+                    // could render an "oracle-down" badge while sorting as "empty", creating a
+                    // client/server sort mismatch at the threshold boundary.
+                    // Mirror computeIsOracleDown: prefer vault_balance, fall back to c_tot.
+                    const rawVaultR = m.supabase?.vault_balance;
+                    const rawCtotR  = m.supabase?.c_tot;
+                    const vaultBalR = numericOrNull(
+                      rawVaultR != null && Number(rawVaultR) > 0 ? rawVaultR : rawCtotR
+                    );
+                    if (vaultBalR !== null && vaultBalR < MIN_VAULT_FOR_OI) {
+                      // Sub-threshold vault: phantom OI suppressed server-side → render as empty, not oracle-down
+                      return false;
+                    }
+
                     // On-chain market: use resolveMarketPriceE6 as oracle-availability signal.
                     // If the resolved price is 0n the keeper has not cranked or oracle is unavailable.
                     if (m.onChain) {
