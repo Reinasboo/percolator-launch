@@ -184,9 +184,11 @@ export const FundingRateCard: FC<{ slabAddress: string }> = ({ slabAddress }) =>
   if (!fundingData) return null;
 
   const hourlyRatePercent = fundingData.hourlyRatePercent ?? 0;
-  const rateDisplay = hourlyRatePercent >= 0 
-    ? `+${hourlyRatePercent.toFixed(4)}%` 
-    : `${hourlyRatePercent.toFixed(4)}%`;
+  // Convert hourly rate to 8h rate for display — consistent with MarketStatsCard and MarketInfoBar
+  const eightHourRatePercent = hourlyRatePercent * 8;
+  const rateDisplay = eightHourRatePercent >= 0 
+    ? `+${eightHourRatePercent.toFixed(4)}%` 
+    : `${eightHourRatePercent.toFixed(4)}%`;
 
   const directionText = 
     fundingData.direction === "long_pays_short" ? "Longs pay shorts" :
@@ -212,12 +214,12 @@ export const FundingRateCard: FC<{ slabAddress: string }> = ({ slabAddress }) =>
           </div>
           <div className="flex items-baseline gap-1.5">
             <span
-              className={`text-sm font-bold ${hourlyRatePercent >= 0 ? "text-[var(--short)]" : "text-[var(--long)]"}`}
+              className={`text-sm font-bold ${eightHourRatePercent >= 0 ? "text-[var(--short)]" : "text-[var(--long)]"}`}
               style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}
             >
               {rateDisplay}
             </span>
-            <span className="text-[9px] text-[var(--text-dim)]">/hr</span>
+            <span className="text-[9px] text-[var(--text-dim)]">/8h</span>
           </div>
         </div>
 

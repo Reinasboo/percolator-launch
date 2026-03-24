@@ -18,6 +18,8 @@ export const FundingRate: FC = () => {
   const bpsPerSlot = sanitized !== null ? Number(sanitized) : 0;
   // Slots ≈ 400ms → 9000 slots/hr; divide by 100 to convert bps → %
   const hourlyRate = (bpsPerSlot * 9000) / 10000;
+  // 8h rate = hourly * 8 — consistent with FundingRateCard and MarketStatsCard
+  const eightHourRate = hourlyRate * 8;
   const annualizedRate = hourlyRate * 24 * 365;
   const rateColor = bpsPerSlot === 0 ? "text-[var(--text-muted)]" : bpsPerSlot > 0 ? "text-[var(--long)]" : "text-[var(--short)]";
 
@@ -54,8 +56,8 @@ export const FundingRate: FC = () => {
           <p className={`text-sm font-medium ${rateColor}`}>{bpsPerSlot.toFixed(6)} bps</p>
         </div>
         <div>
-          <p className="text-xs text-[var(--text-muted)]">Hourly</p>
-          <p className={`text-sm font-medium ${rateColor}`}>{hourlyRate >= 0 ? "+" : ""}{hourlyRate.toFixed(4)}%/hr</p>
+          <p className="text-xs text-[var(--text-muted)]">8-Hour</p>
+          <p className={`text-sm font-medium ${rateColor}`}>{eightHourRate >= 0 ? "+" : ""}{eightHourRate.toFixed(4)}%/8h</p>
         </div>
         <div>
           <p className="text-xs text-[var(--text-muted)]">Annualized</p>
