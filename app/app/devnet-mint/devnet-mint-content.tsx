@@ -66,7 +66,7 @@ const DevnetMintContent: FC = () => {
 
   // Auto-populate from URL params (?mint=&symbol=)
   useEffect(() => {
-    const mint = searchParams?.get("mint") ?? "";
+    const mint = (searchParams?.get("mint") ?? "").trim();
     const sym = searchParams?.get("symbol") ?? "";
     if (mint) {
       setFaucetMint(mint);
@@ -75,7 +75,8 @@ const DevnetMintContent: FC = () => {
   }, [searchParams]);
 
   const handleFaucetClaim = useCallback(async () => {
-    if (!publicKey || !faucetMint || faucetLoading) return;
+    const normalizedFaucetMint = faucetMint.trim();
+    if (!publicKey || !normalizedFaucetMint || faucetLoading) return;
     setFaucetLoading(true);
     setFaucetError(null);
     setFaucetResult(null);
@@ -85,7 +86,7 @@ const DevnetMintContent: FC = () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          mintAddress: faucetMint.trim(),
+          mintAddress: normalizedFaucetMint,
           walletAddress: publicKey.toBase58(),
         }),
       });
@@ -490,7 +491,9 @@ const DevnetMintContent: FC = () => {
 
   // Issue #1139: Validate faucet mint is a real Solana address before enabling the button
   // GH#1715: Empty input is not invalid — treat as "no input yet", not an error.
-  const isFaucetMintValid = !faucetMint.trim() || isValidBase58Pubkey(faucetMint.trim());
+  // CodeRabbit #1716: normalize once, use everywhere — prevents whitespace-only submission.
+  const normalizedFaucetMint = faucetMint.trim();
+  const isFaucetMintValid = !normalizedFaucetMint || isValidBase58Pubkey(normalizedFaucetMint);
 
   const cardClass = "bg-[var(--panel-bg)] border border-[var(--border)] p-4 sm:p-6";
   const btnPrimary = "border border-[var(--accent)]/40 text-[var(--accent)] bg-transparent px-5 py-2.5 text-sm font-semibold transition-all duration-200 hover:border-[var(--accent)]/70 hover:bg-[var(--accent)]/[0.08] active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100";
@@ -542,7 +545,7 @@ const DevnetMintContent: FC = () => {
             <h2 className="mb-1 text-[10px] font-medium uppercase tracking-[0.15em] text-[var(--accent)]/70">
               Get Test Tokens for a Market
             </h2>
-            {faucetMint && faucetSymbol ? (
+            {normalizedFaucetMint && faucetSymbol ? (
               <p className="mb-3 text-xs text-[var(--text-secondary)]">
                 You need{" "}
                 <span className="font-semibold text-white">{faucetSymbol}</span>{" "}
@@ -570,11 +573,11 @@ const DevnetMintContent: FC = () => {
                     setFaucetRateLimited(null);
                   }}
                   placeholder="Paste devnet mint address..."
-                  className={`${inputClass} ${faucetMint && !isFaucetMintValid ? "border-[var(--short)]/60" : ""}`}
+                  className={`${inputClass} ${normalizedFaucetMint && !isFaucetMintValid ? "border-[var(--short)]/60" : ""}`}
                   disabled={faucetLoading}
                 />
                 {/* GH#1667: use PublicKey-derived validity, not char-length hint */}
-                {faucetMint && !isFaucetMintValid && (
+                {normalizedFaucetMint && !isFaucetMintValid && (
                   <p className="mt-1 text-[11px] text-[var(--short)]/80">Not a valid Solana address</p>
                 )}
               </div>
@@ -609,7 +612,7 @@ const DevnetMintContent: FC = () => {
               <button
                 className={`${btnPrimary} w-full`}
                 onClick={handleFaucetClaim}
-                disabled={faucetLoading || !faucetMint || !isFaucetMintValid || !walletReady}
+                disabled={faucetLoading || !normalizedFaucetMint || !isFaucetMintValid || !walletReady}
               >
                 {!walletReady
                   ? "Connect Wallet First"
