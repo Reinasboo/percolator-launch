@@ -5,6 +5,7 @@ import {
   getAllCommitActivity,
   getGoodFirstIssues,
   getAllCIStatuses,
+  type CommitActivityMap,
 } from "@/lib/github";
 import { DevelopersClient } from "./DevelopersClient";
 
@@ -36,15 +37,26 @@ export default async function DevelopersPage() {
     (r) => r.stargazers_count > 0 || r.forks_count > 0
   );
 
+  // Compute totalCommits from commitActivity so both stats are derived from
+  // the same API response — avoids the 202-cache-race that caused mismatch.
+  const commitActivityData: CommitActivityMap =
+    commitActivity.status === "fulfilled" ? commitActivity.value : {};
+  const totalCommitsFromActivity = Object.values(commitActivityData)
+    .flat()
+    .reduce((sum, w) => sum + (w.total || 0), 0);
+
+  const rawContributorStats =
+    contributorStats.status === "fulfilled" ? contributorStats.value : null;
+  const resolvedContributorStats =
+    rawContributorStats && totalCommitsFromActivity > 0
+      ? { ...rawContributorStats, totalCommits: totalCommitsFromActivity }
+      : rawContributorStats;
+
   return (
     <DevelopersClient
       repos={repoData}
       isLive={isLive}
-      contributorStats={
-        contributorStats.status === "fulfilled"
-          ? contributorStats.value
-          : null
-      }
+      contributorStats={resolvedContributorStats}
       commitActivity={
         commitActivity.status === "fulfilled" ? commitActivity.value : null
       }

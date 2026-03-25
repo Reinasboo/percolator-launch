@@ -21,7 +21,7 @@ function AnimatedNumber({
 
   useEffect(() => {
     if (!visible || value === 0) {
-      setDisplay(0);
+      setDisplay(value);
       return;
     }
 
@@ -41,8 +41,6 @@ function AnimatedNumber({
 
     requestAnimationFrame(animate);
   }, [value, visible]);
-
-  if (value === 0 && !suffix) return <span>—</span>;
 
   const text = suffix
     ? `${display.toLocaleString()}${suffix}`
@@ -102,8 +100,8 @@ export const ContributorStatsBar: FC<Props> = ({ stats }) => {
             valueNode = cfg.static;
           } else if (cfg.key && stats) {
             const val = stats[cfg.key] as number;
-            // Show dash for falsy/NaN/undefined values instead of animating to 0
-            valueNode = val && Number.isFinite(val) && val > 0
+            // Show dash only for undefined/null/NaN — display 0 as a real value
+            valueNode = Number.isFinite(val)
               ? <AnimatedNumber value={val} visible={visible} />
               : <span>—</span>;
           } else {
