@@ -35,6 +35,9 @@ const TIMEFRAME_MS: Record<Timeframe, number> = {
 
 const CANDLE_INTERVAL_MS = 5 * 60 * 1000;
 
+// PERC-8090: removed 7d/30d from TIMEFRAMES — too exotic for a perps UI
+const VISIBLE_TIMEFRAMES: Timeframe[] = ["1m", "5m", "15m", "1h", "4h", "1d"];
+
 // Phase 2: timeframes that benefit from auto-polling
 const POLLING_TIMEFRAMES: Timeframe[] = ["1m", "5m", "15m", "1h", "4h", "1d"];
 
@@ -434,9 +437,9 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
             </button>
           </div>
 
-          {/* Phase 2: timeframe bar with 15m added */}
+          {/* PERC-8090: 1m/5m/15m/1h/4h/1d only — 7d/30d collapsed */}
           <div className="flex gap-1 rounded-none border border-[var(--border)] bg-[var(--bg-elevated)] p-0.5">
-            {(["1m", "5m", "15m", "1h", "4h", "1d", "7d", "30d"] as Timeframe[]).map((tf) => (
+            {VISIBLE_TIMEFRAMES.map((tf) => (
               <button
                 key={tf}
                 onClick={() => setTimeframe(tf)}

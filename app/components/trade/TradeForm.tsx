@@ -13,9 +13,10 @@ import { useSlabState } from "@/components/providers/SlabProvider";
 import { useTokenMeta } from "@/hooks/useTokenMeta";
 import { useLivePrice } from "@/hooks/useLivePrice";
 import { useOracleFreshness } from "@/hooks/useOracleFreshness";
-import { AccountKind, computePreTradeLiqPrice } from "@percolator/sdk";
+import { AccountKind, computePreTradeLiqPrice, computeLiqPrice, computeMarkPnl, computePnlPercent } from "@percolator/sdk";
 import { PreTradeSummary } from "@/components/trade/PreTradeSummary";
 import { TradeConfirmationModal } from "@/components/trade/TradeConfirmationModal";
+import { ClosePositionModal } from "@/components/trade/ClosePositionModal";
 import { InfoIcon } from "@/components/ui/Tooltip";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import { usePrivyLogin } from "@/hooks/usePrivySafe";
@@ -23,8 +24,10 @@ import { isMockMode } from "@/lib/mock-mode";
 import { isMockSlab, getMockUserAccountIdle } from "@/lib/mock-trade-data";
 import { sanitizeSymbol } from "@/lib/symbol-utils";
 import { useMarketInfo } from "@/hooks/useMarketInfo";
+import { formatTokenAmount, formatUsd } from "@/lib/format";
+import { useClosePosition } from "@/hooks/useClosePosition";
 
-const LEVERAGE_PRESETS = [1, 2, 3, 5, 10];
+const LEVERAGE_SNAP_POINTS = [1, 2, 5, 10, 20];
 const MARGIN_PRESETS = [25, 50, 75, 100];
 
 /** GH#1483: Upper bound for UI leverage display. Clamps Supabase-sourced max_leverage
@@ -64,7 +67,7 @@ export const TradeForm: FC<{ slabAddress: string }> = ({ slabAddress }) => {
   const { engine, params } = useEngineState();
   const { accounts, config: mktConfig, header, refresh: refreshSlab } = useSlabState();
   const tokenMeta = useTokenMeta(mktConfig?.collateralMint ?? null);
-  const { priceUsd } = useLivePrice();
+  const { priceUsd, priceE6: livePriceE6 } = useLivePrice();
   // GH#1330: Detect stale oracle to block trade submission before tx failure.
   // GH#1330/1338: Detect stale or unavailable oracle to block trade submission.
   // "stale" = price exists but hasn't updated recently (>30s).
@@ -102,11 +105,16 @@ export const TradeForm: FC<{ slabAddress: string }> = ({ slabAddress }) => {
 
   const [direction, setDirection] = useState<"long" | "short">("long");
   const [marginInput, setMarginInput] = useState("");
+  // Dual size input: "contracts" (token units) or "usdc" (USD value)
+  const [sizeMode, setSizeMode] = useState<"contracts" | "usdc">("contracts");
+  const [contractsInput, setContractsInput] = useState("");
+  const [usdcInput, setUsdcInput] = useState("");
   const [leverage, setLeverage] = useState(1);
   const [lastSig, setLastSig] = useState<string | null>(null);
   const [tradePhase, setTradePhase] = useState<"idle" | "submitting" | "confirming">("idle");
   const [humanError, setHumanError] = useState<string | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [showCloseModal, setShowCloseModal] = useState(false);
 
   const longBtnRef = useRef<HTMLButtonElement>(null);
   const shortBtnRef = useRef<HTMLButtonElement>(null);
@@ -148,7 +156,7 @@ export const TradeForm: FC<{ slabAddress: string }> = ({ slabAddress }) => {
   const maxLeverage = Math.min(MAX_DISPLAY_LEVERAGE, rawMaxLeverage);
 
   const availableLeverage = useMemo(() => {
-    const arr = LEVERAGE_PRESETS.filter((l) => l <= maxLeverage);
+    const arr = LEVERAGE_SNAP_POINTS.filter((l) => l <= maxLeverage);
     if (arr.length === 0 || arr[arr.length - 1] < maxLeverage) {
       arr.push(maxLeverage);
     }
@@ -164,6 +172,76 @@ export const TradeForm: FC<{ slabAddress: string }> = ({ slabAddress }) => {
   // capital=0n from a null userAccount is misleading — the user may have tokens
   // in their wallet that they'll deposit to create their account.
   const effectiveBalance = userAccount ? capital : (walletAtaBalance ?? 0n);
+
+  // ── Dual size input (USDC ↔ contracts) ─────────────────────────────────────
+  // marginInput drives the legacy path. The dual size input computes contracts
+  // from position notional = contracts, margin = notional / leverage.
+  // When user edits contracts: derive USDC (= contracts * priceUsd) and margin.
+  // When user edits USDC: derive contracts (= usdc / priceUsd) and margin.
+  const handleContractsChange = useCallback((val: string) => {
+    setContractsInput(val.replace(/[^0-9.]/g, ""));
+    const n = parseFloat(val);
+    if (!isNaN(n) && priceUsd && priceUsd > 0) {
+      const usd = n * priceUsd;
+      setUsdcInput(usd.toFixed(2));
+      // margin = notional / leverage
+      const marginAmt = n / leverage;
+      setMarginInput(marginAmt.toFixed(decimals > 6 ? 6 : decimals));
+    } else if (val === "" || val === ".") {
+      setUsdcInput("");
+      setMarginInput("");
+    }
+  }, [priceUsd, leverage, decimals]);
+
+  const handleUsdcChange = useCallback((val: string) => {
+    setUsdcInput(val.replace(/[^0-9.]/g, ""));
+    const usd = parseFloat(val);
+    if (!isNaN(usd) && priceUsd && priceUsd > 0) {
+      const contracts = usd / priceUsd;
+      setContractsInput(contracts.toFixed(6));
+      // margin = contracts / leverage
+      const marginAmt = contracts / leverage;
+      setMarginInput(marginAmt.toFixed(decimals > 6 ? 6 : decimals));
+    } else if (val === "" || val === ".") {
+      setContractsInput("");
+      setMarginInput("");
+    }
+  }, [priceUsd, leverage, decimals]);
+
+  // Re-sync USDC field when leverage changes (contracts stay fixed, USDC doesn't change, margin changes)
+  useEffect(() => {
+    if (!contractsInput) return;
+    const n = parseFloat(contractsInput);
+    if (!isNaN(n) && n > 0 && priceUsd && priceUsd > 0) {
+      const marginAmt = n / leverage;
+      setMarginInput(marginAmt.toFixed(decimals > 6 ? 6 : decimals));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leverage]);
+
+  // ── Position card data ───────────────────────────────────────────────────────
+  const openPositionSize = existingPosition;
+  const hasOpenPosition = openPositionSize !== 0n;
+  const isOpenLong = openPositionSize > 0n;
+  const openEntryPriceE6 = userAccount?.account.entryPrice ?? 0n;
+  const openCapital = userAccount?.account.capital ?? 0n;
+  const openLiqPriceE6 = hasOpenPosition
+    ? computeLiqPrice(openEntryPriceE6, openCapital, openPositionSize, maintenanceMarginBps)
+    : 0n;
+  const openPnlTokens = hasOpenPosition && livePriceE6 && livePriceE6 > 0n
+    ? computeMarkPnl(openPositionSize, openEntryPriceE6, livePriceE6)
+    : 0n;
+  const openPnlPercent = hasOpenPosition ? computePnlPercent(openPnlTokens, openCapital) : 0;
+  // Liq danger: within 20% of mark
+  const openLiqDanger = (() => {
+    if (!livePriceE6 || livePriceE6 <= 0n || openLiqPriceE6 <= 0n) return false;
+    const dist = Math.abs(Number(livePriceE6) - Number(openLiqPriceE6)) / Number(livePriceE6);
+    return dist < 0.20;
+  })();
+  const openLeverage = hasOpenPosition && openCapital > 0n
+    ? Math.max(1, Math.round(Number(abs(openPositionSize)) / Number(openCapital)))
+    : 1;
+  const { closePosition, loading: closeLoading } = useClosePosition(slabAddress);
 
   const marginNative = marginInput ? parsePercToNative(marginInput, decimals) : 0n;
   // Defensive clamp: positionSize should never be negative, but guard anyway
@@ -181,9 +259,17 @@ export const TradeForm: FC<{ slabAddress: string }> = ({ slabAddress }) => {
       // Prevent truncation to 0 for small balances — use at least 1 native unit
       // when the percentage of a non-zero capital would otherwise round to zero
       if (amount === 0n && pct > 0) amount = 1n;
-      setMarginInput(formatPerc(amount, decimals));
+      const marginStr = formatPerc(amount, decimals);
+      setMarginInput(marginStr);
+      // Sync dual size inputs: contracts = margin * leverage
+      const marginNum = Number(amount) / Math.pow(10, decimals);
+      const contracts = marginNum * leverage;
+      setContractsInput(contracts.toFixed(6));
+      if (priceUsd && priceUsd > 0) {
+        setUsdcInput((contracts * priceUsd).toFixed(2));
+      }
     },
-    [effectiveBalance, decimals]
+    [effectiveBalance, decimals, leverage, priceUsd]
   );
 
   // BUG FIX: Fetch on-chain decimals AND wallet ATA balance from user's token account.
@@ -216,6 +302,8 @@ export const TradeForm: FC<{ slabAddress: string }> = ({ slabAddress }) => {
   useEffect(() => {
     setDirection("long");
     setMarginInput("");
+    setContractsInput("");
+    setUsdcInput("");
     setLeverage(1);
     setLastSig(null);
     setHumanError(null);
@@ -314,13 +402,73 @@ export const TradeForm: FC<{ slabAddress: string }> = ({ slabAddress }) => {
         </div>
       )}
 
-      {/* Position open banner */}
-      {hasPosition && (
-        <div className="mb-3 rounded-none border border-[var(--accent)]/20 bg-[var(--accent)]/5 p-2.5">
-          <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-[var(--accent)]">Position Open</p>
-          <p className="mt-1 text-[9px] text-[var(--text-secondary)]">
-            Close from the positions table below. You can still place new trades.
-          </p>
+      {/* ── Open Position Card (replaces simple banner) ── */}
+      {hasOpenPosition && userAccount && (
+        <div className="mb-3 rounded-none border border-cyan-500/30 bg-cyan-950/30 p-3.5">
+          {/* Header row */}
+          <div className="mb-2.5 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className={`text-[10px] font-bold uppercase tracking-[0.1em] ${isOpenLong ? "text-green-400" : "text-red-400"}`}>
+                {isOpenLong ? "LONG" : "SHORT"}
+              </span>
+              <span className="text-[10px] text-[var(--text-dim)]">{symbol}/USD</span>
+              <span className="text-[10px] font-bold text-cyan-400" style={{ fontFamily: "var(--font-mono)" }}>{openLeverage}x</span>
+            </div>
+            <button
+              onClick={() => setShowCloseModal(true)}
+              className="rounded-none border border-red-500/40 bg-red-500/10 px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.1em] text-red-400 transition-colors hover:bg-red-500/20"
+            >
+              Close
+            </button>
+          </div>
+          {/* Stats grid */}
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[10px]">
+            <div>
+              <span className="text-[var(--text-dim)] uppercase tracking-[0.08em]">Entry</span>
+              <span className="ml-2 font-mono font-medium text-[var(--text)]">
+                {openEntryPriceE6 > 0n ? formatUsd(openEntryPriceE6) : "—"}
+              </span>
+            </div>
+            <div>
+              <span className={`uppercase tracking-[0.08em] ${openLiqDanger ? "text-orange-400" : "text-[var(--text-dim)]"}`}>
+                Liq {openLiqDanger ? "⚠" : ""}
+              </span>
+              <span className={`ml-2 font-mono font-medium ${openLiqDanger ? "text-orange-400" : "text-[var(--text)]"}`}>
+                {openLiqPriceE6 > 0n ? formatUsd(openLiqPriceE6) : "—"}
+              </span>
+            </div>
+            <div>
+              <span className="text-[var(--text-dim)] uppercase tracking-[0.08em]">Size</span>
+              <span className="ml-2 font-mono font-medium text-[var(--text)]">
+                {formatTokenAmount(abs(openPositionSize), decimals)} {symbol}
+              </span>
+            </div>
+            <div>
+              <span className="text-[var(--text-dim)] uppercase tracking-[0.08em]">PnL</span>
+              <span className={`ml-2 font-mono font-medium ${openPnlTokens > 0n ? "text-green-400" : openPnlTokens < 0n ? "text-red-400" : "text-[var(--text-muted)]"}`}>
+                {openPnlTokens >= 0n ? "+" : ""}{formatTokenAmount(openPnlTokens, decimals)}
+                <span className="ml-1 text-[9px]">({openPnlPercent >= 0 ? "+" : ""}{openPnlPercent.toFixed(2)}%)</span>
+              </span>
+            </div>
+          </div>
+          {/* Action buttons */}
+          <div className="mt-3 grid grid-cols-2 gap-1.5">
+            <button
+              onClick={() => {
+                const deposit = document.querySelector('[data-deposit-trigger]');
+                if (deposit) deposit.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }}
+              className="rounded-none border border-[var(--border)] py-1.5 text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--text-secondary)] transition-colors hover:border-cyan-500/30 hover:text-cyan-400"
+            >
+              Add Margin
+            </button>
+            <button
+              onClick={() => setShowCloseModal(true)}
+              className="rounded-none bg-red-500/80 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-white transition-colors hover:bg-red-500"
+            >
+              Close Position
+            </button>
+          </div>
         </div>
       )}
 
@@ -399,36 +547,53 @@ export const TradeForm: FC<{ slabAddress: string }> = ({ slabAddress }) => {
         </button>
       </div>
 
-      {/* Margin input */}
+      {/* ── Dual size input (contracts ↔ USDC) ── */}
       <div className="mb-2">
-        <div className="mb-1 flex items-center justify-between">
-          <label className="text-[10px] uppercase tracking-[0.15em] text-[var(--text-dim)]">Margin ({symbol})<InfoIcon tooltip="The amount of collateral you're putting up for this trade. If your position loses more than your margin, you get liquidated." /></label>
+        <div className="mb-1.5 flex items-center justify-between">
+          <label className="text-[10px] uppercase tracking-[0.15em] text-[var(--text-dim)]">Size<InfoIcon tooltip="Position size — enter in contracts (tokens) or USD. Both fields sync automatically." /></label>
           <span className="text-[10px] text-[var(--text-dim)] whitespace-nowrap min-w-0 shrink-0" style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>
-            {/* GH#1133: When no trading account exists yet, show wallet ATA balance (not 0) */}
-            Bal: {userAccount ? formatPerc(capital, decimals) : (walletAtaBalance !== null ? formatPerc(walletAtaBalance, decimals) : "—")}
+            Bal: {userAccount ? formatPerc(capital, decimals) : (walletAtaBalance !== null ? formatPerc(walletAtaBalance, decimals) : "—")} {symbol}
           </span>
         </div>
-        <div className="relative">
-          <input
-            type="text"
-            value={marginInput}
-            onChange={(e) => setMarginInput(e.target.value.replace(/[^0-9.]/g, ""))}
-            placeholder="0.00"
-            style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}
-            className={`w-full rounded-none border px-3 py-2 pr-14 text-sm text-[var(--text)] placeholder-[var(--text-muted)] focus:outline-none focus:ring-1 ${
-              exceedsMargin
-                ? "border-[var(--short)]/50 bg-[var(--short)]/5 focus:border-[var(--short)] focus:ring-[var(--short)]/30"
-                : "border-[var(--border)]/50 bg-[var(--bg)] focus:border-[var(--accent)]/50 focus:ring-[var(--accent)]/20"
-            }`}
-          />
-          <button
-            onClick={() => {
-              if (effectiveBalance > 0n) setMarginInput(formatPerc(effectiveBalance, decimals));
-            }}
-            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-none bg-[var(--accent)]/10 px-2 py-0.5 text-[9px] font-medium uppercase tracking-wider text-[var(--accent)] transition-colors hover:bg-[var(--accent)]/20"
-          >
-            Max
-          </button>
+        <div className="grid grid-cols-2 gap-1.5">
+          {/* Contracts input */}
+          <div>
+            <div className="relative">
+              <input
+                type="text"
+                value={contractsInput}
+                onChange={(e) => handleContractsChange(e.target.value)}
+                onFocus={() => setSizeMode("contracts")}
+                placeholder="0.000000"
+                style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}
+                className={`w-full rounded-none border px-2 py-2 text-right text-sm text-[var(--text)] placeholder-[var(--text-muted)] focus:outline-none focus:ring-1 ${
+                  sizeMode === "contracts"
+                    ? "border-[var(--accent)]/50 bg-[var(--bg)] focus:border-[var(--accent)] focus:ring-[var(--accent)]/20"
+                    : "border-[var(--border)]/40 bg-[var(--bg)] focus:border-[var(--accent)]/30 focus:ring-[var(--accent)]/10"
+                } ${exceedsMargin ? "border-[var(--short)]/50 bg-[var(--short)]/5" : ""}`}
+              />
+            </div>
+            <span className="mt-0.5 block text-center text-[10px] text-[var(--text-dim)] uppercase tracking-[0.1em]">{symbol}</span>
+          </div>
+          {/* USDC input */}
+          <div>
+            <div className="relative">
+              <input
+                type="text"
+                value={usdcInput}
+                onChange={(e) => handleUsdcChange(e.target.value)}
+                onFocus={() => setSizeMode("usdc")}
+                placeholder="$0.00"
+                style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}
+                className={`w-full rounded-none border px-2 py-2 text-right text-sm text-[var(--text)] placeholder-[var(--text-muted)] focus:outline-none focus:ring-1 ${
+                  sizeMode === "usdc"
+                    ? "border-[var(--accent)]/50 bg-[var(--bg)] focus:border-[var(--accent)] focus:ring-[var(--accent)]/20"
+                    : "border-[var(--border)]/40 bg-[var(--bg)] focus:border-[var(--accent)]/30 focus:ring-[var(--accent)]/10"
+                }`}
+              />
+            </div>
+            <span className="mt-0.5 block text-center text-[10px] text-[var(--text-dim)] uppercase tracking-[0.1em]">USD</span>
+          </div>
         </div>
         {exceedsMargin && (
           <p className="mt-1 text-[10px] text-[var(--short)]" style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>
@@ -437,7 +602,7 @@ export const TradeForm: FC<{ slabAddress: string }> = ({ slabAddress }) => {
         )}
       </div>
 
-      {/* Margin percentage row */}
+      {/* Quick-fill percentage row */}
       <div className="mb-3 flex gap-1">
         {MARGIN_PRESETS.map((pct) => (
           <button
@@ -445,7 +610,7 @@ export const TradeForm: FC<{ slabAddress: string }> = ({ slabAddress }) => {
             onClick={() => setMarginPercent(pct)}
             className="flex-1 rounded-none border border-[var(--border)]/30 py-1 text-[10px] font-medium text-[var(--text-muted)] transition-colors hover:border-[var(--accent)]/30 hover:text-[var(--text-secondary)] focus-visible:ring-1 focus-visible:ring-[var(--accent)]/30"
           >
-            {pct}%
+            {pct === 100 ? "MAX" : `${pct}%`}
           </button>
         ))}
       </div>
@@ -572,16 +737,32 @@ export const TradeForm: FC<{ slabAddress: string }> = ({ slabAddress }) => {
         </p>
       )}
 
-      {/* Coin-margined info */}
-      <div className="mt-3 rounded-none border border-[var(--border)]/20 bg-[var(--bg)]/50 p-2.5">
-        <p className="text-[9px] font-medium uppercase tracking-[0.15em] text-[var(--text-secondary)]">
-          Coin-Margined Market
-        </p>
-        <p className="mt-1 text-[10px] leading-relaxed text-[var(--text-secondary)]">
-          Margined in <strong className="text-[var(--text-secondary)]">{symbol}</strong>, not USD. Position value and liquidation risk are affected by the collateral token&apos;s price movements.
-          Effective USD leverage: <span className="font-mono text-[var(--text-secondary)]">{leverage > 0 ? `~${leverage * 2}x` : "—"}</span> (nominal {leverage}x × 2 for coin exposure).
-        </p>
+      {/* Coin-margined info — compact tooltip hint */}
+      <div className="mt-3 flex items-center gap-1.5">
+        <InfoIcon tooltip={`This market is margined in ${symbol}, not USD. Position value and liq risk are affected by the collateral token's price. Effective USD leverage ≈ ${leverage > 0 ? `${leverage * 2}x` : "—"} (nominal ${leverage}x × 2 for coin exposure).`} />
+        <span className="text-[9px] text-[var(--text-dim)] uppercase tracking-[0.1em]">Coin-margined market</span>
       </div>
+
+      {/* Close position modal */}
+      {showCloseModal && hasOpenPosition && userAccount && (
+        <ClosePositionModal
+          positionSize={openPositionSize}
+          entryPrice={openEntryPriceE6}
+          currentPrice={livePriceE6 ?? 0n}
+          capital={openCapital}
+          symbol={symbol}
+          decimals={decimals}
+          priceUsd={priceUsd}
+          isLong={isOpenLong}
+          loading={closeLoading}
+          onConfirm={async (percent) => {
+            await closePosition(percent);
+            setShowCloseModal(false);
+            refreshSlab();
+          }}
+          onCancel={() => setShowCloseModal(false)}
+        />
+      )}
 
       {/* Trade confirmation modal */}
       {showConfirmModal && marginNative > 0n && positionSize > 0n && (
