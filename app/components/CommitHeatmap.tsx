@@ -187,7 +187,13 @@ export const CommitHeatmap: FC<Props> = ({ commitActivity }) => {
             style={{ fontFamily: "var(--font-mono, 'JetBrains Mono')" }}
           >
             All commits across public repos · last{" "}
-            {visibleCount >= 52 ? "52 weeks" : `${visibleCount} weeks`}
+            {trimmedData.length > 0
+              ? trimmedData.length >= 52
+                ? "52 weeks"
+                : `${trimmedData.length} weeks`
+              : visibleCount >= 52
+                ? "52 weeks"
+                : `${visibleCount} weeks`}
           </p>
         </div>
 
@@ -225,7 +231,7 @@ export const CommitHeatmap: FC<Props> = ({ commitActivity }) => {
         {/* Heatmap grid */}
         <div className="overflow-x-auto">
           <div className="inline-block">
-            {/* Month labels row */}
+            {/* Month labels row — weeks array starts at first active week */}
             <div className="flex mb-1 ml-[30px]">
               {monthLabels.map(({ label, col }, i) => {
                 const nextCol =

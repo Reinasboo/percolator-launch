@@ -186,20 +186,81 @@ async function fetchGitHubStats(url: string): Promise<unknown> {
   return res.json();
 }
 
-/** Fetch contributor stats aggregated across all repos */
+/**
+ * Fetch contributor stats aggregated across all repos.
+ *
+ * Uses /contributors (synchronous, paginated) for unique contributor logins
+ * instead of /stats/contributors (async, 202-based) which is unreliable on
+ * first request and often returns stale/partial data.
+ *
+ * Commit counts come from /stats/commit_activity (52-week totals) rather than
+ * /stats/contributors so they agree with the heatmap numbers.
+ */
 export async function getContributorStats(): Promise<ContributorStats> {
   const allLogins = new Set<string>();
   let totalCommits = 0;
   let totalOpenIssues = 0;
   let isActive = false;
 
-  const results = await Promise.allSettled(
-    REPOS.map((repo) =>
-      fetchGitHubStats(`https://api.github.com/repos/dcccrypto/${repo}/stats/contributors`)
-    )
+  // ---- 1. Unique contributors via /contributors (synchronous) ----
+  const contributorResults = await Promise.allSettled(
+    REPOS.map(async (repo) => {
+      const logins: string[] = [];
+      // Paginate up to 3 pages (300 contributors) — more than enough
+      for (let page = 1; page <= 3; page++) {
+        const res = await fetch(
+          `https://api.github.com/repos/dcccrypto/${repo}/contributors?per_page=100&page=${page}&anon=0`,
+          { headers: githubHeaders, next: { revalidate: 600 } }
+        );
+        if (!res.ok) break;
+        const data = await res.json();
+        if (!Array.isArray(data) || data.length === 0) break;
+        data.forEach((c: { login?: string }) => {
+          if (c.login) logins.push(c.login);
+        });
+        if (data.length < 100) break; // last page
+      }
+      return logins;
+    })
   );
 
-  // Also fetch repo metadata for open_issues and pushed_at
+  contributorResults.forEach((result) => {
+    if (result.status !== "fulfilled") return;
+    result.value.forEach((login) => allLogins.add(login));
+  });
+
+  // ---- 2. Total commits via /stats/commit_activity (52-week sum) ----
+  // These are the same numbers the heatmap uses, so both stats will agree.
+  const commitActivityResults = await Promise.allSettled(
+    REPOS.map(async (repo) => {
+      const res = await fetch(
+        `https://api.github.com/repos/dcccrypto/${repo}/stats/commit_activity`,
+        { headers: githubHeaders, next: { revalidate: 600 } }
+      );
+      if (res.status === 202) {
+        await new Promise((r) => setTimeout(r, 2000));
+        const retry = await fetch(
+          `https://api.github.com/repos/dcccrypto/${repo}/stats/commit_activity`,
+          { headers: githubHeaders, next: { revalidate: 600 } }
+        );
+        if (!retry.ok) return [];
+        const data = await retry.json();
+        return Array.isArray(data) ? data : [];
+      }
+      if (!res.ok) return [];
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    })
+  );
+
+  commitActivityResults.forEach((result) => {
+    if (result.status !== "fulfilled" || !Array.isArray(result.value)) return;
+    result.value.forEach((w: { total?: number }) => {
+      totalCommits += w.total || 0;
+    });
+  });
+
+  // ---- 3. Repo metadata for open_issues + activity signal ----
   const repoResults = await Promise.allSettled(
     REPOS.map((repo) =>
       fetch(`https://api.github.com/repos/dcccrypto/${repo}`, {
@@ -208,16 +269,6 @@ export async function getContributorStats(): Promise<ContributorStats> {
       }).then((r) => (r.ok ? r.json() : null))
     )
   );
-
-  results.forEach((result) => {
-    if (result.status !== "fulfilled" || !Array.isArray(result.value)) return;
-    result.value.forEach(
-      (c: { author?: { login: string }; total: number }) => {
-        if (c.author?.login) allLogins.add(c.author.login);
-        totalCommits += c.total || 0;
-      }
-    );
-  });
 
   repoResults.forEach((result) => {
     if (result.status !== "fulfilled" || !result.value) return;
