@@ -14,10 +14,13 @@ import { useTokenMeta } from "@/hooks/useTokenMeta";
 /** P3-4: Mini bar chart showing last N 8h funding rate periods */
 function FundingMiniChart({ rates }: { rates: number[] }) {
   if (!rates.length) return null;
-  const max = Math.max(...rates.map(Math.abs), 0.0001);
+  // Guard against Infinity/NaN from overflow data slipping through
+  const safeRates = rates.filter(r => Number.isFinite(r));
+  if (!safeRates.length) return null;
+  const max = Math.max(...safeRates.map(Math.abs), 0.0001);
   return (
     <div className="flex items-end gap-1 h-8">
-      {rates.map((r, i) => {
+      {safeRates.map((r, i) => {
         const heightPct = Math.max(10, (Math.abs(r) / max) * 100);
         const isPos = r >= 0;
         return (
@@ -106,7 +109,16 @@ export const FundingRateCard: FC<{ slabAddress: string }> = ({ slabAddress }) =>
           if (histRes.ok) {
             const histData = await histRes.json();
             const pts: { rateBpsPerSlot?: number }[] = histData.history ?? [];
-            const rates = pts.map(p => ((p.rateBpsPerSlot ?? 0) / 10000) * 9000 * 8);
+            // Clamp outlier values before display — legacy on-chain data can have overflowed
+            // rateBpsPerSlot (e.g. from unchecked i64 arithmetic). Guard: ±10_000 bps max.
+            const RATE_BPS_MAX = 10_000;
+            const rates = pts
+              .map(p => {
+                const raw = p.rateBpsPerSlot ?? 0;
+                if (!Number.isFinite(raw) || Math.abs(raw) > RATE_BPS_MAX) return null;
+                return (raw / 10000) * 9000 * 8;
+              })
+              .filter((r): r is number => r !== null);
             setMiniChartRates(rates);
           }
         } catch { /* silently skip — mini chart is optional */ }
