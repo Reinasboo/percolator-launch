@@ -5,6 +5,7 @@ import {
   getAllCommitActivity,
   getGoodFirstIssues,
   getAllCIStatuses,
+  REPOS,
   type CommitActivityMap,
 } from "@/lib/github";
 import { DevelopersClient } from "./DevelopersClient";
@@ -37,18 +38,28 @@ export default async function DevelopersPage() {
     (r) => r.stargazers_count > 0 || r.forks_count > 0
   );
 
-  // Compute totalCommits from commitActivity so both stats are derived from
-  // the same API response — avoids the 202-cache-race that caused mismatch.
+  // Compute totalCommits from commitActivity, but ONLY if all repos returned
+  // data. GitHub's stats endpoint responds with 202 (cache being built) for
+  // repos whose stats are cold — a partial response covers only the repos that
+  // were already cached and produces an artificially low number (e.g. 1,272
+  // instead of 2,817).  When the coverage check fails, fall back to the value
+  // computed by getContributorStats(), which retries 202s and is more reliable.
   const commitActivityData: CommitActivityMap =
     commitActivity.status === "fulfilled" ? commitActivity.value : {};
-  const totalCommitsFromActivity = Object.values(commitActivityData)
-    .flat()
-    .reduce((sum, w) => sum + (w.total || 0), 0);
+  const reposCovered = Object.keys(commitActivityData).length;
+  const allReposCovered = reposCovered >= REPOS.length;
+  const totalCommitsFromActivity = allReposCovered
+    ? Object.values(commitActivityData)
+        .flat()
+        .reduce((sum, w) => sum + (w.total || 0), 0)
+    : 0;
 
   const rawContributorStats =
     contributorStats.status === "fulfilled" ? contributorStats.value : null;
+  // Override totalCommits only when commitActivity covered every repo;
+  // otherwise trust getContributorStats() to avoid showing a partial count.
   const resolvedContributorStats =
-    rawContributorStats && totalCommitsFromActivity > 0
+    rawContributorStats && allReposCovered && totalCommitsFromActivity > 0
       ? { ...rawContributorStats, totalCommits: totalCommitsFromActivity }
       : rawContributorStats;
 
