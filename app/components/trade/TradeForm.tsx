@@ -378,10 +378,10 @@ export const TradeForm: FC<{ slabAddress: string }> = ({ slabAddress }) => {
         <button
           ref={longBtnRef}
           onClick={() => setDirection("long")}
-          className={`flex-1 rounded-none py-2 text-[11px] font-medium uppercase tracking-[0.1em] transition-all duration-150 ${
+          className={`flex-1 rounded-none py-2.5 text-[11px] font-bold uppercase tracking-[0.1em] transition-all duration-150 ${
             direction === "long"
-              ? "bg-green-500/20 border border-green-500/50 text-green-400"
-              : "border border-[var(--border)] text-[var(--text-dim)]"
+              ? "bg-green-500 border border-green-500 text-black"
+              : "border border-[var(--border)] bg-gray-800 text-[var(--text-dim)]"
           }`}
         >
           Long
@@ -389,10 +389,10 @@ export const TradeForm: FC<{ slabAddress: string }> = ({ slabAddress }) => {
         <button
           ref={shortBtnRef}
           onClick={() => setDirection("short")}
-          className={`flex-1 rounded-none py-2 text-[11px] font-medium uppercase tracking-[0.1em] transition-all duration-150 ${
+          className={`flex-1 rounded-none py-2.5 text-[11px] font-bold uppercase tracking-[0.1em] transition-all duration-150 ${
             direction === "short"
-              ? "bg-red-500/20 border border-red-500/50 text-red-400"
-              : "border border-[var(--border)] text-[var(--text-dim)]"
+              ? "bg-red-500 border border-red-500 text-white"
+              : "border border-[var(--border)] bg-gray-800 text-[var(--text-dim)]"
           }`}
         >
           Short

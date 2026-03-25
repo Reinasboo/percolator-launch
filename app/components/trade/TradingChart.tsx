@@ -105,6 +105,7 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
   const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   const priceLineRef = useRef<ReturnType<ISeriesApi<"Candlestick">["createPriceLine"]> | null>(null);
   const liqLineRef = useRef<ReturnType<ISeriesApi<"Candlestick">["createPriceLine"]> | null>(null);
+  const entryLineRef = useRef<ReturnType<ISeriesApi<"Candlestick">["createPriceLine"]> | null>(null);
 
   const {
     candles: externalCandles,
@@ -193,8 +194,18 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
       volumeSeriesRef.current = null;
       priceLineRef.current = null;
       liqLineRef.current = null;
+      entryLineRef.current = null;
     };
   }, []);
+
+  // Derive entry price from user account
+  const entryPriceNum = (() => {
+    const ua = realUserAccount;
+    if (!ua) return null;
+    const ep = ua.account.entryPrice;
+    if (ep == null || ep === 0n) return null;
+    return Number(ep) / 1e6;
+  })();
 
   // Update series when data or chartType changes
   useEffect(() => {
@@ -212,15 +223,16 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
     }
     priceLineRef.current = null;
     liqLineRef.current = null;
+    entryLineRef.current = null;
 
     if (chartType === "candle" && candleData.length > 0) {
       const series = chart.addCandlestickSeries({
-        upColor: "#22d3ee",
+        upColor: "#22c55e",
         downColor: "#ef4444",
         borderDownColor: "#ef4444",
-        borderUpColor: "#22d3ee",
+        borderUpColor: "#22c55e",
         wickDownColor: "#ef4444",
-        wickUpColor: "#22d3ee",
+        wickUpColor: "#22c55e",
       });
 
       const formatted = candleData.map((c) => ({
@@ -249,7 +261,7 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
         time: (Math.floor(c.timestamp / 1000)) as import("lightweight-charts").UTCTimestamp,
         // Phase 2: use a tiny sentinel value so lwc renders the pane even when vol=0
         value: (c.volume ?? 0) > 0 ? c.volume : 0.001,
-        color: c.close >= c.open ? "rgba(34,211,238,0.6)" : "rgba(239,68,68,0.6)",
+        color: c.close >= c.open ? "rgba(34,197,94,0.6)" : "rgba(239,68,68,0.6)",
       }));
       volumeSeries.setData(volumeData);
       volumeSeriesRef.current = volumeSeries;
@@ -258,7 +270,7 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
       if (priceUsd != null) {
         priceLineRef.current = series.createPriceLine({
           price: priceUsd,
-          color: "#9945FF",
+          color: "rgba(255,255,255,0.6)",
           lineWidth: 1,
           lineStyle: LineStyle.Dashed,
           axisLabelVisible: true,
@@ -266,21 +278,33 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
         });
       }
 
-      // Phase 2: Liq price overlay — show orange dashed line when user has position
+      // Phase 2: Liq price overlay
       const liqPriceNum = liqPriceE6 != null && liqPriceE6 > 0n ? Number(liqPriceE6) / 1e6 : null;
       if (liqPriceNum != null && liqPriceNum > 0) {
         liqLineRef.current = series.createPriceLine({
           price: liqPriceNum,
-          color: "#f97316",
-          lineWidth: 1,
-          lineStyle: LineStyle.Dashed,
+          color: "#ef4444",
+          lineWidth: 2,
+          lineStyle: LineStyle.Solid,
           axisLabelVisible: true,
           title: "Liq",
         });
       }
+
+      // Entry price overlay — cyan dashed when position is open
+      if (entryPriceNum != null && entryPriceNum > 0) {
+        entryLineRef.current = series.createPriceLine({
+          price: entryPriceNum,
+          color: "#22d3ee",
+          lineWidth: 1,
+          lineStyle: LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: "Entry",
+        });
+      }
     } else if (chartType === "line" && lineData.length > 0) {
       const series = chart.addLineSeries({
-        color: "#22d3ee",
+        color: "#22c55e",
         lineWidth: 2,
       });
       const formatted = lineData.map((p) => ({
@@ -294,7 +318,7 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
       if (priceUsd != null) {
         priceLineRef.current = series.createPriceLine({
           price: priceUsd,
-          color: "#9945FF",
+          color: "rgba(255,255,255,0.6)",
           lineWidth: 1,
           lineStyle: LineStyle.Dashed,
           axisLabelVisible: true,
@@ -302,22 +326,34 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
         });
       }
 
-      // Phase 2: Liq price on line chart too
+      // Liq price on line chart
       const liqPriceNum = liqPriceE6 != null && liqPriceE6 > 0n ? Number(liqPriceE6) / 1e6 : null;
       if (liqPriceNum != null && liqPriceNum > 0) {
         liqLineRef.current = series.createPriceLine({
           price: liqPriceNum,
-          color: "#f97316",
+          color: "#ef4444",
+          lineWidth: 2,
+          lineStyle: LineStyle.Solid,
+          axisLabelVisible: true,
+          title: "Liq",
+        });
+      }
+
+      // Entry price on line chart
+      if (entryPriceNum != null && entryPriceNum > 0) {
+        entryLineRef.current = series.createPriceLine({
+          price: entryPriceNum,
+          color: "#22d3ee",
           lineWidth: 1,
           lineStyle: LineStyle.Dashed,
           axisLabelVisible: true,
-          title: "Liq",
+          title: "Entry",
         });
       }
     }
 
     chart.timeScale().fitContent();
-  }, [chartType, candleData, lineData, priceUsd, liqPriceE6]);
+  }, [chartType, candleData, lineData, priceUsd, liqPriceE6, entryPriceNum]);
 
   // Update mark price line when live price changes
   useEffect(() => {
