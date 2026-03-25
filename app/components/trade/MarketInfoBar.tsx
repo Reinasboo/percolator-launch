@@ -74,7 +74,7 @@ export const MarketInfoBar: FC<MarketInfoBarProps> = ({ slabAddress, symbol, log
 
       {/* Mark Price — large, colored by direction */}
       <span
-        className={`text-lg font-bold tabular-nums shrink-0 ${isUp ? "text-green-400" : "text-red-400"}`}
+        className={`text-2xl font-bold tabular-nums shrink-0 ${isUp ? "text-green-400" : "text-red-400"}`}
         style={{ fontFamily: "var(--font-mono)" }}
       >
         {priceDisplay}
