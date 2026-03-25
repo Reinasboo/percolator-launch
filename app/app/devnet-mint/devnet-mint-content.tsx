@@ -558,7 +558,7 @@ const DevnetMintContent: FC = () => {
             )}
             <div className="space-y-2">
               <div>
-                <label className="mb-1 block text-xs text-[var(--text-secondary)]">Devnet Mirror Mint Address</label>
+                <label className="mb-1 block text-xs text-[var(--text-secondary)]">Devnet Active Market Mint Address</label>
                 <input
                   type="text"
                   value={faucetMint}
