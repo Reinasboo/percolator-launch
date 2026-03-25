@@ -1,5 +1,6 @@
 import "dotenv/config";
 import http from "node:http";
+import { timingSafeEqual } from "node:crypto";
 import { config, createLogger, initSentry, captureException, sendInfoAlert, createServiceMonitors } from "@percolator/shared";
 import { OracleService } from "./services/oracle.js";
 import { CrankService } from "./services/crank.js";
@@ -57,8 +58,12 @@ const healthServer = http.createServer((req, res) => {
       res.end(JSON.stringify({ success: false, message: "Endpoint not configured" }));
       return;
     }
-    const provided = req.headers["x-shared-secret"] ?? "";
-    if (provided !== registerSecret) {
+    // GH#1692: Timing-safe comparison to prevent timing oracle attacks on KEEPER_REGISTER_SECRET.
+    const provided = String(req.headers["x-shared-secret"] ?? "");
+    const aBytes = Buffer.from(provided, "utf8");
+    const bBytes = Buffer.from(registerSecret, "utf8");
+    const unauthorized = aBytes.length !== bBytes.length || !timingSafeEqual(aBytes, bBytes);
+    if (unauthorized) {
       res.writeHead(401, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ success: false, message: "Unauthorized" }));
       return;

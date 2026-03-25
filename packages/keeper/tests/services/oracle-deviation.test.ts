@@ -98,7 +98,7 @@ describe('Cross-source deviation — actual boundary conditions', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    svc = new OracleService();
+    svc = new OracleService({ coldStartMinConfirmations: 0 });
   });
 
   it('0% divergence — accepted', async () => {
@@ -208,7 +208,7 @@ describe('Historical deviation — boundary conditions', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    svc = new OracleService();
+    svc = new OracleService({ coldStartMinConfirmations: 0 });
   });
 
   async function seedPrice(slab: string, usd: number): Promise<bigint> {
@@ -434,7 +434,7 @@ describe('HYPERP vs Pyth scenario table', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    svc = new OracleService();
+    svc = new OracleService({ coldStartMinConfirmations: 0 });
   });
 
   const scenarios: Array<{
