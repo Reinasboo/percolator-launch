@@ -507,11 +507,12 @@ export const TradeForm: FC<{ slabAddress: string }> = ({ slabAddress }) => {
 
       {/* GH#1330/1338: Oracle warning — stale or unavailable oracle blocks trading.
           "unavailable" = oracle never cranked (no price on-chain, e.g. test tokens without a feed).
-          "stale" = price exists but hasn't updated recently. Both prevent "Oracle is invalid" tx failure. */}
+          "stale" = price exists but hasn't updated recently. Both prevent "Oracle is invalid" tx failure.
+          P3-5: Use consistent amber/orange design language matching OracleFreshnessIndicator warning strip. */}
       {oracleStale && !mockMode && (
-        <div className="mb-3 rounded-none border border-[var(--short)]/30 bg-[var(--short)]/5 p-2.5">
-          <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-[var(--short)]">
-            {oracleUnavailable ? "⚠️ Oracle Unavailable" : "Oracle Stale"}
+        <div className="mb-3 rounded-none border border-amber-500/30 bg-amber-500/[0.07] p-2.5">
+          <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-amber-400">
+            {oracleUnavailable ? "⚠ Oracle Unavailable" : "⚠ Oracle Stale"}
           </p>
           <p className="mt-1 text-[9px] text-[var(--text-secondary)] leading-relaxed">
             {oracleUnavailable
@@ -540,7 +541,7 @@ export const TradeForm: FC<{ slabAddress: string }> = ({ slabAddress }) => {
           className={`flex-1 rounded-none py-2.5 text-[11px] font-bold uppercase tracking-[0.1em] transition-all duration-150 ${
             direction === "short"
               ? "bg-red-500 border border-red-500 text-white"
-              : "border border-red-500/40 bg-red-500/10 text-red-400/70 hover:bg-red-500/20 hover:text-red-400"
+              : "border border-red-400/60 bg-red-500/[0.08] text-red-400 hover:bg-red-500/20 hover:border-red-400/80"
           }`}
         >
           Short
@@ -629,7 +630,7 @@ export const TradeForm: FC<{ slabAddress: string }> = ({ slabAddress }) => {
           value={leverage}
           onChange={(e) => setLeverage(Number(e.target.value))}
           style={{
-            background: `linear-gradient(to right, var(--accent) 0%, var(--accent) ${maxLeverage > 1 ? ((leverage - 1) / (maxLeverage - 1)) * 100 : 100}%, rgba(255,255,255,0.03) ${maxLeverage > 1 ? ((leverage - 1) / (maxLeverage - 1)) * 100 : 100}%, rgba(255,255,255,0.03) 100%)`,
+            background: `linear-gradient(to right, var(--accent) 0%, var(--accent) ${maxLeverage > 1 ? ((leverage - 1) / (maxLeverage - 1)) * 100 : 100}%, rgba(255,255,255,0.12) ${maxLeverage > 1 ? ((leverage - 1) / (maxLeverage - 1)) * 100 : 100}%, rgba(255,255,255,0.12) 100%)`,
           }}
           className="mb-3 h-1.5 w-full cursor-pointer appearance-none touch-none accent-[var(--accent)] [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[var(--accent)] [&::-webkit-slider-thumb]:shadow-[0_0_6px_rgba(153,69,255,0.4)] [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-[var(--accent)]"
         />
@@ -640,8 +641,8 @@ export const TradeForm: FC<{ slabAddress: string }> = ({ slabAddress }) => {
               onClick={() => setLeverage(l)}
               className={`flex-1 basis-0 min-w-[32px] rounded-none py-1.5 min-h-[36px] text-[9px] font-medium transition-all duration-150 focus-visible:ring-1 focus-visible:ring-[var(--accent)]/30 touch-manipulation ${
                 leverage === l
-                  ? "bg-[var(--accent)] text-white"
-                  : "border border-[var(--border)]/50 text-[var(--text-secondary)] hover:border-[var(--accent)]/40 hover:text-[var(--text)]"
+                  ? "bg-[var(--accent)] text-white border border-[var(--accent)]"
+                  : "border border-[var(--border)] text-[var(--text)] hover:border-[var(--accent)]/60 hover:text-[var(--text)] bg-[var(--bg-elevated)]/40"
               }`}
             >
               {l}x

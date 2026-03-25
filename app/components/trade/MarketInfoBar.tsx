@@ -134,10 +134,10 @@ export const MarketInfoBar: FC<MarketInfoBarProps> = ({ slabAddress, symbol, log
 
       <span className="h-4 w-px bg-[var(--border)]/40 shrink-0" />
 
-      {/* Stats group */}
-      <div className="flex items-center gap-4 shrink-0">
+      {/* Stats group — flex-1 fills remaining space so ml-auto on badge works correctly */}
+      <div className="flex flex-1 items-center gap-4 min-w-0">
         {/* Volume 24h */}
-        <div className="flex flex-col">
+        <div className="flex flex-col shrink-0">
           <span className="text-[9px] uppercase tracking-[0.1em] text-[var(--text-dim)]">Vol 24h</span>
           <span className="text-xs font-medium text-[var(--text)]" style={{ fontFamily: "var(--font-mono)" }}>
             {formatCompact(volume as number)}
@@ -145,27 +145,27 @@ export const MarketInfoBar: FC<MarketInfoBarProps> = ({ slabAddress, symbol, log
         </div>
 
         {/* OI */}
-        <div className="flex flex-col">
+        <div className="flex flex-col shrink-0">
           <span className="text-[9px] uppercase tracking-[0.1em] text-[var(--text-dim)]">Open Interest</span>
           <span className="text-xs font-medium text-[var(--text)]" style={{ fontFamily: "var(--font-mono)" }}>
             {formatCompact(oi as number)}
           </span>
         </div>
 
-        {/* Funding Rate */}
+        {/* Funding Rate — P3-6: pr-2 padding prevents right-edge clipping */}
         {funding8h != null && (
-          <div className="flex flex-col">
+          <div className="flex flex-col shrink-0 pr-2">
             <span className="text-[9px] uppercase tracking-[0.1em] text-[var(--text-dim)]">Funding / 8h</span>
             <span className={`text-xs font-semibold ${fundingColor}`} style={{ fontFamily: "var(--font-mono)" }}>
               {funding8h >= 0 ? "+" : ""}{funding8h.toFixed(4)}%
             </span>
           </div>
         )}
-      </div>
 
-      {/* P3-3: Market health badge — far right, always visible */}
-      <span className="ml-auto h-4 w-px bg-[var(--border)]/40 shrink-0" />
-      <MarketHealthBadge oracleDown={oracleDown} vaultEmpty={vaultEmpty} />
+        {/* P3-3: Market health badge — ml-auto pushes to far right within flex-1 group */}
+        <span className="ml-auto h-4 w-px bg-[var(--border)]/40 shrink-0" />
+        <MarketHealthBadge oracleDown={oracleDown} vaultEmpty={vaultEmpty} />
+      </div>
     </div>
   );
 };

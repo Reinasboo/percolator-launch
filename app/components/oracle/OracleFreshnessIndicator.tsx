@@ -41,14 +41,15 @@ export const OracleFreshnessIndicator: FC = () => {
   if (!mode) return null;
 
   // GH#1341: Oracle mode detected but price never cranked — show unavailable banner
+  // P3-5: Use amber/orange (not red) to match order panel oracle warning design language.
   if (!ready) {
     return (
       <>
         <div
           className="flex items-center gap-1.5 px-2 py-1 text-[10px]"
           style={{
-            backgroundColor: "rgba(239,68,68,0.10)",
-            color: "#ef4444",
+            backgroundColor: "rgba(245,158,11,0.07)",
+            color: "#f59e0b",
             fontFamily: "var(--font-mono)",
           }}
         >
@@ -139,12 +140,13 @@ export const OracleFreshnessIndicator: FC = () => {
       </button>
 
       {/* Stale / unavailable warning banner (GH#1338) */}
+      {/* P3-5: Consistent amber/orange for both stale and unavailable — matches order panel warning */}
       {(level === "stale" || level === "unavailable") && (
         <div
           className="flex items-center gap-1.5 px-2 py-1 text-[10px]"
           style={{
-            backgroundColor: level === "unavailable" ? "rgba(239,68,68,0.10)" : "rgba(234,179,8,0.10)",
-            color: level === "unavailable" ? "#ef4444" : "#eab308",
+            backgroundColor: "rgba(245,158,11,0.07)",
+            color: "#f59e0b",
             fontFamily: "var(--font-mono)",
           }}
         >
