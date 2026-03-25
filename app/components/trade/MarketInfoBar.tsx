@@ -64,7 +64,7 @@ export const MarketInfoBar: FC<MarketInfoBarProps> = ({ slabAddress, symbol, log
   const { priceUsd, change24h } = useLivePrice();
   const { market } = useMarketInfo(slabAddress);
   const { fundingRate, engine } = useEngineState();
-  const { level: oracleLevel, ready: oracleReady } = useOracleFreshness();
+  const { level: oracleLevel } = useOracleFreshness();
 
   const priceDisplay = priceUsd != null
     ? `$${priceUsd < 0.01 ? priceUsd.toFixed(6) : priceUsd < 1 ? priceUsd.toFixed(4) : priceUsd.toFixed(2)}`
@@ -77,8 +77,9 @@ export const MarketInfoBar: FC<MarketInfoBarProps> = ({ slabAddress, symbol, log
   const fundingColor = funding8h != null ? (funding8h < 0 ? "text-orange-400" : "text-green-400") : "text-[var(--text)]";
 
   // P3-3: oracle + vault status for health badge
-  // oracleDown = never cranked (unavailable) or stale beyond fresh threshold
-  const oracleDown = oracleReady && oracleLevel === "unavailable";
+  // oracleDown = unavailable (never cranked) or stale — oracleReady && unavailable is
+  // always false (they're mutually exclusive), so check level directly.
+  const oracleDown = oracleLevel === "unavailable" || oracleLevel === "stale";
   // vaultEmpty = engine loaded but vault is 0
   const vaultEmpty = engine !== null && (engine.vault ?? 0n) === 0n;
 

@@ -99,12 +99,15 @@ export const FundingRateCard: FC<{ slabAddress: string }> = ({ slabAddress }) =>
           netLpPosition: BigInt(data.netLpPosition ?? 0),
         });
         // P3-4: fetch last 4 funding history points for mini bar chart
+        // /history returns { rateBpsPerSlot } — convert to 8h rate%:
+        // hourly% = (rateBpsPerSlot / 10000) * 9000  →  8h% = hourly * 8
         try {
           const histRes = await fetch(`/api/funding/${slabAddress}/history?limit=4`);
           if (histRes.ok) {
             const histData = await histRes.json();
-            const pts: { hourlyRatePercent?: number }[] = histData.history ?? [];
-            setMiniChartRates(pts.map(p => (p.hourlyRatePercent ?? 0) * 8));
+            const pts: { rateBpsPerSlot?: number }[] = histData.history ?? [];
+            const rates = pts.map(p => ((p.rateBpsPerSlot ?? 0) / 10000) * 9000 * 8);
+            setMiniChartRates(rates);
           }
         } catch { /* silently skip — mini chart is optional */ }
         setError(null);
