@@ -540,7 +540,7 @@ export const TradeForm: FC<{ slabAddress: string }> = ({ slabAddress }) => {
           className={`flex-1 rounded-none py-2.5 text-[11px] font-bold uppercase tracking-[0.1em] transition-all duration-150 ${
             direction === "short"
               ? "bg-red-500 border border-red-500 text-white"
-              : "border border-[var(--border)] bg-gray-800 text-[var(--text-dim)]"
+              : "border border-red-500/40 bg-red-500/10 text-red-400/70 hover:bg-red-500/20 hover:text-red-400"
           }`}
         >
           Short
@@ -633,12 +633,12 @@ export const TradeForm: FC<{ slabAddress: string }> = ({ slabAddress }) => {
           }}
           className="mb-3 h-1.5 w-full cursor-pointer appearance-none touch-none accent-[var(--accent)] [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[var(--accent)] [&::-webkit-slider-thumb]:shadow-[0_0_6px_rgba(153,69,255,0.4)] [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-[var(--accent)]"
         />
-        <div className="flex gap-1">
+        <div className="flex flex-wrap gap-1">
           {availableLeverage.map((l) => (
             <button
               key={l}
               onClick={() => setLeverage(l)}
-              className={`flex-1 rounded-none py-1.5 min-h-[44px] text-[10px] font-medium transition-all duration-150 focus-visible:ring-1 focus-visible:ring-[var(--accent)]/30 touch-manipulation ${
+              className={`flex-1 basis-0 min-w-[32px] rounded-none py-1.5 min-h-[36px] text-[9px] font-medium transition-all duration-150 focus-visible:ring-1 focus-visible:ring-[var(--accent)]/30 touch-manipulation ${
                 leverage === l
                   ? "bg-[var(--accent)] text-white"
                   : "border border-[var(--border)]/30 text-[var(--text-muted)] hover:border-[var(--accent)]/30 hover:text-[var(--text-secondary)]"
