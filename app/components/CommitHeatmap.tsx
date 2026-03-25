@@ -40,6 +40,7 @@ const REPO_SHORT: Record<string, string> = {
   "percolator-stake": "stake",
   "percolator-sdk": "sdk",
   "percolator-ops": "ops",
+  "percolator-nft": "nft",
   "percolator-mobile": "mobile",
 };
 
@@ -109,9 +110,18 @@ export const CommitHeatmap: FC<Props> = ({ commitActivity }) => {
     return commitActivity[selectedRepo] || [];
   }, [commitActivity, selectedRepo]);
 
+  /** Trim leading empty weeks (repos started Feb 2026, GitHub returns 52 weeks of zeros) */
+  const trimmedData = useMemo(() => {
+    // Find first week with any commits
+    const firstActive = weekData.findIndex((w) => w.total > 0);
+    if (firstActive <= 0) return weekData;
+    // Keep 1 empty week before first active for visual padding
+    return weekData.slice(Math.max(0, firstActive - 1));
+  }, [weekData]);
+
   /** Determine how many weeks to show (responsive to viewport) */
   const visibleCount = useResponsiveWeeks();
-  const weeks = weekData.slice(-visibleCount);
+  const weeks = trimmedData.slice(-visibleCount);
 
   /** Month labels aligned to weeks */
   const monthLabels = useMemo(() => {
@@ -177,7 +187,13 @@ export const CommitHeatmap: FC<Props> = ({ commitActivity }) => {
             style={{ fontFamily: "var(--font-mono, 'JetBrains Mono')" }}
           >
             All commits across public repos · last{" "}
-            {visibleCount >= 52 ? "52 weeks" : `${visibleCount} weeks`}
+            {trimmedData.length > 0
+              ? trimmedData.length >= 52
+                ? "52 weeks"
+                : `${trimmedData.length} weeks`
+              : visibleCount >= 52
+                ? "52 weeks"
+                : `${visibleCount} weeks`}
           </p>
         </div>
 
@@ -215,7 +231,7 @@ export const CommitHeatmap: FC<Props> = ({ commitActivity }) => {
         {/* Heatmap grid */}
         <div className="overflow-x-auto">
           <div className="inline-block">
-            {/* Month labels row */}
+            {/* Month labels row — weeks array starts at first active week */}
             <div className="flex mb-1 ml-[30px]">
               {monthLabels.map(({ label, col }, i) => {
                 const nextCol =
