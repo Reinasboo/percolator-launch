@@ -48,19 +48,32 @@ Verified linting still passes with the override.
 
 ### bigint-buffer ≤1.1.5 — Buffer Overflow (HIGH)
 
-- **Advisory:** GHSA-3gc7-fjrx-p6mg
+- **Advisory:** GHSA-3gc7-fjrx-p6mg / CVE-2025-3194
 - **Path:** `@solana/spl-token → @solana/buffer-layout-utils → bigint-buffer`
-- **Patched versions:** `<0.0.0` (no fix exists)
+- **Patched versions:** No released patch (upstream PR #64 open, unmerged as of 2026-03-25)
 - **Risk assessment:** LOW effective risk despite HIGH CVSS
-  - The vulnerability is in `toBigIntLE()` when called with attacker-controlled
-    buffer lengths. In our usage, buffer inputs come from on-chain Solana account
-    data with fixed, known layouts — not from untrusted user input.
-  - `@solana/buffer-layout-utils` is a widely-used Solana ecosystem package;
-    the entire Solana JS ecosystem depends on it.
-  - No alternative exists — this is the standard Solana token library.
-- **Mitigation:** Monitor for upstream fix. If `@solana/spl-token` releases a
-  version that drops `bigint-buffer`, upgrade immediately.
-- **Decision:** ACCEPT — no actionable fix available, effective risk is low.
+  - **Root cause:** Stack buffer overflow in native C binding's `fromBigInt` function
+    (`bigint_buffer.cc`). The `fits_in_stack` check compared `word_count` bytes
+    against `BUFFER_STACK_SIZE` (element count), causing overflow when a BigInt
+    requiring more than ~64 bytes is converted to a Buffer via native path.
+  - **JS path is safe:** When `process.browser === true` (Next.js frontend) or
+    when the native binding fails to load, a pure JS fallback is used — this path
+    is not affected by the C overflow.
+  - **Server-side (api, indexer, keeper):** Uses native bindings in Node.js. However,
+    all inputs to `toBufferLE/toBufferBE` come from SPL Token's internal fixed-size
+    serialization (u64 = 8 bytes, u128 = 16 bytes) — well within stack limits. No
+    user-controlled BigInt can reach this path without first passing Solana runtime
+    validation.
+  - **Fix available (unmerged):** ja88a/bigint-buffer@840d2146 has the one-line C fix.
+    A maintained drop-in replacement exists: `@vekexasia/bigint-buffer2@1.1.1` (Rust
+    napi bindings, same API). Cannot override via `pnpm.overrides` without package
+    name matching; would require forking `@solana/buffer-layout-utils`.
+- **Mitigation:** Monitor for `@solana/spl-token` releasing a version that drops
+  `bigint-buffer` or migrates to `@vekexasia/bigint-buffer2`. If upstream PR #64
+  is merged and a new bigint-buffer version is published, upgrade immediately.
+- **Decision:** ACCEPT — effective exploit risk is low in our context (fixed-size
+  inputs, frontend uses safe JS path). No actionable drop-in fix available without
+  forking upstream Solana packages. Last reviewed: 2026-03-25.
 
 ### h3 <1.15.9 — SSE Injection + Path Traversal (MODERATE) — MITIGATED
 
