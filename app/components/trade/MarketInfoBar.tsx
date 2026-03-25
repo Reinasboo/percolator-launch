@@ -4,6 +4,7 @@ import { FC } from "react";
 import { useLivePrice } from "@/hooks/useLivePrice";
 import { useMarketInfo } from "@/hooks/useMarketInfo";
 import { useEngineState } from "@/hooks/useEngineState";
+import { useOracleFreshness } from "@/hooks/useOracleFreshness";
 import { MarketLogo } from "@/components/market/MarketLogo";
 
 interface MarketInfoBarProps {
@@ -29,10 +30,41 @@ function fundingRateBpsTo8h(rateBps: bigint): number {
   return ((Number(rateBps) * 9000 * 8) / 10000) / 100;
 }
 
+/** P3-3: Market health badge — surfaces oracle/liquidity status in the ticker bar */
+type HealthBadgeState = "live" | "no-oracle" | "no-liquidity" | "inactive";
+
+function MarketHealthBadge({ oracleDown, vaultEmpty }: { oracleDown: boolean; vaultEmpty: boolean }) {
+  let state: HealthBadgeState;
+  if (oracleDown && vaultEmpty) state = "inactive";
+  else if (vaultEmpty) state = "no-liquidity";
+  else if (oracleDown) state = "no-oracle";
+  else state = "live";
+
+  const cfg: Record<HealthBadgeState, { label: string; icon: string; cls: string; pulse: boolean; tooltip: string }> = {
+    live:          { label: "LIVE",         icon: "●",  cls: "text-green-400 bg-green-500/10 border-green-500/20",  pulse: false, tooltip: "Oracle healthy — market is live" },
+    "no-oracle":   { label: "NO ORACLE",    icon: "◉",  cls: "text-amber-400 bg-amber-500/10 border-amber-500/20",  pulse: true,  tooltip: "Oracle not cranked — market paused. Trades are blocked." },
+    "no-liquidity":{ label: "NO LIQUIDITY", icon: "⚠",  cls: "text-red-400 bg-red-500/10 border-red-500/20",        pulse: false, tooltip: "No vault liquidity — trades cannot execute until this market is funded." },
+    inactive:      { label: "INACTIVE",     icon: "⚠",  cls: "text-red-400 bg-red-500/10 border-red-500/20",        pulse: false, tooltip: "Oracle unavailable and no vault liquidity." },
+  };
+
+  const { label, icon, cls, pulse, tooltip } = cfg[state];
+
+  return (
+    <span
+      title={tooltip}
+      className={`shrink-0 inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded border ${cls} ${pulse ? "animate-pulse" : ""}`}
+    >
+      <span>{icon}</span>
+      <span>{label}</span>
+    </span>
+  );
+}
+
 export const MarketInfoBar: FC<MarketInfoBarProps> = ({ slabAddress, symbol, logoUrl, mintAddress }) => {
   const { priceUsd, change24h } = useLivePrice();
   const { market } = useMarketInfo(slabAddress);
-  const { fundingRate } = useEngineState();
+  const { fundingRate, engine } = useEngineState();
+  const { level: oracleLevel, ready: oracleReady } = useOracleFreshness();
 
   const priceDisplay = priceUsd != null
     ? `$${priceUsd < 0.01 ? priceUsd.toFixed(6) : priceUsd < 1 ? priceUsd.toFixed(4) : priceUsd.toFixed(2)}`
@@ -43,6 +75,12 @@ export const MarketInfoBar: FC<MarketInfoBarProps> = ({ slabAddress, symbol, log
 
   const funding8h = fundingRate != null ? fundingRateBpsTo8h(fundingRate) : null;
   const fundingColor = funding8h != null ? (funding8h < 0 ? "text-orange-400" : "text-green-400") : "text-[var(--text)]";
+
+  // P3-3: oracle + vault status for health badge
+  // oracleDown = never cranked (unavailable) or stale beyond fresh threshold
+  const oracleDown = oracleReady && oracleLevel === "unavailable";
+  // vaultEmpty = engine loaded but vault is 0
+  const vaultEmpty = engine !== null && (engine.vault ?? 0n) === 0n;
 
   const volume = market?.volume_24h as number | null | undefined;
 
@@ -123,6 +161,10 @@ export const MarketInfoBar: FC<MarketInfoBarProps> = ({ slabAddress, symbol, log
           </div>
         )}
       </div>
+
+      {/* P3-3: Market health badge — far right, always visible */}
+      <span className="h-4 w-px bg-[var(--border)]/40 shrink-0" />
+      <MarketHealthBadge oracleDown={oracleDown} vaultEmpty={vaultEmpty} />
     </div>
   );
 };
