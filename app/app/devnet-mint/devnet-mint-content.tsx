@@ -552,7 +552,7 @@ const DevnetMintContent: FC = () => {
                 Paste a devnet mirror mint address to get $500 worth of test tokens airdropped to your wallet.
                 <br />
                 <span className="text-[var(--text-dim)] text-[10px]">
-                  Token must be a mirrored market mint (created by the launch wizard).
+                  Token must be an active market mint on Percolator devnet.
                 </span>
               </p>
             )}
