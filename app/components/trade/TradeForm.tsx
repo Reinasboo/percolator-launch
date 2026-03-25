@@ -641,7 +641,7 @@ export const TradeForm: FC<{ slabAddress: string }> = ({ slabAddress }) => {
               className={`flex-1 basis-0 min-w-[32px] rounded-none py-1.5 min-h-[36px] text-[9px] font-medium transition-all duration-150 focus-visible:ring-1 focus-visible:ring-[var(--accent)]/30 touch-manipulation ${
                 leverage === l
                   ? "bg-[var(--accent)] text-white"
-                  : "border border-[var(--border)]/30 text-[var(--text-muted)] hover:border-[var(--accent)]/30 hover:text-[var(--text-secondary)]"
+                  : "border border-[var(--border)]/50 text-[var(--text-secondary)] hover:border-[var(--accent)]/40 hover:text-[var(--text)]"
               }`}
             >
               {l}x
