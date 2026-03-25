@@ -48,7 +48,10 @@ describe('OracleService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    oracleService = new OracleService();
+    // GH#1693: disable cold-start confirmation requirement in unit tests — these tests
+    // verify cross-source and historical deviation logic in isolation; cold-start is
+    // covered separately in oracle-sanity-bounds.test.ts.
+    oracleService = new OracleService({ coldStartMinConfirmations: 0 });
   });
 
   afterEach(() => {

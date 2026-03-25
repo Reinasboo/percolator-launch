@@ -24,6 +24,16 @@ const CACHED_PRICE_MAX_AGE_MS = 60_000; // Reject cached prices older than 60s
 // Cross-source validation: reject if DexScreener and Jupiter diverge by more than this %
 const MAX_CROSS_SOURCE_DEVIATION_PCT = 10;
 
+// GH#1693: Absolute price sanity bounds — reject prices outside this range regardless of source.
+// MIN: $0.000001 (1 micro-dollar); MAX: $1 billion.
+// Prevents corrupted/mocked data from reaching the chain.
+const PRICE_SANITY_MIN_E6 = 1n; // $0.000001
+const PRICE_SANITY_MAX_E6 = 1_000_000_000_000_000n; // $1,000,000,000
+
+// GH#1693: On cold start (empty history), require this many consistent price samples
+// before accepting the price as canonical. Prevents a single poisoned cold-start price.
+const COLD_START_MIN_CONFIRMATIONS = 3;
+
 // DexScreener rate limit: cache responses for 10s to avoid hitting limits
 const dexScreenerCache = new Map<string, { data: DexScreenerResponse; fetchedAt: number }>();
 const DEX_SCREENER_CACHE_TTL_MS = 10_000;
@@ -48,6 +58,15 @@ export class OracleService {
   private readonly rateLimitMs = 5_000;
   private readonly maxHistory = 100;
   private readonly maxTrackedMarkets = 500;
+  // GH#1693: Track cold-start confirmation counts per market.
+  // We require coldStartMinConfirmations consistent samples before trusting a cold-start price.
+  private coldStartConfirmations = new Map<string, { count: number; priceE6: bigint }>();
+  // Configurable cold-start minimum — can be set to 0 in tests to disable the requirement.
+  private readonly coldStartMinConfirmations: number;
+
+  constructor(options?: { coldStartMinConfirmations?: number }) {
+    this.coldStartMinConfirmations = options?.coldStartMinConfirmations ?? COLD_START_MIN_CONFIRMATIONS;
+  }
   // BM2: Deduplicate concurrent requests for the same mint
   private inFlightRequests = new Map<string, Promise<bigint | null>>();
 
@@ -210,6 +229,20 @@ export class OracleService {
       return null;
     }
 
+    // GH#1693: Absolute sanity bounds — reject prices outside [$0.000001, $1B] regardless of source.
+    // Defends against: compromised DNS returning extreme prices, mocked/malformed API responses,
+    // single-source fallback with no cross-validation on cold start.
+    if (priceE6 < PRICE_SANITY_MIN_E6 || priceE6 > PRICE_SANITY_MAX_E6) {
+      logger.warn("Price outside absolute sanity bounds — rejecting", {
+        mint,
+        priceE6: priceE6.toString(),
+        minE6: PRICE_SANITY_MIN_E6.toString(),
+        maxE6: PRICE_SANITY_MAX_E6.toString(),
+        source,
+      });
+      return null;
+    }
+
     // R2-S4: Historical deviation check — reject if >30% change from last known price
     const history = this.priceHistory.get(slabAddress);
     if (history && history.length > 0) {
@@ -230,6 +263,51 @@ export class OracleService {
           return null;
         }
       }
+    } else if (this.coldStartMinConfirmations > 0) {
+      // GH#1693: Cold start — no price history yet. Require coldStartMinConfirmations
+      // consecutive consistent samples before accepting the price. This prevents a single
+      // poisoned cold-start value (e.g. from a compromised DexScreener response) from being
+      // pushed on-chain immediately.
+      const existing = this.coldStartConfirmations.get(slabAddress);
+      const COLD_START_TOLERANCE_PCT = 5; // Allow ±5% between cold-start samples
+      if (!existing || existing.priceE6 === 0n) {
+        // First sample — record and wait
+        this.coldStartConfirmations.set(slabAddress, { count: 1, priceE6 });
+        logger.info("Cold-start confirmation 1/" + this.coldStartMinConfirmations, {
+          mint, slabAddress, priceE6: priceE6.toString(), source,
+        });
+        return null;
+      }
+      // Check consistency with accumulated cold-start price (within tolerance)
+      const refPrice = existing.priceE6;
+      const coldDeviation = priceE6 > refPrice
+        ? Number((priceE6 - refPrice) * 100n / refPrice)
+        : Number((refPrice - priceE6) * 100n / refPrice);
+      if (coldDeviation > COLD_START_TOLERANCE_PCT) {
+        // Inconsistent sample — reset to this new value and start counting again
+        logger.warn("Cold-start sample inconsistent with reference, resetting", {
+          mint, slabAddress,
+          newPrice: priceE6.toString(),
+          refPrice: refPrice.toString(),
+          coldDeviation,
+          tolerancePct: COLD_START_TOLERANCE_PCT,
+        });
+        this.coldStartConfirmations.set(slabAddress, { count: 1, priceE6 });
+        return null;
+      }
+      const newCount = existing.count + 1;
+      if (newCount < this.coldStartMinConfirmations) {
+        this.coldStartConfirmations.set(slabAddress, { count: newCount, priceE6: refPrice });
+        logger.info(`Cold-start confirmation ${newCount}/${this.coldStartMinConfirmations}`, {
+          mint, slabAddress, priceE6: priceE6.toString(), source,
+        });
+        return null;
+      }
+      // Reached minimum confirmations — clear the cold-start tracker and proceed
+      this.coldStartConfirmations.delete(slabAddress);
+      logger.info("Cold-start confirmed — pushing first price", {
+        mint, slabAddress, priceE6: priceE6.toString(), confirmations: newCount, source,
+      });
     }
 
     const entry: PriceEntry = { priceE6, source, timestamp: Date.now() };

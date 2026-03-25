@@ -14,6 +14,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { timingSafeEqual } from "node:crypto";
 import { getServiceClient } from "@/lib/supabase";
 import { PublicKey } from "@solana/web3.js";
 
@@ -28,8 +29,13 @@ export async function POST(req: NextRequest) {
     console.error("[oracle-keeper/register] KEEPER_REGISTER_SECRET not configured — endpoint disabled");
     return NextResponse.json({ error: "Endpoint not configured" }, { status: 503 });
   }
+  // GH#1692: Use timing-safe comparison to prevent timing oracle attacks.
+  // Plain string equality leaks secret length via response-time side channels.
   const authHeader = req.headers.get("x-keeper-secret") ?? "";
-  if (authHeader !== REGISTER_SECRET) {
+  const aBytes = Buffer.from(authHeader, "utf8");
+  const bBytes = Buffer.from(REGISTER_SECRET, "utf8");
+  const unauthorized = aBytes.length !== bBytes.length || !timingSafeEqual(aBytes, bBytes);
+  if (unauthorized) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
