@@ -489,7 +489,8 @@ const DevnetMintContent: FC = () => {
   }, [publicKey, signTransaction, existingMint, mintMoreAmount, recipient, refreshBalance]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Issue #1139: Validate faucet mint is a real Solana address before enabling the button
-  const isFaucetMintValid = isValidBase58Pubkey(faucetMint.trim());
+  // GH#1715: Empty input is not invalid — treat as "no input yet", not an error.
+  const isFaucetMintValid = !faucetMint.trim() || isValidBase58Pubkey(faucetMint.trim());
 
   const cardClass = "bg-[var(--panel-bg)] border border-[var(--border)] p-4 sm:p-6";
   const btnPrimary = "border border-[var(--accent)]/40 text-[var(--accent)] bg-transparent px-5 py-2.5 text-sm font-semibold transition-all duration-200 hover:border-[var(--accent)]/70 hover:bg-[var(--accent)]/[0.08] active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100";
