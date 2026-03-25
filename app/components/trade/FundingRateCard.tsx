@@ -11,6 +11,28 @@ import { isMockSlab } from "@/lib/mock-trade-data";
 import { sanitizeFundingRateBps } from "@/lib/health";
 import { useTokenMeta } from "@/hooks/useTokenMeta";
 
+/** P3-4: Mini bar chart showing last N 8h funding rate periods */
+function FundingMiniChart({ rates }: { rates: number[] }) {
+  if (!rates.length) return null;
+  const max = Math.max(...rates.map(Math.abs), 0.0001);
+  return (
+    <div className="flex items-end gap-1 h-8">
+      {rates.map((r, i) => {
+        const heightPct = Math.max(10, (Math.abs(r) / max) * 100);
+        const isPos = r >= 0;
+        return (
+          <div
+            key={i}
+            title={`${r >= 0 ? "+" : ""}${r.toFixed(4)}%`}
+            className={`w-6 rounded-sm ${isPos ? "bg-green-500/60" : "bg-red-500/60"}`}
+            style={{ height: `${heightPct}%` }}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
 interface FundingData {
   currentRateBpsPerSlot: number;
   hourlyRatePercent: number;
@@ -59,6 +81,8 @@ export const FundingRateCard: FC<{ slabAddress: string }> = ({ slabAddress }) =>
   const [error, setError] = useState<string | null>(null);
   const [showExplainer, setShowExplainer] = useState(false);
   const [countdown, setCountdown] = useState(0);
+  // P3-4: last 4 funding rate periods for mini bar chart (8h rates in %)
+  const [miniChartRates, setMiniChartRates] = useState<number[]>([]);
 
   // Fetch funding data from API, fall back to on-chain data
   useEffect(() => {
@@ -74,6 +98,15 @@ export const FundingRateCard: FC<{ slabAddress: string }> = ({ slabAddress }) =>
           ...data,
           netLpPosition: BigInt(data.netLpPosition ?? 0),
         });
+        // P3-4: fetch last 4 funding history points for mini bar chart
+        try {
+          const histRes = await fetch(`/api/funding/${slabAddress}/history?limit=4`);
+          if (histRes.ok) {
+            const histData = await histRes.json();
+            const pts: { hourlyRatePercent?: number }[] = histData.history ?? [];
+            setMiniChartRates(pts.map(p => (p.hourlyRatePercent ?? 0) * 8));
+          }
+        } catch { /* silently skip — mini chart is optional */ }
         setError(null);
       } catch {
         // Silently fall back to on-chain data — no error shown to user
@@ -92,6 +125,8 @@ export const FundingRateCard: FC<{ slabAddress: string }> = ({ slabAddress }) =>
             currentSlot: 0,
           });
           setError(null); // Clear error — on-chain data is valid
+          // Mini chart fallback: repeat current rate 4x
+          setMiniChartRates([hourly * 8, hourly * 8, hourly * 8, hourly * 8]);
         }
       } finally {
         setLoading(false);
@@ -235,6 +270,14 @@ export const FundingRateCard: FC<{ slabAddress: string }> = ({ slabAddress }) =>
             {(fundingData.aprPercent ?? 0) >= 0 ? "+" : ""}{(fundingData.aprPercent ?? 0).toFixed(1)}% APR
           </span>
         </div>
+
+        {/* P3-4: Mini bar chart — last 4 periods */}
+        {miniChartRates.length > 0 && (
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-[9px] text-[var(--text-dim)] uppercase tracking-[0.1em]">Last {miniChartRates.length} periods</span>
+            <FundingMiniChart rates={miniChartRates} />
+          </div>
+        )}
 
         {/* Position-Specific Estimate */}
         {positionDirection && estimatedFunding24h !== null && (
