@@ -62,18 +62,24 @@ export const DepositTrigger: FC<{ slabAddress: string }> = ({ slabAddress }) => 
     );
   }
 
-  // First-time state: shimmer button
+  // PERC-8090: First-time state — inline compact prompt instead of full-width shimmer card
   if (!hasDeposited && capital === 0n) {
     return (
       <div data-deposit-trigger>
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="deposit-shimmer w-full border border-[var(--accent)]/60 bg-[var(--accent)]/[0.06] px-3 py-2.5 text-left transition-colors hover:bg-[var(--accent)]/[0.10]"
-        >
-          <span className="relative z-10 text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--accent)]">
-            Deposit Collateral to Trade
-          </span>
-        </button>
+        <div className="flex items-center justify-between border border-[var(--border)]/50 bg-[var(--bg)]/80 px-3 py-1.5">
+          <div className="flex items-center gap-2">
+            <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
+            <span className="text-[10px] text-[var(--text-secondary)]">
+              Deposit {symbol} to start trading
+            </span>
+          </div>
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="text-[10px] font-medium uppercase tracking-[0.1em] text-[var(--accent)] transition-colors hover:text-[var(--accent)]/80"
+          >
+            {expanded ? "Close" : "Deposit →"}
+          </button>
+        </div>
         {expanded && (
           <div className="mt-1">
             <DepositWithdrawCard slabAddress={slabAddress} />

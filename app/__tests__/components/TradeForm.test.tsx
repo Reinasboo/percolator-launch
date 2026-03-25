@@ -212,11 +212,12 @@ describe("TradeForm Component Tests", () => {
       render(<TradeForm slabAddress="test-slab" />);
       
       const maxButton = screen.getByRole("button", { name: /max/i });
-      const input = screen.getByPlaceholderText("0.00");
+      const input = screen.getByPlaceholderText("0.000000");
       
       await user.click(maxButton);
       
-      expect(input).toHaveValue("5");
+      // PERC-8090: Max now populates contracts input (5 contracts at 1x leverage)
+      expect(input).toHaveValue("5.000000");
     });
     
     it("should not set value if balance is zero", async () => {
@@ -237,7 +238,7 @@ describe("TradeForm Component Tests", () => {
       render(<TradeForm slabAddress="test-slab" />);
       
       const maxButton = screen.getByRole("button", { name: /max/i });
-      const input = screen.getByPlaceholderText("0.00");
+      const input = screen.getByPlaceholderText("0.000000");
       
       await user.click(maxButton);
       
@@ -263,7 +264,7 @@ describe("TradeForm Component Tests", () => {
       render(<TradeForm slabAddress="test-slab" />);
       
       const maxButton = screen.getByRole("button", { name: /max/i });
-      const input = screen.getByPlaceholderText("0.00");
+      const input = screen.getByPlaceholderText("0.000000");
       
       await user.click(maxButton);
       
@@ -291,7 +292,7 @@ describe("TradeForm Component Tests", () => {
       
       render(<TradeForm slabAddress="test-slab" />);
       
-      const input = screen.getByPlaceholderText("0.00");
+      const input = screen.getByPlaceholderText("0.000000");
       
       await user.type(input, "abc");
       
@@ -304,7 +305,7 @@ describe("TradeForm Component Tests", () => {
       
       render(<TradeForm slabAddress="test-slab" />);
       
-      const input = screen.getByPlaceholderText("0.00");
+      const input = screen.getByPlaceholderText("0.000000");
       
       await user.type(input, "1@#$2");
       
@@ -317,7 +318,7 @@ describe("TradeForm Component Tests", () => {
       
       render(<TradeForm slabAddress="test-slab" />);
       
-      const input = screen.getByPlaceholderText("0.00");
+      const input = screen.getByPlaceholderText("0.000000");
       
       await user.type(input, "5.5");
       
@@ -329,7 +330,7 @@ describe("TradeForm Component Tests", () => {
       
       render(<TradeForm slabAddress="test-slab" />);
       
-      const input = screen.getByPlaceholderText("0.00");
+      const input = screen.getByPlaceholderText("0.000000");
       
       await user.type(input, "100"); // More than 10 SOL balance
       
@@ -344,7 +345,7 @@ describe("TradeForm Component Tests", () => {
       
       render(<TradeForm slabAddress="test-slab" />);
       
-      const input = screen.getByPlaceholderText("0.00");
+      const input = screen.getByPlaceholderText("0.000000");
       const submitButton = screen.getByRole("button", { name: /Long 1x/i });
       
       // Empty input should disable button
@@ -382,7 +383,7 @@ describe("TradeForm Component Tests", () => {
       
       const { rerender } = render(<TradeForm slabAddress="test-slab" />);
       
-      const input = screen.getByPlaceholderText("0.00");
+      const input = screen.getByPlaceholderText("0.000000");
       await user.type(input, "5");
       
       // Simulate wallet disconnect
