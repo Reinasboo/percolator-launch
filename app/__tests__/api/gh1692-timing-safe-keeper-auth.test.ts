@@ -8,11 +8,12 @@
  * 4. Length-differing secrets are also rejected (no short-circuit)
  */
 
+import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 import { NextRequest } from "next/server";
 
 // ── Mock dependencies before importing route ──────────────────────────────────
 
-jest.mock("@/lib/supabase", () => ({
+vi.mock("@/lib/supabase", () => ({
   getServiceClient: () => ({
     from: () => ({
       update: () => ({
@@ -26,7 +27,7 @@ jest.mock("@/lib/supabase", () => ({
   }),
 }));
 
-jest.mock("@solana/web3.js", () => ({
+vi.mock("@solana/web3.js", () => ({
   PublicKey: class {
     constructor(s: string) {
       if (s.length < 32) throw new Error("Invalid pubkey");
@@ -40,7 +41,7 @@ describe("GH#1692: oracle-keeper/register timing-safe auth", () => {
   const CORRECT_SECRET = "super-secret-register-key-12345";
 
   beforeEach(() => {
-    jest.resetModules();
+    vi.resetModules();
     process.env.KEEPER_REGISTER_SECRET = CORRECT_SECRET;
     process.env.KEEPER_INTERNAL_URL = "http://localhost:8081";
   });
@@ -87,7 +88,7 @@ describe("GH#1692: oracle-keeper/register timing-safe auth", () => {
 
   it("rejects when KEEPER_REGISTER_SECRET not configured", async () => {
     delete process.env.KEEPER_REGISTER_SECRET;
-    jest.resetModules();
+    vi.resetModules();
     process.env.KEEPER_INTERNAL_URL = "http://localhost:8081";
     const { POST } = await import("@/app/api/oracle-keeper/register/route");
     const res = await POST(makeRequest(CORRECT_SECRET));
