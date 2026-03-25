@@ -82,3 +82,11 @@ SOUL.md
 IDENTITY.md
 AGENTS.md
 TOOLS.md
+
+# Debug/scratch scripts (must never be committed)
+fetch_slab.mjs
+inspect-slabs-tmp.mjs
+*-slab*.mjs
+*-tmp.mjs
+*-debug.mjs
+scratch*.mjs
