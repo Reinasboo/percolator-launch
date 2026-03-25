@@ -237,6 +237,11 @@ export async function POST(req: NextRequest) {
     }
 
     // 1. Validate mintAddress exists in devnet_mints table → get mainnet_ca + metadata
+    //    GH#1703: Also fall back to markets table (mint_address) for market mints that
+    //    were created directly (not via the mainnet mirror flow) so users can get test
+    //    tokens for any active market without hitting the misleading "not a known devnet
+    //    mirror mint" error. The server API (/api/faucet) already accepts these mints —
+    //    the client-side gating was the only blocker.
     const supabase = getServiceClient();
     const { data: mintRow, error: dbErr } = await (supabase as any)
       .from("devnet_mints")
@@ -244,15 +249,34 @@ export async function POST(req: NextRequest) {
       .eq("devnet_mint", mintAddress)
       .maybeSingle();
 
-    if (dbErr || !mintRow) {
-      return NextResponse.json(
-        { error: "mintAddress is not a known devnet mirror mint" },
-        { status: 400 },
-      );
-    }
+    let mainnetCa: string;
+    let symbol: string | null;
+    let decimals: number;
 
-    const { mainnet_ca: mainnetCa, symbol, decimals: rawDecimals } = mintRow;
-    const decimals: number = rawDecimals ?? 6;
+    if (!dbErr && mintRow) {
+      // Found in devnet_mints (mirror flow)
+      mainnetCa = mintRow.mainnet_ca;
+      symbol = mintRow.symbol;
+      decimals = mintRow.decimals ?? 6;
+    } else {
+      // Fallback: check markets table for mint_address match (direct-created market mints)
+      const { data: marketRow, error: marketErr } = await (supabase as any)
+        .from("markets")
+        .select("mainnet_ca, symbol, decimals")
+        .eq("mint_address", mintAddress)
+        .maybeSingle();
+
+      if (marketErr || !marketRow) {
+        return NextResponse.json(
+          { error: "mintAddress is not a known devnet mirror mint" },
+          { status: 400 },
+        );
+      }
+
+      mainnetCa = marketRow.mainnet_ca;
+      symbol = marketRow.symbol;
+      decimals = marketRow.decimals ?? 6;
+    }
 
     // 2. INSERT-as-gate: atomically reserve the claim slot BEFORE minting.
     //    This eliminates the TOCTOU race in the previous SELECT→UPSERT flow.
