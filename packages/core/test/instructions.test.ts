@@ -9,6 +9,11 @@ import {
   encodeCloseSlab, encodeUpdateConfig, encodeSetMaintenanceFee,
   encodeSetOracleAuthority, encodePushOraclePrice, encodeSetOraclePriceCap,
   encodeResolveMarket, encodeWithdrawInsurance,
+  encodeFundMarketInsurance, encodeSetInsuranceIsolation,
+  encodeAdvanceOraclePhase, encodeTopUpKeeperFund,
+  encodeSlashCreationDeposit, encodeInitSharedVault,
+  encodeAllocateMarket, encodeQueueWithdrawalSV,
+  encodeClaimEpochWithdrawal, encodeAdvanceEpoch,
   IX_TAG,
 } from "../src/abi/instructions.js";
 
@@ -139,5 +144,201 @@ describe("instruction encoders", () => {
 
   it("encodeWithdrawInsurance produces 1 byte", () => {
     expect(encodeWithdrawInsurance()[0]).toBe(IX_TAG.WithdrawInsurance);
+  });
+});
+
+// ============================================================================
+// PERC-608: Settlement tag integrity and ClearPendingSettlement guard
+// ============================================================================
+
+describe("PERC-608 settlement tag integrity", () => {
+  it("ChallengeSettlement is tag 43 (not ExecuteAdl)", () => {
+    expect(IX_TAG.ChallengeSettlement).toBe(43);
+  });
+
+  it("ResolveDispute is tag 44", () => {
+    expect(IX_TAG.ResolveDispute).toBe(44);
+  });
+
+  it("no ClearPendingSettlement tag exists in IX_TAG", () => {
+    expect((IX_TAG as Record<string, number>)["ClearPendingSettlement"]).toBeUndefined();
+  });
+
+  it("no clearPendingSettlement tag exists (case-insensitive check)", () => {
+    const keys = Object.keys(IX_TAG);
+    const match = keys.find((k) => k.toLowerCase() === "clearpendingsettlement");
+    expect(match).toBeUndefined();
+  });
+
+  it("tag 43 is exclusively ChallengeSettlement — no duplicate assignment", () => {
+    const entries = Object.entries(IX_TAG).filter(([, v]) => v === 43);
+    expect(entries).toHaveLength(1);
+    expect(entries[0][0]).toBe("ChallengeSettlement");
+  });
+
+  it("tag 44 is exclusively ResolveDispute — no duplicate assignment", () => {
+    const entries = Object.entries(IX_TAG).filter(([, v]) => v === 44);
+    expect(entries).toHaveLength(1);
+    expect(entries[0][0]).toBe("ResolveDispute");
+  });
+
+  it("all IX_TAG values are unique (no tag collision)", () => {
+    const values = Object.values(IX_TAG);
+    expect(new Set(values).size).toBe(values.length);
+  });
+
+  it("settlement-adjacent tags have correct sequence (41-46)", () => {
+    expect(IX_TAG.FundMarketInsurance).toBe(41);
+    expect(IX_TAG.SetInsuranceIsolation).toBe(42);
+    expect(IX_TAG.ChallengeSettlement).toBe(43);
+    expect(IX_TAG.ResolveDispute).toBe(44);
+    expect(IX_TAG.DepositLpCollateral).toBe(45);
+    expect(IX_TAG.WithdrawLpCollateral).toBe(46);
+  });
+
+  it("permissionless crank tags are in expected range (56-63)", () => {
+    expect(IX_TAG.AdvanceOraclePhase).toBe(56);
+    expect(IX_TAG.TopUpKeeperFund).toBe(57);
+    expect(IX_TAG.SlashCreationDeposit).toBe(58);
+    expect(IX_TAG.InitSharedVault).toBe(59);
+    expect(IX_TAG.AllocateMarket).toBe(60);
+    expect(IX_TAG.QueueWithdrawalSV).toBe(61);
+    expect(IX_TAG.ClaimEpochWithdrawal).toBe(62);
+    expect(IX_TAG.AdvanceEpoch).toBe(63);
+  });
+});
+
+// ============================================================================
+// PERC-306 / PERC-622 / PERC-623 / PERC-628 / PERC-629: Newer encoders
+// ============================================================================
+
+describe("newer instruction encoders", () => {
+  // --- PERC-306: FundMarketInsurance ---
+  it("encodeFundMarketInsurance produces 9 bytes with correct tag", () => {
+    const data = encodeFundMarketInsurance({ amount: 1_000_000n });
+    expect(data.length).toBe(9);
+    expect(data[0]).toBe(IX_TAG.FundMarketInsurance);
+  });
+
+  it("encodeFundMarketInsurance encodes zero amount", () => {
+    const data = encodeFundMarketInsurance({ amount: 0n });
+    expect(data.length).toBe(9);
+    expect(data[0]).toBe(IX_TAG.FundMarketInsurance);
+    // bytes 1-8 should be all zeros for amount=0
+    for (let i = 1; i < 9; i++) {
+      expect(data[i]).toBe(0);
+    }
+  });
+
+  it("encodeFundMarketInsurance encodes max u64", () => {
+    const data = encodeFundMarketInsurance({ amount: 18_446_744_073_709_551_615n });
+    expect(data.length).toBe(9);
+    expect(data[0]).toBe(IX_TAG.FundMarketInsurance);
+    // All amount bytes should be 0xFF for max u64
+    for (let i = 1; i < 9; i++) {
+      expect(data[i]).toBe(0xFF);
+    }
+  });
+
+  // --- PERC-306: SetInsuranceIsolation ---
+  it("encodeSetInsuranceIsolation produces 3 bytes with correct tag", () => {
+    const data = encodeSetInsuranceIsolation({ bps: 5000 });
+    expect(data.length).toBe(3);
+    expect(data[0]).toBe(IX_TAG.SetInsuranceIsolation);
+  });
+
+  it("encodeSetInsuranceIsolation encodes zero bps", () => {
+    const data = encodeSetInsuranceIsolation({ bps: 0 });
+    expect(data.length).toBe(3);
+    expect(data[1]).toBe(0);
+    expect(data[2]).toBe(0);
+  });
+
+  it("encodeSetInsuranceIsolation encodes 10000 bps (100%)", () => {
+    const data = encodeSetInsuranceIsolation({ bps: 10000 });
+    expect(data.length).toBe(3);
+    // 10000 = 0x2710 LE → [0x10, 0x27]
+    expect(data[1]).toBe(0x10);
+    expect(data[2]).toBe(0x27);
+  });
+
+  // --- PERC-622: AdvanceOraclePhase ---
+  it("encodeAdvanceOraclePhase produces 1 byte with correct tag", () => {
+    const data = encodeAdvanceOraclePhase();
+    expect(data.length).toBe(1);
+    expect(data[0]).toBe(IX_TAG.AdvanceOraclePhase);
+  });
+
+  // --- PERC-623: TopUpKeeperFund ---
+  it("encodeTopUpKeeperFund produces 9 bytes with correct tag", () => {
+    const data = encodeTopUpKeeperFund({ amount: "5000000" });
+    expect(data.length).toBe(9);
+    expect(data[0]).toBe(IX_TAG.TopUpKeeperFund);
+  });
+
+  it("encodeTopUpKeeperFund encodes zero amount", () => {
+    const data = encodeTopUpKeeperFund({ amount: "0" });
+    expect(data.length).toBe(9);
+    for (let i = 1; i < 9; i++) {
+      expect(data[i]).toBe(0);
+    }
+  });
+
+  // --- PERC-629: SlashCreationDeposit ---
+  it("encodeSlashCreationDeposit produces 1 byte with correct tag", () => {
+    const data = encodeSlashCreationDeposit();
+    expect(data.length).toBe(1);
+    expect(data[0]).toBe(IX_TAG.SlashCreationDeposit);
+  });
+
+  // --- PERC-628: InitSharedVault ---
+  it("encodeInitSharedVault produces 11 bytes with correct tag", () => {
+    const data = encodeInitSharedVault({
+      epochDurationSlots: "100000",
+      maxMarketExposureBps: 2500,
+    });
+    expect(data.length).toBe(11);
+    expect(data[0]).toBe(IX_TAG.InitSharedVault);
+  });
+
+  it("encodeInitSharedVault zero epoch duration and zero exposure", () => {
+    const data = encodeInitSharedVault({
+      epochDurationSlots: "0",
+      maxMarketExposureBps: 0,
+    });
+    expect(data.length).toBe(11);
+    expect(data[0]).toBe(IX_TAG.InitSharedVault);
+    // All payload bytes should be zero
+    for (let i = 1; i < 11; i++) {
+      expect(data[i]).toBe(0);
+    }
+  });
+
+  // --- PERC-628: AllocateMarket ---
+  it("encodeAllocateMarket produces 17 bytes with correct tag", () => {
+    const data = encodeAllocateMarket({ amount: "50000000000" });
+    expect(data.length).toBe(17);
+    expect(data[0]).toBe(IX_TAG.AllocateMarket);
+  });
+
+  // --- PERC-628: QueueWithdrawalSV ---
+  it("encodeQueueWithdrawalSV produces 9 bytes with correct tag", () => {
+    const data = encodeQueueWithdrawalSV({ lpAmount: "1000000" });
+    expect(data.length).toBe(9);
+    expect(data[0]).toBe(IX_TAG.QueueWithdrawalSV);
+  });
+
+  // --- PERC-628: ClaimEpochWithdrawal ---
+  it("encodeClaimEpochWithdrawal produces 1 byte with correct tag", () => {
+    const data = encodeClaimEpochWithdrawal();
+    expect(data.length).toBe(1);
+    expect(data[0]).toBe(IX_TAG.ClaimEpochWithdrawal);
+  });
+
+  // --- PERC-628: AdvanceEpoch ---
+  it("encodeAdvanceEpoch produces 1 byte with correct tag", () => {
+    const data = encodeAdvanceEpoch();
+    expect(data.length).toBe(1);
+    expect(data[0]).toBe(IX_TAG.AdvanceEpoch);
   });
 });
