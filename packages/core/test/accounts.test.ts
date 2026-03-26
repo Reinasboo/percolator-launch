@@ -27,6 +27,11 @@ import {
   ACCOUNTS_CREATE_INSURANCE_MINT,
   ACCOUNTS_DEPOSIT_INSURANCE_LP,
   ACCOUNTS_WITHDRAW_INSURANCE_LP,
+  ACCOUNTS_FUND_MARKET_INSURANCE,
+  ACCOUNTS_SET_INSURANCE_ISOLATION,
+  ACCOUNTS_EXECUTE_ADL,
+  ACCOUNTS_ADVANCE_ORACLE_PHASE,
+  ACCOUNTS_TOPUP_KEEPER_FUND,
   buildAccountMetas,
   WELL_KNOWN,
   type AccountSpec,
@@ -355,6 +360,100 @@ describe("buildAccountMetas", () => {
 // ============================================================================
 // WELL_KNOWN
 // ============================================================================
+
+// ============================================================================
+// PERC-608: Settlement & newer instruction account specs
+// ============================================================================
+
+describe("PERC-608 settlement guard account specs", () => {
+  it("ACCOUNTS_FUND_MARKET_INSURANCE has 5 accounts with admin signer", () => {
+    expect(ACCOUNTS_FUND_MARKET_INSURANCE).toHaveLength(5);
+    expect(ACCOUNTS_FUND_MARKET_INSURANCE[0].name).toBe("admin");
+    expect(ACCOUNTS_FUND_MARKET_INSURANCE[0].signer).toBe(true);
+    expect(ACCOUNTS_FUND_MARKET_INSURANCE[0].writable).toBe(true);
+  });
+
+  it("ACCOUNTS_SET_INSURANCE_ISOLATION has 2 accounts with admin signer", () => {
+    expect(ACCOUNTS_SET_INSURANCE_ISOLATION).toHaveLength(2);
+    expect(ACCOUNTS_SET_INSURANCE_ISOLATION[0].name).toBe("admin");
+    expect(ACCOUNTS_SET_INSURANCE_ISOLATION[0].signer).toBe(true);
+  });
+
+  it("deprecated ACCOUNTS_EXECUTE_ADL requires keeper signer (tag 43 = ChallengeSettlement)", () => {
+    expect(ACCOUNTS_EXECUTE_ADL).toHaveLength(2);
+    expect(ACCOUNTS_EXECUTE_ADL[0].name).toBe("keeper");
+    expect(ACCOUNTS_EXECUTE_ADL[0].signer).toBe(true);
+    expect(ACCOUNTS_EXECUTE_ADL[1].name).toBe("slab");
+    expect(ACCOUNTS_EXECUTE_ADL[1].writable).toBe(true);
+  });
+
+  it("ACCOUNTS_ADVANCE_ORACLE_PHASE is permissionless (no signer)", () => {
+    expect(ACCOUNTS_ADVANCE_ORACLE_PHASE).toHaveLength(1);
+    expect(ACCOUNTS_ADVANCE_ORACLE_PHASE[0].name).toBe("slab");
+    expect(ACCOUNTS_ADVANCE_ORACLE_PHASE[0].signer).toBe(false);
+    expect(ACCOUNTS_ADVANCE_ORACLE_PHASE[0].writable).toBe(true);
+  });
+
+  it("ACCOUNTS_TOPUP_KEEPER_FUND has funder as signer", () => {
+    expect(ACCOUNTS_TOPUP_KEEPER_FUND).toHaveLength(3);
+    expect(ACCOUNTS_TOPUP_KEEPER_FUND[0].name).toBe("funder");
+    expect(ACCOUNTS_TOPUP_KEEPER_FUND[0].signer).toBe(true);
+    expect(ACCOUNTS_TOPUP_KEEPER_FUND[0].writable).toBe(true);
+  });
+
+  it("FundMarketInsurance slab is writable", () => {
+    const slab = ACCOUNTS_FUND_MARKET_INSURANCE.find((a) => a.name === "slab");
+    expect(slab).toBeDefined();
+    expect(slab!.writable).toBe(true);
+  });
+
+  it("FundMarketInsurance includes tokenProgram as non-signer, non-writable", () => {
+    const tp = ACCOUNTS_FUND_MARKET_INSURANCE.find((a) => a.name === "tokenProgram");
+    expect(tp).toBeDefined();
+    expect(tp!.signer).toBe(false);
+    expect(tp!.writable).toBe(false);
+  });
+
+  it("buildAccountMetas works with ACCOUNTS_FUND_MARKET_INSURANCE (5 accounts)", () => {
+    const keys = makeKeys(5);
+    const metas = buildAccountMetas(ACCOUNTS_FUND_MARKET_INSURANCE, keys);
+    expect(metas).toHaveLength(5);
+    expect(metas[0].isSigner).toBe(true);   // admin
+    expect(metas[0].isWritable).toBe(true);
+    expect(metas[4].isSigner).toBe(false);   // tokenProgram
+    expect(metas[4].isWritable).toBe(false);
+  });
+
+  it("buildAccountMetas rejects wrong count for ACCOUNTS_FUND_MARKET_INSURANCE", () => {
+    expect(() => buildAccountMetas(ACCOUNTS_FUND_MARKET_INSURANCE, makeKeys(3))).toThrow(
+      "Account count mismatch: expected 5, got 3"
+    );
+  });
+
+  it("buildAccountMetas accepts named map for ACCOUNTS_FUND_MARKET_INSURANCE", () => {
+    const [admin, slab, adminAta, vault, tokenProgram] = makeKeys(5);
+    const metas = buildAccountMetas(ACCOUNTS_FUND_MARKET_INSURANCE, {
+      admin, slab, adminAta, vault, tokenProgram,
+    });
+    expect(metas).toHaveLength(5);
+    expect(metas[0].pubkey.equals(admin)).toBe(true);
+    expect(metas[0].isSigner).toBe(true);
+  });
+
+  it("all newer specs have unique account names", () => {
+    const newer = [
+      ACCOUNTS_FUND_MARKET_INSURANCE,
+      ACCOUNTS_SET_INSURANCE_ISOLATION,
+      ACCOUNTS_EXECUTE_ADL,
+      ACCOUNTS_ADVANCE_ORACLE_PHASE,
+      ACCOUNTS_TOPUP_KEEPER_FUND,
+    ];
+    for (const spec of newer) {
+      const names = spec.map((s) => s.name);
+      expect(new Set(names).size).toBe(names.length);
+    }
+  });
+});
 
 describe("WELL_KNOWN program/sysvar keys", () => {
   it("tokenProgram is SPL Token program ID", () => {
