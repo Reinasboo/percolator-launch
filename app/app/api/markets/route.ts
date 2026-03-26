@@ -536,13 +536,18 @@ export async function GET(request: NextRequest) {
     // validateNumericParam() from route-validators.ts. Previously limit=-1/0/999999
     // all returned the full dataset and non-numeric offset was silently ignored.
     // Follow-up: use validated .value directly (not re-parsed) to reject "1.5"/"20abc".
+    // GH#1737: Clamp limit to MAX_LIMIT instead of rejecting — limit=510 was returning
+    // a 400 error which the frontend silently swallowed, showing 0 markets. Any value
+    // > MAX_LIMIT is treated as MAX_LIMIT (500). Non-numeric values still return 400.
     const MAX_LIMIT = 500;
     const limitParam = request?.nextUrl?.searchParams?.get("limit") ?? null;
     let limitNum = 0;
     if (limitParam !== null) {
-      const limitValidation = validateNumericParam(limitParam, { min: 1, max: MAX_LIMIT });
+      // Validate numeric format first (rejects floats, garbage strings, negatives)
+      const limitValidation = validateNumericParam(limitParam, { min: 1 });
       if (!limitValidation.valid) return limitValidation.response;
-      limitNum = limitValidation.value;
+      // Clamp to MAX_LIMIT — values above 500 silently fall back to 500
+      limitNum = Math.min(limitValidation.value, MAX_LIMIT);
     }
 
     const offsetParam = request?.nextUrl?.searchParams?.get("offset") ?? null;
