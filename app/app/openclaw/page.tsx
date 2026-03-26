@@ -110,7 +110,7 @@ const workshopBody = `
   <div class="cover-meta">
     <div class="cover-meta-row">Duration: <span>60 minutes</span></div>
     <div class="cover-meta-row">Level: <span>Beginner–Intermediate</span></div>
-    <div class="cover-meta-row">Discord: <span>discord.gg/guPnxpHkE</span></div>
+    <div class="cover-meta-row">Discord: <span>discord.gg/fJa4BDBxPN</span></div>
   </div>
   <div class="toc-block">
     <h3>Contents</h3>
@@ -491,7 +491,7 @@ PROGRESS.md    → structured     (Last HB / Task / Status / Next / Blockers)</p
       </div>
       <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);">
         <div style="display:flex;gap:32px;flex-wrap:wrap;">
-          <div><div style="font-size:0.72rem;color:var(--muted);font-family:var(--font-mono);">DISCORD</div><div style="font-size:0.9rem;color:var(--cyan);">discord.gg/guPnxpHkE</div></div>
+          <div><div style="font-size:0.72rem;color:var(--muted);font-family:var(--font-mono);">DISCORD</div><div style="font-size:0.9rem;color:var(--cyan);">discord.gg/fJa4BDBxPN</div></div>
           <div><div style="font-size:0.72rem;color:var(--muted);font-family:var(--font-mono);">GITHUB</div><div style="font-size:0.9rem;color:var(--cyan);">github.com/dcccrypto/percolator-launch</div></div>
           <div><div style="font-size:0.72rem;color:var(--muted);font-family:var(--font-mono);">COLLECTOR BASE</div><div style="font-size:0.9rem;color:var(--cyan);">http://127.0.0.1:18801</div></div>
         </div>
@@ -519,7 +519,7 @@ PROGRESS.md    → structured     (Last HB / Task / Status / Next / Blockers)</p
         <div style="grid-column:4;grid-row:5;background:#FF4444;"></div>
       </div>
     </div>
-    <div style="font-family:var(--font-mono);font-size:1rem;color:var(--cyan);">discord.gg/guPnxpHkE</div>
+    <div style="font-family:var(--font-mono);font-size:1rem;color:var(--cyan);">discord.gg/fJa4BDBxPN</div>
   </div>
   <div class="cover-bottom-bar"></div>
 </div>
