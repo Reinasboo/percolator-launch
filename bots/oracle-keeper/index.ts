@@ -74,6 +74,7 @@ const HARDCODED_BLOCKED_MARKETS = new Set<string>([
   "HjBePQZnoZVftg9B52gyeuHGjBvt2f8FNCVP4FeoP3YT", // PERCOLATOR-PERP-1 (Small)
   "484DG6KQi5eVXuaXzWxaWMWeXDp9LFXyshNi33UnWfxV", // PERCOLATOR-PERP-2 (Small)
   "GDyHCzpiuEsWDkLuji3NEFYJfqbDTzMCKn9ugUzTZqAW", // PERCOLATOR-PERP-3 (Large)
+  "6F86pCA6DcJxx3eY8ZaUteLL6bTw1uAyVGQ71ahGqjtC", // 2xQc...pump (2XQC-PUMP-PERP) — dead token, no open positions, indexer_excluded=true (2026-03-26)
 ]);
 
 /**
