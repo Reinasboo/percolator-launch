@@ -80,8 +80,23 @@ export const CreateMarketWizard: FC<{ initialMint?: string }> = ({ initialMint }
   // This fixes the "Continue button does nothing" bug — without persisted state,
   // allValid is false after refresh because all fields are empty.
   const WIZARD_STORAGE_KEY = "percolator-wizard-state";
+  // GH#1719: Use sessionStorage to track whether this is a fresh navigation to /create
+  // vs. a same-session page refresh. On fresh navigation (new browser tab, link click from
+  // another page), always start at step 1 to avoid showing stale Token step as "Complete"
+  // with a mint that may no longer exist on devnet.
+  // sessionStorage is cleared when the tab is closed; localStorage persists across sessions.
+  const SESSION_VISITED_KEY = "percolator-wizard-visited";
+  const isPageRefresh = typeof window !== "undefined" && sessionStorage.getItem(SESSION_VISITED_KEY) === "1";
 
   const [wizard, setWizard] = useState<WizardState>(() => {
+    // GH#1719: Only restore persisted state on same-session page refresh.
+    // On fresh navigation (new tab, external link), always start at Step 1 — Token.
+    if (!isPageRefresh) {
+      // Mark this tab as visited so a subsequent F5 refresh can restore.
+      try { sessionStorage.setItem(SESSION_VISITED_KEY, "1"); } catch {}
+      // Still pre-fill mintAddress from URL param when provided.
+      return { ...DEFAULT_STATE, mintAddress: initialMint ?? "" };
+    }
     try {
       const persisted = typeof window !== "undefined" ? localStorage.getItem(WIZARD_STORAGE_KEY) : null;
       if (persisted) {
@@ -124,7 +139,9 @@ export const CreateMarketWizard: FC<{ initialMint?: string }> = ({ initialMint }
   // the user to click back to previous steps during resume.
   // GH#1298: Use safeStep (same clamping as wizard state above) so completedSteps
   // doesn't mark step 3 as complete when we've rewound to step 2/3.
+  // GH#1719: Same fresh-navigation guard — don't restore completedSteps on new tabs.
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(() => {
+    if (!isPageRefresh) return new Set<number>();
     try {
       const persisted = typeof window !== "undefined" ? localStorage.getItem(WIZARD_STORAGE_KEY) : null;
       if (persisted) {

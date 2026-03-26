@@ -268,7 +268,7 @@ export async function POST(req: NextRequest) {
 
       if (marketErr || !marketRow) {
         return NextResponse.json(
-          { error: "mintAddress is not a known devnet mirror mint" },
+          { error: "This address is not a Percolator devnet market mint. Paste the mint address of an active market from /markets." },
           { status: 400 },
         );
       }
