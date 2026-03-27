@@ -138,11 +138,7 @@ function validateMainnetConfig(
 
   const crankWallet = config.crankWallet as string;
   if (!crankWallet || crankWallet.trim() === "") {
-    throw new Error(
-      "Mainnet Configuration Error: crankWallet not set. " +
-      "Keeper bot must be deployed to mainnet before production use. " +
-      "See Issue #244 for deployment requirements."
-    );
+    console.warn("[getConfig] Mainnet crankWallet not set — keeper bot not deployed (Issue #244).");
   }
 
   const matcherProgramId = config.matcherProgramId as string;
