@@ -1,8 +1,9 @@
 /**
  * GH#1744: /api/markets returns null total/activeTotal when limit=0 or limit=NaN.
+ * GH#1753: Non-numeric limit (limit=abc, limit=NaN) now soft-defaults to MAX_LIMIT (500)
+ *          instead of returning 400. This matches the fix for limit=0 (clamped to MIN_LIMIT).
  *
- * Fix: clamp limit to [1, 500] instead of rejecting limit=0 with 400.
- * Non-numeric strings (limit=abc) still return 400.
+ * Fix: clamp limit to [1, 500] instead of rejecting limit=0/NaN/string with 400.
  * Ensures total and activeTotal are always numbers in 200 responses.
  */
 
@@ -92,16 +93,26 @@ describe("GH#1744 — limit=0 and limit=NaN should never return null total/activ
     expect(body.markets.length).toBeLessThanOrEqual(1);
   });
 
-  it("limit=NaN returns 400 (non-numeric)", async () => {
+  it("limit=NaN returns 200 with total as number, defaults to MAX_LIMIT (GH#1753)", async () => {
     const { GET } = await import("@/app/api/markets/route");
     const res = await GET(makeRequest({ limit: "NaN" }));
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(typeof body.total).toBe("number");
+    expect(typeof body.activeTotal).toBe("number");
+    // All 3 markets returned (default MAX_LIMIT=500 applies)
+    expect(body.markets.length).toBe(3);
   });
 
-  it("limit=abc returns 400 (non-numeric)", async () => {
+  it("limit=abc returns 200 with total as number, defaults to MAX_LIMIT (GH#1753)", async () => {
     const { GET } = await import("@/app/api/markets/route");
     const res = await GET(makeRequest({ limit: "abc" }));
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(typeof body.total).toBe("number");
+    expect(typeof body.activeTotal).toBe("number");
+    // All 3 markets returned (default MAX_LIMIT=500 applies)
+    expect(body.markets.length).toBe(3);
   });
 
   it("limit=1 returns 200 with total as number and 1 market", async () => {

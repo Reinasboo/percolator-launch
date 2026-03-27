@@ -538,21 +538,24 @@ export async function GET(request: NextRequest) {
     // Follow-up: use validated .value directly (not re-parsed) to reject "1.5"/"20abc".
     // GH#1737: Clamp limit to MAX_LIMIT instead of rejecting — limit=510 was returning
     // a 400 error which the frontend silently swallowed, showing 0 markets. Any value
-    // > MAX_LIMIT is treated as MAX_LIMIT (500). Non-numeric values still return 400.
+    // > MAX_LIMIT is treated as MAX_LIMIT (500).
+    // GH#1753: Soft-default non-numeric/NaN strings to MAX_LIMIT instead of returning 400.
+    // parseInt("abc") and parseInt("NaN") both return NaN — previously this caused the
+    // validator to return 400, which some callers (mobile, SDK clients) swallowed silently,
+    // receiving null total/activeTotal. Now: ?limit=abc and ?limit=NaN default to MAX_LIMIT.
     const MAX_LIMIT = 500;
     const MIN_LIMIT = 1;
+    const DEFAULT_LIMIT = MAX_LIMIT; // returned when limit is absent or non-numeric
     const limitParam = request?.nextUrl?.searchParams?.get("limit") ?? null;
     let limitNum = 0;
     if (limitParam !== null) {
-      // Validate numeric format first (rejects floats, garbage strings, negatives).
-      // GH#1744: Use min:0 here (not min:1) so limit=0 doesn't return 400 — we clamp
-      // below. Non-numeric strings (limit=abc, limit=NaN) still reject with 400.
-      const limitValidation = validateNumericParam(limitParam, { min: 0 });
-      if (!limitValidation.valid) return limitValidation.response;
-      // GH#1744: Clamp to [MIN_LIMIT, MAX_LIMIT] — limit=0 becomes 1 (returns
-      // at least one market), limit>500 falls back to 500. Never returns 400 for
-      // numeric inputs, so total/activeTotal are always present in 200 responses.
-      limitNum = Math.min(Math.max(limitValidation.value, MIN_LIMIT), MAX_LIMIT);
+      // GH#1753: Use parseInt with NaN fallback to DEFAULT_LIMIT.
+      // parseInt handles: "abc" → NaN, "NaN" → NaN, "0" → 0, "510" → 510.
+      // Then clamp to [MIN_LIMIT, MAX_LIMIT] — limit=0 → 1, limit>500 → 500.
+      const parsed = parseInt(limitParam, 10);
+      limitNum = Number.isNaN(parsed)
+        ? DEFAULT_LIMIT
+        : Math.min(Math.max(parsed, MIN_LIMIT), MAX_LIMIT);
     }
 
     const offsetParam = request?.nextUrl?.searchParams?.get("offset") ?? null;
