@@ -6,6 +6,7 @@ import { usePythFeedSearch } from "@/hooks/usePythFeedSearch";
 import { useDexPoolSearch, type DexPoolResult } from "@/hooks/useDexPoolSearch";
 import { OracleBadge } from "./OracleBadge";
 import { isValidBase58Pubkey, isValidHex64 } from "@/lib/createWizardUtils";
+import { getNetwork } from "@/lib/config";
 
 interface StepOracleSelectProps {
   mintAddress: string;
@@ -42,6 +43,9 @@ export const StepOracleSelect: FC<StepOracleSelectProps> = ({
   onBack,
   canContinue,
 }) => {
+  const isMainnet = getNetwork() === "mainnet";
+  const MIN_MAINNET_POOL_DEPTH_USD = 2_000_000;
+
   const autoRouterMint = mintValid ? mintAddress : null;
   const priceRouter = usePriceRouter(autoRouterMint);
 
@@ -314,6 +318,14 @@ export const StepOracleSelect: FC<StepOracleSelectProps> = ({
               </button>
             </div>
           )}
+          {isMainnet && selectedDexPool && selectedDexPool.liquidityUsd < MIN_MAINNET_POOL_DEPTH_USD && (
+            <div className="border border-[var(--short)]/40 bg-[var(--short)]/[0.06] px-4 py-3 text-[11px]">
+              <p className="text-[var(--short)] font-medium">✗ Insufficient pool depth for mainnet</p>
+              <p className="text-[var(--text-muted)] mt-1">
+                Pool has ${(selectedDexPool.liquidityUsd / 1000).toFixed(0)}K liquidity. Mainnet requires $2M+ DEX pool depth to prevent oracle manipulation.
+              </p>
+            </div>
+          )}
           <input
             id="dex-pool"
             type="text"
@@ -335,6 +347,9 @@ export const StepOracleSelect: FC<StepOracleSelectProps> = ({
       )}
 
       {/* Navigation */}
+      {(() => {
+        const poolDepthOk = !isMainnet || oracleType !== "hyperp_ema" || !selectedDexPool || selectedDexPool.liquidityUsd >= MIN_MAINNET_POOL_DEPTH_USD;
+        return (
       <div className="flex items-center gap-3">
         <button
           type="button"
@@ -346,12 +361,14 @@ export const StepOracleSelect: FC<StepOracleSelectProps> = ({
         <button
           type="button"
           onClick={onContinue}
-          disabled={!canContinue}
+          disabled={!canContinue || !poolDepthOk}
           className="flex-1 border border-[var(--accent)]/50 bg-[var(--accent)]/[0.08] py-3 text-[13px] font-bold uppercase tracking-[0.1em] text-[var(--accent)] transition-all duration-200 hud-btn-corners hover:border-[var(--accent)] hover:bg-[var(--accent)]/[0.15] disabled:cursor-not-allowed disabled:border-[var(--border)] disabled:bg-transparent disabled:text-[var(--text-secondary)] disabled:opacity-50"
         >
           CONTINUE →
         </button>
       </div>
+        );
+      })()}
     </div>
   );
 };

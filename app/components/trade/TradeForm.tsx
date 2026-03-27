@@ -6,7 +6,7 @@ import { getAssociatedTokenAddressSync } from "@solana/spl-token";
 import gsap from "gsap";
 import { useTrade } from "@/hooks/useTrade";
 import { humanizeError, withTransientRetry } from "@/lib/errorMessages";
-import { explorerTxUrl } from "@/lib/config";
+import { explorerTxUrl, getNetwork } from "@/lib/config";
 import { useUserAccount } from "@/hooks/useUserAccount";
 import { useEngineState } from "@/hooks/useEngineState";
 import { useSlabState } from "@/components/providers/SlabProvider";
@@ -650,6 +650,16 @@ export const TradeForm: FC<{ slabAddress: string }> = ({ slabAddress }) => {
           ))}
         </div>
       </div>
+
+      {/* Mainnet Phase 1 Guards */}
+      {getNetwork() === "mainnet" && (
+        <div className="mb-5 border border-[var(--accent)]/30 bg-[var(--accent)]/[0.04] px-4 py-3 text-[11px] space-y-1">
+          <p className="text-[var(--accent)] font-medium">⚡ Mainnet Phase 1 Guards Active</p>
+          <p className="text-[var(--text-muted)]">• $10K OI cap per market during beta</p>
+          <p className="text-[var(--text-muted)]">• 2x max leverage enforced on-chain</p>
+          <p className="text-[var(--text-muted)]">• Guards auto-lift when caps are raised by DAO</p>
+        </div>
+      )}
 
       {/* Pre-trade summary */}
       {marginInput && marginNative > 0n && !exceedsMargin && (

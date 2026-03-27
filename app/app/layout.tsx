@@ -11,6 +11,7 @@ import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { TickerBanner } from "@/components/layout/TickerBanner";
 import { CursorGlow } from "@/components/ui/CursorGlow";
 import { MusicPlayer } from "@/components/ui/MusicPlayer";
+import { MainnetBetaBanner } from "@/components/layout/MainnetBetaBanner";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
@@ -48,6 +49,11 @@ export const metadata: Metadata = {
     description: "Launch and trade perpetual futures for any Solana token.",
     images: ["/og-image.png"],
   },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true },
+  },
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
@@ -59,6 +65,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <CursorGlow />
           <div className="relative z-[1] flex min-h-screen flex-col">
             <TickerBanner />
+            <MainnetBetaBanner />
             <Header />
             <main className="flex-1 pb-[60px] md:pb-0">{children}</main>
             <Footer />

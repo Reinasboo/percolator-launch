@@ -5,6 +5,7 @@ import { type SlabTierKey } from "@percolator/sdk";
 import { SlabTierPicker } from "./SlabTierPicker";
 import { FeeSlider } from "./FeeSlider";
 import { ConflictWarning } from "./ConflictWarning";
+import { getNetwork } from "@/lib/config";
 
 interface StepParametersProps {
   mode: "quick" | "manual";
@@ -54,6 +55,7 @@ export const StepParameters: FC<StepParametersProps> = ({
 }) => {
   const maxLeverage = Math.floor(10000 / initialMarginBps);
   const feeConflict = tradingFeeBps >= initialMarginBps;
+  const isMainnet = getNetwork() === "mainnet";
 
   return (
     <div className="space-y-6">
@@ -100,6 +102,16 @@ export const StepParameters: FC<StepParametersProps> = ({
           max={5000}
           showPercent={false}
         />
+      )}
+
+      {/* Mainnet Phase 1 Guards */}
+      {isMainnet && (
+        <div className="border border-[var(--accent)]/30 bg-[var(--accent)]/[0.04] px-4 py-3 text-[11px] space-y-1">
+          <p className="text-[var(--accent)] font-medium">⚡ Mainnet Phase 1 Guards Active</p>
+          <p className="text-[var(--text-muted)]">• $10K OI cap per market during beta</p>
+          <p className="text-[var(--text-muted)]">• 2x max leverage enforced on-chain</p>
+          <p className="text-[var(--text-muted)]">• Guards auto-lift when caps are raised by DAO</p>
+        </div>
       )}
 
       {/* Conflict Warning */}
