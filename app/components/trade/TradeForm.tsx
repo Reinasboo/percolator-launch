@@ -609,7 +609,7 @@ export const TradeForm: FC<{ slabAddress: string }> = ({ slabAddress }) => {
           <button
             key={pct}
             onClick={() => setMarginPercent(pct)}
-            className="flex-1 rounded-none border border-[var(--border)]/30 py-1 text-[10px] font-medium text-[var(--text-muted)] transition-colors hover:border-[var(--accent)]/30 hover:text-[var(--text-secondary)] focus-visible:ring-1 focus-visible:ring-[var(--accent)]/30"
+            className="flex-1 rounded-none border border-[var(--border)]/30 py-1 text-[10px] font-medium text-white/60 transition-colors hover:border-[var(--accent)]/30 hover:text-[var(--text-secondary)] focus-visible:ring-1 focus-visible:ring-[var(--accent)]/30"
           >
             {pct === 100 ? "MAX" : `${pct}%`}
           </button>
