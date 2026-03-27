@@ -540,14 +540,19 @@ export async function GET(request: NextRequest) {
     // a 400 error which the frontend silently swallowed, showing 0 markets. Any value
     // > MAX_LIMIT is treated as MAX_LIMIT (500). Non-numeric values still return 400.
     const MAX_LIMIT = 500;
+    const MIN_LIMIT = 1;
     const limitParam = request?.nextUrl?.searchParams?.get("limit") ?? null;
     let limitNum = 0;
     if (limitParam !== null) {
-      // Validate numeric format first (rejects floats, garbage strings, negatives)
-      const limitValidation = validateNumericParam(limitParam, { min: 1 });
+      // Validate numeric format first (rejects floats, garbage strings, negatives).
+      // GH#1744: Use min:0 here (not min:1) so limit=0 doesn't return 400 — we clamp
+      // below. Non-numeric strings (limit=abc, limit=NaN) still reject with 400.
+      const limitValidation = validateNumericParam(limitParam, { min: 0 });
       if (!limitValidation.valid) return limitValidation.response;
-      // Clamp to MAX_LIMIT — values above 500 silently fall back to 500
-      limitNum = Math.min(limitValidation.value, MAX_LIMIT);
+      // GH#1744: Clamp to [MIN_LIMIT, MAX_LIMIT] — limit=0 becomes 1 (returns
+      // at least one market), limit>500 falls back to 500. Never returns 400 for
+      // numeric inputs, so total/activeTotal are always present in 200 responses.
+      limitNum = Math.min(Math.max(limitValidation.value, MIN_LIMIT), MAX_LIMIT);
     }
 
     const offsetParam = request?.nextUrl?.searchParams?.get("offset") ?? null;
