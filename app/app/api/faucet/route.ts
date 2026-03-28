@@ -45,8 +45,12 @@ const USDC_MINT_AMOUNT = 10_000_000_000; // 10,000 USDC (6 decimals)
 const SOL_AIRDROP_AMOUNT = 2 * LAMPORTS_PER_SOL; // 2 SOL
 const RATE_LIMIT_HOURS = 24;
 
-// Public devnet RPC for requestAirdrop (private RPC may reject airdrop requests)
-const PUBLIC_DEVNET_RPC = "https://api.devnet.solana.com";
+// Public devnet RPCs for requestAirdrop (private RPC may reject airdrop requests).
+// GH#1764: two endpoints — if primary fails with a transient/retryable error, try fallback.
+const DEVNET_RPC_POOL = [
+  "https://api.devnet.solana.com",
+  "https://rpc.ankr.com/solana_devnet",
+];
 
 export async function POST(req: NextRequest) {
   try {
@@ -106,57 +110,97 @@ export async function POST(req: NextRequest) {
 
     // ── SOL airdrop path ──────────────────────────────────────────────────────
     if (type === "sol") {
-      // Use public devnet RPC — private/Helius endpoints may not support requestAirdrop
-      const pubConn = new Connection(PUBLIC_DEVNET_RPC, "confirmed");
-      let sig: string;
-      try {
-        sig = await pubConn.requestAirdrop(walletPk, SOL_AIRDROP_AMOUNT);
-        await pubConn.confirmTransaction(sig, "confirmed");
-      } catch (airdropErr) {
-        // GH#1474: fall back to toString() when .message is empty
-        const msg =
-          airdropErr instanceof Error
-            ? airdropErr.message || airdropErr.toString() || "Airdrop failed"
-            : String(airdropErr) || "Airdrop failed";
-        // Detect Solana devnet RPC rate-limit responses.
-        // The public devnet faucet returns "429 Too Many Requests", "airdrop request limit",
-        // or similar strings when the wallet or IP has exceeded the daily drip.
-        const isRateLimit =
-          /429|too many requests|rate.?limit|airdrop.*limit|limit.*airdrop/i.test(msg);
-        if (isRateLimit) {
-          // GH#1595: release gate so user can retry after RPC rate limit clears
-          if (gate.claimId) await releaseFaucetClaim(supabase, gate.claimId);
-          return NextResponse.json(
-            {
-              error:
-                "Solana devnet faucet rate-limited. Wait a few minutes and retry.",
-              retryable: true,
-            },
-            { status: 429 },
-          );
+      // GH#1764: try each RPC in DEVNET_RPC_POOL. If a request hits a transient/
+      // retryable error, fall through to the next endpoint. If all RPCs are
+      // exhausted, release the gate and return 503. Rate-limit responses (429)
+      // abort immediately — trying another endpoint won't help for per-wallet limits.
+      let sig: string | null = null;
+      let lastRateLimitMsg: string | null = null;
+      let lastTransientMsg: string | null = null;
+      let fatalErr: unknown = null;
+
+      for (const rpcUrl of DEVNET_RPC_POOL) {
+        const pubConn = new Connection(rpcUrl, "confirmed");
+        try {
+          sig = await pubConn.requestAirdrop(walletPk, SOL_AIRDROP_AMOUNT);
+          await pubConn.confirmTransaction(sig, "confirmed");
+          break; // success — exit loop
+        } catch (airdropErr) {
+          // GH#1474: fall back to toString() when .message is empty
+          const msg =
+            airdropErr instanceof Error
+              ? airdropErr.message || airdropErr.toString() || "Airdrop failed"
+              : String(airdropErr) || "Airdrop failed";
+
+          // Detect Solana devnet RPC rate-limit responses.
+          // The public devnet faucet returns "429 Too Many Requests", "airdrop request limit",
+          // or similar strings when the wallet or IP has exceeded the daily drip.
+          const isRateLimit =
+            /429|too many requests|rate.?limit|airdrop.*limit|limit.*airdrop/i.test(msg);
+          if (isRateLimit) {
+            // Per-wallet rate limits apply across all public RPCs — bail out immediately.
+            lastRateLimitMsg = msg;
+            break;
+          }
+
+          // GH#1392 / GH#1764: transient failures — try next RPC.
+          // Extended pattern covers ETIMEDOUT, ENOTFOUND, ECONNRESET, EHOSTUNREACH,
+          // "network changed", "fetch failed", and other Node.js socket-level errors.
+          const isTransient =
+            /internal error|service unavailable|timeout|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|ECONNRESET|EHOSTUNREACH|network.*changed|fetch failed|socket hang up/i.test(
+              msg,
+            );
+          if (isTransient) {
+            lastTransientMsg = msg;
+            sig = null; // ensure we don't use a partial sig
+            continue; // try next RPC
+          }
+
+          // Non-transient, non-rate-limit error — record and stop trying
+          fatalErr = airdropErr;
+          sig = null;
+          break;
         }
-        // GH#1392: Solana devnet returns "Internal error" for transient failures
-        const isRetryable =
-          /internal error|service unavailable|timeout|ECONNREFUSED/i.test(msg);
-        if (isRetryable) {
-          if (gate.claimId) await releaseFaucetClaim(supabase, gate.claimId);
-          return NextResponse.json(
-            {
-              error:
-                "Solana devnet temporarily unavailable. Please retry in a few minutes.",
-              retryable: true,
-            },
-            { status: 503 },
-          );
-        }
-        if (gate.claimId) await releaseFaucetClaim(supabase, gate.claimId);
-        Sentry.captureException(airdropErr, {
-          tags: { endpoint: "/api/faucet", type: "sol" },
-          extra: { walletAddress },
-        });
-        return NextResponse.json({ error: msg }, { status: 500 });
       }
 
+      // ── Post-loop: evaluate outcome ──────────────────────────────────────
+      if (lastRateLimitMsg !== null) {
+        // GH#1595: release gate so user can retry after RPC rate limit clears
+        if (gate.claimId) await releaseFaucetClaim(supabase, gate.claimId);
+        return NextResponse.json(
+          {
+            error: "Solana devnet faucet rate-limited. Wait a few minutes and retry.",
+            retryable: true,
+          },
+          { status: 429 },
+        );
+      }
+
+      if (sig === null && (lastTransientMsg !== null || fatalErr !== null)) {
+        if (fatalErr !== null) {
+          const errMsg =
+            fatalErr instanceof Error
+              ? fatalErr.message || fatalErr.toString() || "Airdrop failed"
+              : String(fatalErr) || "Airdrop failed";
+          if (gate.claimId) await releaseFaucetClaim(supabase, gate.claimId);
+          Sentry.captureException(fatalErr, {
+            tags: { endpoint: "/api/faucet", type: "sol" },
+            extra: { walletAddress },
+          });
+          return NextResponse.json({ error: errMsg }, { status: 500 });
+        }
+        // All RPCs returned transient errors
+        if (gate.claimId) await releaseFaucetClaim(supabase, gate.claimId);
+        return NextResponse.json(
+          {
+            error: "Solana devnet temporarily unavailable. Please retry in a few minutes.",
+            retryable: true,
+          },
+          { status: 503 },
+        );
+      }
+
+      // At this point sig is guaranteed non-null (all null paths return early above)
       // GH#1595: claim already recorded by gate INSERT — also log to auto_fund_log for analytics
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase as any).from("auto_fund_log").insert({
@@ -169,7 +213,7 @@ export async function POST(req: NextRequest) {
         funded: true,
         sol_airdropped: true,
         sol_amount: SOL_AIRDROP_AMOUNT / LAMPORTS_PER_SOL,
-        signature: sig,
+        signature: sig!,
         nextClaimAt: new Date(
           Date.now() + RATE_LIMIT_HOURS * 60 * 60 * 1000,
         ).toISOString(),
