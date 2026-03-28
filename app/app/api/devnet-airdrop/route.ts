@@ -400,10 +400,14 @@ export async function POST(req: NextRequest) {
     //    mintAddress, registered via devnet-register-mint for native devnet tokens), look
     //    up the markets table to find the real mainnet_ca for DexScreener price lookup.
     const supabase = getServiceClient();
+    // GH#1771: devnet_mints.devnet_mint should be unique, but add .limit(1) as a defensive
+    // guard against any duplicate rows that could cause .maybeSingle() to throw.
     const { data: mintRow, error: dbErr } = await (supabase as any)
       .from("devnet_mints")
       .select("mainnet_ca, symbol, decimals")
       .eq("devnet_mint", mintAddress)
+      .order("created_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     let mainnetCa: string;
@@ -425,11 +429,20 @@ export async function POST(req: NextRequest) {
       // real mainnet_ca from the markets table for better price lookup and mirror resolution.
       if (mainnetCa === mintAddress) {
         isSelfReferencingNativeMint = true;
-        const { data: marketForNative } = await (supabase as any)
+        // GH#1771: mint_address can appear in multiple markets rows (shared mints).
+        // Use .limit(1) to avoid .maybeSingle() multi-row error; prefer rows with a non-null
+        // mainnet_ca by ordering newest first so we get the most useful row.
+        const { data: _nativeRows } = await (supabase as any)
           .from("markets")
           .select("mainnet_ca, symbol, decimals")
           .eq("mint_address", mintAddress)
-          .maybeSingle();
+          .order("created_at", { ascending: false })
+          .limit(5);
+        // Pick the first row that has a real mainnet_ca (not null, not self-referencing)
+        const marketForNative =
+          (_nativeRows as Array<{ mainnet_ca: string | null; symbol: string | null; decimals: number | null }> | null)
+            ?.find((r) => r.mainnet_ca && r.mainnet_ca !== mintAddress) ??
+          (_nativeRows?.[0] ?? null);
         if (marketForNative?.mainnet_ca && marketForNative.mainnet_ca !== mintAddress) {
           // Found a real mainnet CA — use it for DexScreener price lookup
           mainnetCa = marketForNative.mainnet_ca;
