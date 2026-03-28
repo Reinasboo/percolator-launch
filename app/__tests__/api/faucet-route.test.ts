@@ -199,34 +199,165 @@ describe("/api/faucet route", () => {
 
   describe("SOL airdrop retryable error detection (GH#1392)", () => {
     // Mirror of the retryable regex added for transient Solana devnet failures.
-    const isRetryable = (msg: string) =>
-      /internal error|service unavailable|timeout|ECONNREFUSED/i.test(msg);
+    // GH#1764: extended to cover additional Node.js socket-level error codes.
+    const isTransient = (msg: string) =>
+      /internal error|service unavailable|timeout|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|ECONNRESET|EHOSTUNREACH|network.*changed|fetch failed|socket hang up/i.test(
+        msg,
+      );
 
     it("detects 'Internal error' from Solana devnet", () => {
-      expect(isRetryable("airdrop to G7NG... failed: Internal error")).toBe(true);
+      expect(isTransient("airdrop to G7NG... failed: Internal error")).toBe(true);
     });
 
     it("detects 'Service unavailable'", () => {
-      expect(isRetryable("Service unavailable")).toBe(true);
+      expect(isTransient("Service unavailable")).toBe(true);
     });
 
     it("detects connection refused", () => {
-      expect(isRetryable("connect ECONNREFUSED 127.0.0.1:8899")).toBe(true);
+      expect(isTransient("connect ECONNREFUSED 127.0.0.1:8899")).toBe(true);
     });
 
     it("detects timeout errors", () => {
-      expect(isRetryable("Request timeout")).toBe(true);
+      expect(isTransient("Request timeout")).toBe(true);
+    });
+
+    it("GH#1764: detects ETIMEDOUT", () => {
+      expect(isTransient("connect ETIMEDOUT 145.40.91.120:443")).toBe(true);
+    });
+
+    it("GH#1764: detects ENOTFOUND (DNS failure)", () => {
+      expect(isTransient("getaddrinfo ENOTFOUND api.devnet.solana.com")).toBe(true);
+    });
+
+    it("GH#1764: detects ECONNRESET", () => {
+      expect(isTransient("read ECONNRESET")).toBe(true);
+    });
+
+    it("GH#1764: detects 'fetch failed' (Node.js 18+ undici errors)", () => {
+      expect(isTransient("fetch failed")).toBe(true);
+    });
+
+    it("GH#1764: detects 'socket hang up'", () => {
+      expect(isTransient("socket hang up")).toBe(true);
     });
 
     it("does NOT flag unrelated errors as retryable", () => {
-      expect(isRetryable("Transaction simulation failed")).toBe(false);
-      expect(isRetryable("Invalid public key input")).toBe(false);
+      expect(isTransient("Transaction simulation failed")).toBe(false);
+      expect(isTransient("Invalid public key input")).toBe(false);
     });
 
     it("returns 503 status for retryable SOL airdrop errors (not 500)", () => {
       const errMsg = "airdrop to G7NG... failed: Internal error";
-      const statusCode = isRetryable(errMsg) ? 503 : 500;
+      const statusCode = isTransient(errMsg) ? 503 : 500;
       expect(statusCode).toBe(503);
+    });
+  });
+
+  describe("GH#1764: multi-RPC fallback logic", () => {
+    // Simulate the loop logic: try each RPC, fall through on transient errors.
+    const isTransient = (msg: string) =>
+      /internal error|service unavailable|timeout|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|ECONNRESET|EHOSTUNREACH|network.*changed|fetch failed|socket hang up/i.test(
+        msg,
+      );
+    const isRateLimit = (msg: string) =>
+      /429|too many requests|rate.?limit|airdrop.*limit|limit.*airdrop/i.test(msg);
+
+    type AirdropResult =
+      | { status: "success"; sig: string }
+      | { status: "rate-limited" }
+      | { status: "transient"; msg: string }
+      | { status: "fatal"; msg: string };
+
+    function simulateRpcPool(
+      responses: Array<() => AirdropResult>,
+    ): { finalSig: string | null; rateLimited: boolean; allTransient: boolean; fatal: boolean } {
+      let sig: string | null = null;
+      let rateLimited = false;
+      let lastTransient = false;
+      let fatal = false;
+
+      for (const attempt of responses) {
+        const result = attempt();
+        if (result.status === "success") {
+          sig = result.sig;
+          lastTransient = false;
+          break;
+        }
+        if (result.status === "rate-limited") {
+          rateLimited = true;
+          break;
+        }
+        if (result.status === "transient") {
+          lastTransient = true;
+          continue;
+        }
+        if (result.status === "fatal") {
+          fatal = true;
+          break;
+        }
+      }
+
+      return { finalSig: sig, rateLimited, allTransient: !fatal && !rateLimited && sig === null && lastTransient, fatal };
+    }
+
+    it("succeeds on first RPC — no fallback needed", () => {
+      const result = simulateRpcPool([
+        () => ({ status: "success", sig: "abc123" }),
+        () => ({ status: "success", sig: "def456" }),
+      ]);
+      expect(result.finalSig).toBe("abc123");
+      expect(result.rateLimited).toBe(false);
+    });
+
+    it("falls back to second RPC when first has ENOTFOUND", () => {
+      const result = simulateRpcPool([
+        () => ({ status: "transient", msg: "getaddrinfo ENOTFOUND api.devnet.solana.com" }),
+        () => ({ status: "success", sig: "fallback-sig-xyz" }),
+      ]);
+      expect(result.finalSig).toBe("fallback-sig-xyz");
+      expect(result.allTransient).toBe(false);
+    });
+
+    it("returns allTransient when both RPCs fail transiently", () => {
+      const result = simulateRpcPool([
+        () => ({ status: "transient", msg: "fetch failed" }),
+        () => ({ status: "transient", msg: "socket hang up" }),
+      ]);
+      expect(result.finalSig).toBeNull();
+      expect(result.allTransient).toBe(true);
+      expect(result.rateLimited).toBe(false);
+    });
+
+    it("rate-limit aborts immediately without trying fallback", () => {
+      let fallbackCalled = false;
+      const result = simulateRpcPool([
+        () => ({ status: "rate-limited" }),
+        () => { fallbackCalled = true; return { status: "success", sig: "nope" }; },
+      ]);
+      expect(result.rateLimited).toBe(true);
+      expect(fallbackCalled).toBe(false);
+      expect(result.finalSig).toBeNull();
+    });
+
+    it("fatal error aborts immediately without trying fallback", () => {
+      let fallbackCalled = false;
+      const result = simulateRpcPool([
+        () => ({ status: "fatal", msg: "Transaction simulation failed" }),
+        () => { fallbackCalled = true; return { status: "success", sig: "nope" }; },
+      ]);
+      expect(result.fatal).toBe(true);
+      expect(fallbackCalled).toBe(false);
+    });
+
+    it("transient then rate-limit: rate-limit wins (no more fallbacks)", () => {
+      const result = simulateRpcPool([
+        () => ({ status: "transient", msg: "ETIMEDOUT" }),
+        () => ({ status: "rate-limited" }),
+      ]);
+      // In this scenario: first RPC transient → try second → rate-limited → abort
+      // allTransient is false because rateLimited=true
+      expect(result.rateLimited).toBe(true);
+      expect(result.finalSig).toBeNull();
     });
   });
 
