@@ -184,7 +184,7 @@ export function MusicPlayer() {
           ? " top-[80px] right-3 sm:top-[72px] sm:right-5"
           : moveToBottomLeftLg
           ? " bottom-3 right-3 sm:bottom-5 sm:right-5 lg:bottom-5 lg:right-auto lg:left-5"
-          : " bottom-3 right-3 sm:bottom-5 sm:right-5"
+          : " bottom-[72px] right-3 md:bottom-3 sm:right-5"
       }`}
       style={{ opacity: 0 }}
     >
