@@ -72,6 +72,8 @@ export interface LpPositionsState {
   positions: LpPosition[];
   totalRedeemable: number;
   loading: boolean;
+  /** True only during background refreshes (not initial load) */
+  isRefreshing: boolean;
   error: string | null;
 }
 
@@ -91,7 +93,9 @@ export function useLpPositions(): LpPositionsState & { refresh: () => void } {
 
   const [positions, setPositions] = useState<LpPosition[]>([]);
   const [totalRedeemable, setTotalRedeemable] = useState(0);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const hasLoadedOnce = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
   const walletKeyStr = wallet.publicKey?.toBase58() ?? null;
@@ -100,10 +104,17 @@ export function useLpPositions(): LpPositionsState & { refresh: () => void } {
     if (!walletKeyStr || !connection) {
       setPositions([]);
       setTotalRedeemable(0);
+      setLoading(false);
+      setIsRefreshing(false);
+      hasLoadedOnce.current = false;
       return;
     }
 
-    setLoading(true);
+    if (hasLoadedOnce.current) {
+      setIsRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     setError(null);
 
     try {
@@ -226,6 +237,8 @@ export function useLpPositions(): LpPositionsState & { refresh: () => void } {
       setError(err.message ?? 'Failed to load LP positions');
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
+      hasLoadedOnce.current = true;
     }
   }, [walletKeyStr, connection]);
 
@@ -234,10 +247,13 @@ export function useLpPositions(): LpPositionsState & { refresh: () => void } {
   useEffect(() => { fetchRef.current = fetchPositions; }, [fetchPositions]);
 
   useEffect(() => {
+    // New wallet identity should start with initial-load semantics (CodeRabbit fix)
+    hasLoadedOnce.current = false;
+    setIsRefreshing(false);
     fetchRef.current();
     const interval = setInterval(() => fetchRef.current(), 30_000);
     return () => clearInterval(interval);
   }, [walletKeyStr]); // Re-subscribe when wallet changes
 
-  return { positions, totalRedeemable, loading, error, refresh: fetchPositions };
+  return { positions, totalRedeemable, loading, isRefreshing, error, refresh: fetchPositions };
 }

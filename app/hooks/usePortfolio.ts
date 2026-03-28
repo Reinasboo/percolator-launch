@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PublicKey } from "@solana/web3.js";
 import { useConnectionCompat } from "@/hooks/useWalletCompat";
 import { useWalletCompat } from "@/hooks/useWalletCompat";
@@ -63,6 +63,8 @@ export interface PortfolioData {
   /** Number of positions at liquidation risk */
   atRiskCount: number;
   loading: boolean;
+  /** True only during background refreshes (not initial load) */
+  isRefreshing: boolean;
   refresh: () => void;
 }
 
@@ -80,7 +82,20 @@ export function usePortfolio(): PortfolioData {
   const [totalUnrealizedPnl, setTotalUnrealizedPnl] = useState<bigint>(0n);
   const [atRiskCount, setAtRiskCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const hasLoadedOnce = useRef(false);
   const [refreshCounter, setRefreshCounter] = useState(0);
+
+  // Reset initial-load lifecycle when wallet identity changes (CodeRabbit fix)
+  const prevPublicKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    const pkStr = publicKey?.toBase58() ?? null;
+    if (pkStr !== prevPublicKeyRef.current) {
+      prevPublicKeyRef.current = pkStr;
+      hasLoadedOnce.current = false;
+      setIsRefreshing(false);
+    }
+  }, [publicKey]);
 
   useEffect(() => {
     if (!publicKey) {
@@ -91,6 +106,8 @@ export function usePortfolio(): PortfolioData {
       setTotalUnrealizedPnl(0n);
       setAtRiskCount(0);
       setLoading(false);
+      setIsRefreshing(false);
+      hasLoadedOnce.current = false;
       return;
     }
 
@@ -104,7 +121,11 @@ export function usePortfolio(): PortfolioData {
 
     async function load() {
       try {
-        setLoading(true);
+        if (hasLoadedOnce.current) {
+          setIsRefreshing(true);
+        } else {
+          setLoading(true);
+        }
         const marketArrays = await Promise.all(
           [...programIds].map((id) => discoverMarkets(connection, new PublicKey(id)).catch(() => []))
         );
@@ -257,7 +278,11 @@ export function usePortfolio(): PortfolioData {
       } catch {
         // ignore
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          setIsRefreshing(false);
+          hasLoadedOnce.current = true;
+        }
       }
     }
 
@@ -287,5 +312,5 @@ export function usePortfolio(): PortfolioData {
     };
   }, []);
 
-  return { positions, totalPnl, totalDeposited, totalValue, totalUnrealizedPnl, atRiskCount, loading, refresh };
+  return { positions, totalPnl, totalDeposited, totalValue, totalUnrealizedPnl, atRiskCount, loading, isRefreshing, refresh };
 }
