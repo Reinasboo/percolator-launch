@@ -104,6 +104,9 @@ export function useLpPositions(): LpPositionsState & { refresh: () => void } {
     if (!walletKeyStr || !connection) {
       setPositions([]);
       setTotalRedeemable(0);
+      setLoading(false);
+      setIsRefreshing(false);
+      hasLoadedOnce.current = false;
       return;
     }
 
@@ -244,6 +247,9 @@ export function useLpPositions(): LpPositionsState & { refresh: () => void } {
   useEffect(() => { fetchRef.current = fetchPositions; }, [fetchPositions]);
 
   useEffect(() => {
+    // New wallet identity should start with initial-load semantics (CodeRabbit fix)
+    hasLoadedOnce.current = false;
+    setIsRefreshing(false);
     fetchRef.current();
     const interval = setInterval(() => fetchRef.current(), 30_000);
     return () => clearInterval(interval);

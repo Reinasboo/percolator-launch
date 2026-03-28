@@ -86,6 +86,17 @@ export function usePortfolio(): PortfolioData {
   const hasLoadedOnce = useRef(false);
   const [refreshCounter, setRefreshCounter] = useState(0);
 
+  // Reset initial-load lifecycle when wallet identity changes (CodeRabbit fix)
+  const prevPublicKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    const pkStr = publicKey?.toBase58() ?? null;
+    if (pkStr !== prevPublicKeyRef.current) {
+      prevPublicKeyRef.current = pkStr;
+      hasLoadedOnce.current = false;
+      setIsRefreshing(false);
+    }
+  }, [publicKey]);
+
   useEffect(() => {
     if (!publicKey) {
       setPositions([]);
@@ -95,6 +106,8 @@ export function usePortfolio(): PortfolioData {
       setTotalUnrealizedPnl(0n);
       setAtRiskCount(0);
       setLoading(false);
+      setIsRefreshing(false);
+      hasLoadedOnce.current = false;
       return;
     }
 
