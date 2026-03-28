@@ -349,6 +349,11 @@ export async function GET(request: NextRequest) {
     // set ensures consistency with /api/stats.
     const nonZombieOnly = sanitized.filter((m) => !(m as Record<string, unknown>).is_zombie);
     const activeTotal = nonZombieOnly.filter((m) => isActiveMarket(m as Parameters<typeof isActiveMarket>[0])).length;
+    // GH#1760: Expose markets_with_price for transparency — subset of activeTotal with a sane last_price.
+    // activeTotal = has any sane stat (price OR volume OR OI); markets_with_price = only those with price.
+    // This disambiguates why activeTotal (e.g. 71) > markets_with_price (e.g. 56):
+    // the 15-market gap are markets with volume/OI data but no current oracle price.
+    const marketsWithPrice = nonZombieOnly.filter((m) => isSaneMarketValue((m as Record<string, unknown>).last_price as number | null)).length;
 
     // GH#1512: Apply search filter — case-insensitive substring match on symbol or name.
     // GH#1527: Also resolve the query against SLUG_ALIASES so searching "SOL" matches
@@ -569,7 +574,7 @@ export async function GET(request: NextRequest) {
     const paged = offsetNum > 0 ? sorted.slice(offsetNum) : sorted;
     const limited = limitNum > 0 ? paged.slice(0, limitNum) : paged;
 
-    return NextResponse.json({ total: sorted.length, activeTotal, zombieCount, markets: limited }, {
+    return NextResponse.json({ total: sorted.length, activeTotal, marketsWithPrice, zombieCount, markets: limited }, {
       headers: {
         "Cache-Control": "public, s-maxage=10, stale-while-revalidate=30",
       },

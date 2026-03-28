@@ -599,24 +599,29 @@ export const CreateMarketWizard: FC<{ initialMint?: string }> = ({ initialMint }
   // --- Render ---
 
   // PERC-516: Clear persisted state on success so a refresh doesn't show stale wizard
+  // GH#1761: Also clear when insuranceMintFailed — market is live regardless of step 5
   useEffect(() => {
-    if (createState.step >= 5 && createState.slabAddress) {
+    if ((createState.step >= 5 || createState.insuranceMintFailed) && createState.slabAddress) {
       try {
         localStorage.removeItem(WIZARD_STORAGE_KEY);
         localStorage.removeItem("percolator-pending-slab-keypair");
       } catch {}
     }
-  }, [createState.step, createState.slabAddress]);
+  }, [createState.step, createState.insuranceMintFailed, createState.slabAddress]);
+
+  // GH#1761: Show success when all 5 steps complete, OR when steps 1-4 succeed but
+  // step 5 (Insurance LP Mint) fails non-fatally. Market is live either way.
+  const isSuccess = (createState.step >= 5 || createState.insuranceMintFailed) && !!createState.slabAddress;
 
   // Success state
-  if (createState.step >= 5 && createState.slabAddress) {
+  if (isSuccess) {
     return (
       <LaunchSuccess
         tokenSymbol={symbol}
         tradingFeeBps={wizard.tradingFeeBps}
         maxLeverage={maxLeverage}
         slabLabel={SLAB_TIERS[wizard.slabTier].label}
-        marketAddress={createState.slabAddress}
+        marketAddress={createState.slabAddress!}
         txSigs={createState.txSigs}
         onDeployAnother={handleReset}
         mainnetCA={wizard.mintAddress}
@@ -624,6 +629,7 @@ export const CreateMarketWizard: FC<{ initialMint?: string }> = ({ initialMint }
         devnetAirdropAmount={createState.devnetAirdropAmount}
         devnetAirdropSymbol={createState.devnetAirdropSymbol}
         devnetMintError={createState.devnetMintError}
+        insuranceMintFailed={createState.insuranceMintFailed}
       />
     );
   }

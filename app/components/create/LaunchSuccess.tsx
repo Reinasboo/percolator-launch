@@ -25,6 +25,11 @@ interface LaunchSuccessProps {
   devnetAirdropSymbol?: string | null;
   /** Error from devnet mint attempt */
   devnetMintError?: string | null;
+  /**
+   * GH#1761: Insurance LP Mint (step 5) failed but market is live.
+   * Shows a soft warning on the success screen; does not block trading.
+   */
+  insuranceMintFailed?: boolean;
 }
 
 /**
@@ -44,6 +49,7 @@ export const LaunchSuccess: FC<LaunchSuccessProps> = ({
   devnetAirdropAmount,
   devnetAirdropSymbol,
   devnetMintError,
+  insuranceMintFailed,
 }) => {
   const [copied, setCopied] = useState(false);
   const [copiedDevnet, setCopiedDevnet] = useState(false);
@@ -150,6 +156,21 @@ export const LaunchSuccess: FC<LaunchSuccessProps> = ({
           </div>
         </div>
       </div>
+
+      {/* GH#1761: Insurance LP Mint soft warning — shown when step 5 failed non-fatally */}
+      {insuranceMintFailed && (
+        <div className="border border-[var(--warning)]/20 bg-[var(--warning)]/[0.04] p-4 mb-4 text-left w-full max-w-sm mx-auto">
+          <p className="text-[9px] font-medium uppercase tracking-[0.15em] text-[var(--warning)] mb-2">
+            INSURANCE LP MINT PENDING
+          </p>
+          <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
+            Your market is <strong className="text-white">live and tradeable</strong>. The Insurance LP Mint transaction timed out on devnet — this is non-blocking.
+          </p>
+          <p className="text-[11px] text-[var(--text-dim)] mt-1.5 leading-relaxed">
+            Insurance LP deposits will be unavailable until the mint is created. You can retry from the market settings page later.
+          </p>
+        </div>
+      )}
 
       {/* Devnet Token Info — CA mismatch notice + airdrop confirmation + mint errors */}
       {isDevnet && (devnetMint || devnetAirdropAmount || devnetMintError) && (
