@@ -154,6 +154,12 @@ export interface CreateMarketState {
   devnetAirdropSymbol: string | null;
   /** Error from devnet mint attempt */
   devnetMintError: string | null;
+  /**
+   * GH#1761: Set to true when step 5 (Insurance LP Mint) fails after exhausting retries.
+   * The market is still live and tradeable — this is non-fatal. The mint can be retried
+   * independently later. Success screen shows a soft warning rather than hard error.
+   */
+  insuranceMintFailed: boolean;
 }
 
 const STEP_LABELS = [
@@ -178,6 +184,7 @@ export function useCreateMarket() {
     devnetAirdropAmount: null,
     devnetAirdropSymbol: null,
     devnetMintError: null,
+    insuranceMintFailed: false,
   });
 
   // Persist slab keypair across retries so we can resume from any step
@@ -896,7 +903,46 @@ export function useCreateMarket() {
           setState((s) => ({ ...s, txSigs: [...s.txSigs, sig] }));
         }
 
+        // GH#1761: Register market in Supabase BEFORE step 5 (Insurance LP Mint).
+        // Steps 1-4 create a live, tradeable market. Moving registration here ensures
+        // symbol, mainnet_ca, and oracle_authority are stored even if step 5 fails.
+        // Previously this ran after step 5, so a step-5 timeout left the market on-chain
+        // with no DB record → dashboard showed random chars (CCPHprPU) instead of symbol.
+        if (startStep <= 4) {
+          try {
+            await fetch("/api/markets", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                slab_address: slabPk.toBase58(),
+                mint_address: params.mint.toBase58(),
+                symbol: params.symbol ?? "UNKNOWN",
+                name: params.name ?? "Unknown Token",
+                decimals: params.decimals ?? 6,
+                deployer: wallet.publicKey.toBase58(),
+                oracle_mode: oracleMode,
+                dex_pool_address: params.dexPoolAddress ?? null,
+                oracle_authority: isAdminOracle
+                  ? (isDevnetEnv && getConfig().crankWallet ? getConfig().crankWallet : wallet.publicKey.toBase58())
+                  : null,
+                initial_price_e6: params.initialPriceE6.toString(),
+                max_leverage: params.initialMarginBps > 0 ? Math.floor(10000 / Number(params.initialMarginBps)) : 1,
+                trading_fee_bps: Number(params.tradingFeeBps),
+                lp_collateral: params.lpCollateral.toString(),
+                mainnet_ca: params.mainnetCA ?? null,
+              }),
+            });
+          } catch {
+            // Non-fatal — market is on-chain even if DB write fails
+            console.warn("GH#1761: Failed to register market in dashboard DB");
+          }
+        }
+
         // Step 4: Create Insurance LP Mint (permissionless insurance deposits)
+        // GH#1761: This step is non-fatal. The market is already live and tradeable
+        // after steps 1-4. A tx expiry here (devnet congestion) should NOT block success.
+        // We catch the error, set insuranceMintFailed=true, and proceed to the success screen.
+        // The user can retry step 5 independently; the success screen shows a soft warning.
         if (startStep <= 4) {
           setState((s) => ({ ...s, step: 4, stepLabel: STEP_LABELS[4] }));
 
@@ -917,41 +963,27 @@ export function useCreateMarket() {
           ]);
           const createMintIx = buildIx({ programId, keys: createMintKeys, data: createMintData });
 
-          const sig = await sendTx({
-            connection, wallet,
-            instructions: [createMintIx],
-            computeUnits: 200_000,
-          });
-          setState((s) => ({ ...s, txSigs: [...s.txSigs, sig] }));
-        }
-
-        // Register market in Supabase so dashboard can see it
-        try {
-          await fetch("/api/markets", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              slab_address: slabPk.toBase58(),
-              mint_address: params.mint.toBase58(),
-              symbol: params.symbol ?? "UNKNOWN",
-              name: params.name ?? "Unknown Token",
-              decimals: params.decimals ?? 6,
-              deployer: wallet.publicKey.toBase58(),
-              oracle_mode: oracleMode,
-              dex_pool_address: params.dexPoolAddress ?? null,
-              oracle_authority: isAdminOracle
-                ? (isDevnetEnv && getConfig().crankWallet ? getConfig().crankWallet : wallet.publicKey.toBase58())
-                : null,
-              initial_price_e6: params.initialPriceE6.toString(),
-              max_leverage: params.initialMarginBps > 0 ? Math.floor(10000 / Number(params.initialMarginBps)) : 1,
-              trading_fee_bps: Number(params.tradingFeeBps),
-              lp_collateral: params.lpCollateral.toString(),
-              mainnet_ca: params.mainnetCA ?? null,
-            }),
-          });
-        } catch {
-          // Non-fatal — market is on-chain even if DB write fails
-          console.warn("Failed to register market in dashboard DB");
+          try {
+            const sig = await sendTx({
+              connection, wallet,
+              instructions: [createMintIx],
+              computeUnits: 200_000,
+              // GH#1761: Use maxRetries=3 for step 5 to handle devnet congestion.
+              // The default is 2; an extra retry gives more tolerance for tx expiry.
+              maxRetries: 3,
+            });
+            setState((s) => ({ ...s, txSigs: [...s.txSigs, sig] }));
+          } catch (step5Err) {
+            // GH#1761: Step 5 failure is non-fatal. Market is live from steps 1-4.
+            // Log the error, set the flag, and let flow continue to success screen.
+            console.warn("[useCreateMarket] GH#1761: Insurance LP Mint (step 5) failed:", step5Err);
+            setState((s) => ({
+              ...s,
+              insuranceMintFailed: true,
+              // Mark step as done visually so the progress bar advances past it
+              txSigs: [...s.txSigs, "skipped-insurance-mint-failed"],
+            }));
+          }
         }
 
         // PERC-465: Post-creation hooks — register with oracle keeper + mint devnet token
@@ -1038,7 +1070,8 @@ export function useCreateMarket() {
       devnetMint: null,
       devnetAirdropAmount: null,
       devnetAirdropSymbol: null,
-    devnetMintError: null,
+      devnetMintError: null,
+      insuranceMintFailed: false,
     });
   }, []);
 
