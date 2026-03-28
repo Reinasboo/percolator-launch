@@ -56,18 +56,12 @@ export default function PortfolioPage() {
 
   // LP positions (insurance fund deposits)
   const lpPositions = useLpPositions();
+  const isRefreshing = portfolio.isRefreshing || lpPositions.isRefreshing;
 
   // PERC-481: Aggregate trade statistics
   const traderStats = useTraderStats(walletPublicKey?.toBase58() ?? null);
 
-  // Auto-refresh every 15s
-  useEffect(() => {
-    if (!connected || !refresh) return;
-    const interval = setInterval(() => {
-      refresh();
-    }, 15_000);
-    return () => clearInterval(interval);
-  }, [connected, refresh]);
+  // Auto-refresh handled by usePortfolio hook (30s interval + visibility change)
 
   // Resolve collateral mint addresses to token symbols
   const collateralMints = positions.map((pos) => pos.market.config.collateralMint);
@@ -123,10 +117,10 @@ export default function PortfolioPage() {
             {refresh && (
               <button
                 onClick={() => { refresh(); lpPositions.refresh(); }}
-                disabled={loading || lpPositions.loading}
+                disabled={loading || lpPositions.loading || isRefreshing}
                 className="rounded-sm border border-[var(--border)] bg-[var(--panel-bg)] px-4 py-2 text-xs text-[var(--text-secondary)] transition-all hover:border-[var(--accent)]/40 hover:text-[var(--text)] disabled:opacity-40"
               >
-                {loading || lpPositions.loading ? "Refreshing..." : "Refresh"}
+                Refresh
               </button>
             )}
           </div>
