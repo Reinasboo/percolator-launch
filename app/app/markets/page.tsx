@@ -729,7 +729,10 @@ function MarketsPageInner() {
               <div className="relative rounded-sm border border-[var(--border)] hud-corners after:pointer-events-none after:absolute after:right-0 after:top-0 after:bottom-0 after:w-6 after:z-20 after:bg-gradient-to-l after:from-[var(--bg-surface)] after:to-transparent sm:after:hidden">
               <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
                 {/* Header row: xs=4 cols (name|price|lev|health), sm+=7 cols */}
-                <div className="sticky top-0 z-10 grid w-full min-w-[500px] sm:min-w-[700px] grid-cols-[minmax(120px,2.5fr)_minmax(80px,1.2fr)_minmax(55px,0.7fr)_minmax(55px,0.7fr)] sm:grid-cols-[minmax(160px,3fr)_minmax(90px,1.2fr)_minmax(90px,1fr)_minmax(90px,1fr)_minmax(90px,1fr)_minmax(65px,0.8fr)_minmax(80px,0.9fr)] gap-2 sm:gap-4 border-b border-[var(--border)] bg-[var(--bg-surface)] px-3 sm:px-5 py-2.5 text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.15em] text-[var(--text-dim)]">
+                {/* GH#1775: sticky inside overflow-x-auto is broken by CSS spec (overflow clips stacking context).
+                    Removed sticky top-0 z-10 — header scrolls with content on mobile.
+                    Desktop (sm+) is unaffected since the table fits in viewport width. */}
+                <div className="grid w-full min-w-[500px] sm:min-w-[700px] grid-cols-[minmax(120px,2.5fr)_minmax(80px,1.2fr)_minmax(55px,0.7fr)_minmax(55px,0.7fr)] sm:grid-cols-[minmax(160px,3fr)_minmax(90px,1.2fr)_minmax(90px,1fr)_minmax(90px,1fr)_minmax(90px,1fr)_minmax(65px,0.8fr)_minmax(80px,0.9fr)] gap-2 sm:gap-4 border-b border-[var(--border)] bg-[var(--bg-surface)] px-3 sm:px-5 py-2.5 text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.15em] text-[var(--text-dim)]">
                   <div>token</div>
                   <div className="text-right">price</div>
                   <div className="hidden sm:block text-right">OI</div>
