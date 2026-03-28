@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 
 // ─── Slide Data ──────────────────────────────────────────────────────────────
 
-const TOTAL_SLIDES = 11;
+const TOTAL_SLIDES = 10;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -28,7 +28,6 @@ function Slide01Cover({ isCurrent }: SlideProps) {
         <div className="pitch-meta-row">
           <span className="pitch-tag">Solana</span>
           <span className="pitch-tag">Devnet Live</span>
-          <span className="pitch-tag">168 Markets</span>
           <span className="pitch-tag">Apache 2.0</span>
         </div>
         <p className="pitch-url">percolatorlaunch.com</p>
@@ -268,10 +267,7 @@ function Slide07FormalVerification({ isCurrent }: SlideProps) {
               <div className="pitch-proof-cat-dot purple" />
               <span>Conservation properties</span>
             </div>
-            <div className="pitch-proof-cat">
-              <div className="pitch-proof-cat-dot cyan" />
-              <span>Third-party audit: 0 critical, 0 high</span>
-            </div>
+
           </div>
         </div>
       </div>
@@ -288,11 +284,7 @@ function Slide08Traction({ isCurrent }: SlideProps) {
         <div className="pitch-traction-grid">
           <div className="pitch-traction-card">
             <div className="pitch-traction-num mono">168</div>
-            <div className="pitch-traction-label">Devnet markets active</div>
-          </div>
-          <div className="pitch-traction-card">
-            <div className="pitch-traction-num mono">191</div>
-            <div className="pitch-traction-label">Organic devnet users, zero paid acquisition</div>
+            <div className="pitch-traction-label">Devnet markets created</div>
           </div>
           <div className="pitch-traction-card">
             <div className="pitch-traction-num mono">2,700+</div>
@@ -301,6 +293,10 @@ function Slide08Traction({ isCurrent }: SlideProps) {
           <div className="pitch-traction-card">
             <div className="pitch-traction-num mono">18×</div>
             <div className="pitch-traction-label">Cheaper token instructions via pinocchio-token (SIMD-0266)</div>
+          </div>
+          <div className="pitch-traction-card">
+            <div className="pitch-traction-num mono">Apache 2.0</div>
+            <div className="pitch-traction-label">Fully open source — 8 public repos</div>
           </div>
         </div>
         <div className="pitch-traction-milestones">
@@ -368,19 +364,19 @@ function Slide10Roadmap({ isCurrent }: SlideProps) {
       phase: "Apr 2026",
       status: "next",
       title: "Mainnet Beta",
-      items: ["Mainnet launch", "Permissionless market creation open to all", "Creator fee share live"],
+      items: ["Mainnet beta launch", "Initial markets live", "Creator fee share"],
     },
     {
       phase: "Q3 2026",
       status: "planned",
       title: "Ecosystem Integration",
-      items: ["pump.fun ecosystem integration", "Creator fee share as native incentive", "Market liquidity programs"],
+      items: ["Ecosystem integrations", "Liquidity programs", "Mobile app"],
     },
     {
       phase: "2027",
       status: "future",
       title: "Scale",
-      items: ["Cross-chain expansion", "Institutional API", "Governance launch"],
+      items: ["Cross-chain expansion", "Institutional API"],
     },
   ];
 
@@ -407,36 +403,6 @@ function Slide10Roadmap({ isCurrent }: SlideProps) {
   );
 }
 
-function Slide11Team({ isCurrent }: SlideProps) {
-  const members = [
-    { role: "Founder / CEO", name: "TBD" },
-    { role: "CTO", name: "TBD" },
-    { role: "Head of Engineering", name: "TBD" },
-    { role: "Head of Product", name: "TBD" },
-  ];
-
-  return (
-    <div className="pitch-slide">
-      <div className="pitch-slide-inner">
-        <div className="pitch-label">10 / Team</div>
-        <h2 className="pitch-title">Built by people who ship</h2>
-        <div className="pitch-team-grid">
-          {members.map((m, i) => (
-            <div key={i} className="pitch-team-card">
-              <div className="pitch-team-avatar">
-                <div className="pitch-team-avatar-placeholder">?</div>
-              </div>
-              <div className="pitch-team-name">{m.name}</div>
-              <div className="pitch-team-role">{m.role}</div>
-            </div>
-          ))}
-        </div>
-        <p className="pitch-team-note">Team details to be filled in by Khubair.</p>
-      </div>
-    </div>
-  );
-}
-
 // ─── Slide Registry ───────────────────────────────────────────────────────────
 
 const SLIDES = [
@@ -450,7 +416,6 @@ const SLIDES = [
   { id: 8, title: "Traction", component: Slide08Traction },
   { id: 9, title: "Market Opportunity", component: Slide09Market },
   { id: 10, title: "Roadmap", component: Slide10Roadmap },
-  { id: 11, title: "Team", component: Slide11Team },
 ];
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
@@ -1271,63 +1236,6 @@ export default function PitchPage() {
           color: rgba(255,255,255,0.25);
         }
 
-        /* ── Team ── */
-        .pitch-team-grid {
-          display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          gap: 1.5rem;
-          margin-bottom: 1.5rem;
-        }
-
-        .pitch-team-card {
-          background: rgba(255,255,255,0.025);
-          border: 1px solid rgba(255,255,255,0.07);
-          border-radius: 12px;
-          padding: 1.5rem;
-          text-align: center;
-        }
-
-        .pitch-team-avatar {
-          width: 64px;
-          height: 64px;
-          border-radius: 50%;
-          background: rgba(153,69,255,0.1);
-          border: 2px solid rgba(153,69,255,0.3);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          margin: 0 auto 0.75rem;
-        }
-
-        .pitch-team-avatar-placeholder {
-          font-size: 1.5rem;
-          color: rgba(153,69,255,0.5);
-          font-weight: 700;
-        }
-
-        .pitch-team-name {
-          font-family: 'Inter Tight', 'Inter', sans-serif;
-          font-size: 1rem;
-          font-weight: 700;
-          color: rgba(255,255,255,0.4);
-          margin-bottom: 0.3rem;
-          font-style: italic;
-        }
-
-        .pitch-team-role {
-          font-family: 'Inter', sans-serif;
-          font-size: 0.8rem;
-          color: rgba(255,255,255,0.35);
-        }
-
-        .pitch-team-note {
-          font-family: 'JetBrains Mono', monospace;
-          font-size: 0.75rem;
-          color: rgba(153,69,255,0.5);
-          text-align: center;
-          letter-spacing: 0.08em;
-        }
-
         /* ── Controls ── */
         .pitch-controls {
           position: absolute;
@@ -1430,8 +1338,7 @@ export default function PitchPage() {
 
           .pitch-problem-grid,
           .pitch-traction-grid,
-          .pitch-roadmap-row,
-          .pitch-team-grid {
+          .pitch-roadmap-row {
             grid-template-columns: repeat(2, 1fr);
           }
 
@@ -1463,8 +1370,7 @@ export default function PitchPage() {
         @media (max-width: 480px) {
           .pitch-problem-grid,
           .pitch-traction-grid,
-          .pitch-roadmap-row,
-          .pitch-team-grid {
+          .pitch-roadmap-row {
             grid-template-columns: 1fr;
           }
         }
