@@ -75,7 +75,7 @@ describe("GH#1662 – MusicPlayer does not overlap STATS panel at 1440px", () =>
   });
 
   it("does not change behaviour for non-trade routes (fallback branch unchanged)", () => {
-    // The original bottom-right fallback classes still appear
-    expect(playerSrc).toContain("bottom-3 right-3 sm:bottom-5 sm:right-5");
+    // The original bottom-right fallback classes still appear (mobile bottom clears nav bar)
+    expect(playerSrc).toContain("bottom-[72px] right-3 md:bottom-3 sm:right-5");
   });
 });
