@@ -228,12 +228,16 @@ async function resolveServerOwnedDevnetMint(
 
   // 1. Look for an existing server-owned mirror in devnet_mints for this mainnetCa.
   //    The mainnet-mirror flow stores: mainnet_ca = <REAL_MAINNET_CA>, devnet_mint = <server-created devnet SPL>
-  const { data: mirrorRow } = await (supabase as any)
+  // GH#1771: Use .limit(1) instead of .maybeSingle() — multiple mirrors may exist
+  // for the same mainnet_ca (e.g. re-keyed mirrors), causing a PGRST116 multi-row error.
+  const { data: mirrorRows } = await (supabase as any)
     .from("devnet_mints")
     .select("devnet_mint")
     .eq("mainnet_ca", mainnetCa)
     .neq("devnet_mint", mainnetCa) // exclude self-referencing native devnet entries
-    .maybeSingle();
+    .order("created_at", { ascending: false })
+    .limit(1);
+  const mirrorRow = mirrorRows?.[0] ?? null;
 
   if (mirrorRow?.devnet_mint) {
     // Sanity-check: verify the server keypair is still the authority on-chain
@@ -437,11 +441,15 @@ export async function POST(req: NextRequest) {
       }
     } else {
       // Fallback: check markets table for mint_address match (direct-created market mints)
-      const { data: marketRow, error: marketErr } = await (supabase as any)
+      // GH#1771: Use .limit(1) instead of .maybeSingle() — a mint can appear
+      // in multiple markets rows (shared mints), causing a PGRST116 multi-row error.
+      const { data: marketRows, error: marketErr } = await (supabase as any)
         .from("markets")
         .select("mainnet_ca, symbol, decimals")
         .eq("mint_address", mintAddress)
-        .maybeSingle();
+        .order("created_at", { ascending: false })
+        .limit(1);
+      const marketRow = marketRows?.[0] ?? null;
 
       if (marketErr || !marketRow) {
         return NextResponse.json(
