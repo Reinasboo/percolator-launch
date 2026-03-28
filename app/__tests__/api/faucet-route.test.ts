@@ -200,8 +200,9 @@ describe("/api/faucet route", () => {
   describe("SOL airdrop retryable error detection (GH#1392)", () => {
     // Mirror of the retryable regex added for transient Solana devnet failures.
     // GH#1764: extended to cover additional Node.js socket-level error codes.
+    // GH#1776: extended to cover superstruct RPC validation errors.
     const isTransient = (msg: string) =>
-      /internal error|service unavailable|timeout|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|ECONNRESET|EHOSTUNREACH|network.*changed|fetch failed|socket hang up/i.test(
+      /internal error|service unavailable|timeout|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|ECONNRESET|EHOSTUNREACH|network.*changed|fetch failed|socket hang up|satisfy a union|superstruct/i.test(
         msg,
       );
 
@@ -255,8 +256,9 @@ describe("/api/faucet route", () => {
 
   describe("GH#1764: multi-RPC fallback logic", () => {
     // Simulate the loop logic: try each RPC, fall through on transient errors.
+    // GH#1776: superstruct errors added to transient pattern.
     const isTransient = (msg: string) =>
-      /internal error|service unavailable|timeout|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|ECONNRESET|EHOSTUNREACH|network.*changed|fetch failed|socket hang up/i.test(
+      /internal error|service unavailable|timeout|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|ECONNRESET|EHOSTUNREACH|network.*changed|fetch failed|socket hang up|satisfy a union|superstruct/i.test(
         msg,
       );
     const isRateLimit = (msg: string) =>
@@ -410,6 +412,39 @@ describe("/api/faucet route", () => {
     it("handles null/undefined thrown values without returning empty", () => {
       expect(serializeError(null)).toBe("null");
       expect(serializeError(undefined)).toBe("undefined");
+    });
+  });
+
+  describe("GH#1776: superstruct RPC validation error treated as transient (not 500)", () => {
+    // The superstruct error "Expected the value to satisfy a union of `type | type`"
+    // comes from web3.js confirmTransaction when devnet RPC returns an unexpected
+    // response format. Must be treated as a transient error (try next RPC), never a 500.
+    const isTransient = (msg: string) =>
+      /internal error|service unavailable|timeout|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|ECONNRESET|EHOSTUNREACH|network.*changed|fetch failed|socket hang up|satisfy a union|superstruct/i.test(
+        msg,
+      );
+
+    it("classifies superstruct union error as transient (retryable)", () => {
+      const superstructMsg =
+        "Expected the value to satisfy a union of `type | type`, but received: [object Object]";
+      expect(isTransient(superstructMsg)).toBe(true);
+    });
+
+    it("classifies 'superstruct' keyword as transient", () => {
+      expect(isTransient("superstruct validation error")).toBe(true);
+    });
+
+    it("superstruct error routes to 503, not 500", () => {
+      const superstructMsg =
+        "Expected the value to satisfy a union of `type | type`, but received: [object Object]";
+      const isRateLimit =
+        /429|too many requests|rate.?limit|airdrop.*limit|limit.*airdrop/i.test(superstructMsg);
+      const transient = isTransient(superstructMsg);
+      // Should be transient (503), not rate-limit (429), not fatal (500)
+      expect(isRateLimit).toBe(false);
+      expect(transient).toBe(true);
+      const statusCode = isRateLimit ? 429 : transient ? 503 : 500;
+      expect(statusCode).toBe(503);
     });
   });
 });

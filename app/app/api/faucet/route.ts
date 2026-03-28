@@ -146,8 +146,10 @@ export async function POST(req: NextRequest) {
           // GH#1392 / GH#1764: transient failures — try next RPC.
           // Extended pattern covers ETIMEDOUT, ENOTFOUND, ECONNRESET, EHOSTUNREACH,
           // "network changed", "fetch failed", and other Node.js socket-level errors.
+          // GH#1776: superstruct "satisfy a union" errors indicate the RPC returned an
+          // unexpected response format — treat as transient so we try the next endpoint.
           const isTransient =
-            /internal error|service unavailable|timeout|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|ECONNRESET|EHOSTUNREACH|network.*changed|fetch failed|socket hang up/i.test(
+            /internal error|service unavailable|timeout|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|ECONNRESET|EHOSTUNREACH|network.*changed|fetch failed|socket hang up|satisfy a union|superstruct/i.test(
               msg,
             );
           if (isTransient) {
