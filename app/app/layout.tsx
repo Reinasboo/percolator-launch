@@ -13,12 +13,12 @@ import { CursorGlow } from "@/components/ui/CursorGlow";
 import { MusicPlayer } from "@/components/ui/MusicPlayer";
 import { MainnetBetaBanner } from "@/components/layout/MainnetBetaBanner";
 
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
-const spaceGrotesk = Space_Grotesk({ variable: "--font-space-grotesk", subsets: ["latin"], weight: ["400", "500", "600", "700"] });
-const jetbrainsMono = JetBrains_Mono({ variable: "--font-jetbrains-mono", subsets: ["latin"], weight: ["400", "500", "600", "700"] });
-const interTight = Inter_Tight({ variable: "--font-inter-tight", subsets: ["latin"], weight: ["400", "500", "600", "700", "800", "900"] });
-const outfit = Outfit({ variable: "--font-outfit", subsets: ["latin"], weight: ["300", "400", "500", "600", "700", "800"] });
+const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"], display: "swap" });
+const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"], display: "swap" });
+const spaceGrotesk = Space_Grotesk({ variable: "--font-space-grotesk", subsets: ["latin"], weight: ["400", "500", "600", "700"], display: "swap" });
+const jetbrainsMono = JetBrains_Mono({ variable: "--font-jetbrains-mono", subsets: ["latin"], weight: ["400", "500", "600", "700"], display: "swap" });
+const interTight = Inter_Tight({ variable: "--font-inter-tight", subsets: ["latin"], weight: ["400", "500", "600", "700", "800", "900"], display: "swap" });
+const outfit = Outfit({ variable: "--font-outfit", subsets: ["latin"], weight: ["300", "400", "500", "600", "700", "800"], display: "swap" });
 
 // PERC-695 (bug bounty — CSP static nonce): Force dynamic rendering so each request
 // generates a fresh layout render with the new per-request nonce from middleware.
@@ -59,8 +59,8 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
-    <html lang="en" suppressHydrationWarning>
-        <body suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable} ${interTight.variable} ${outfit.variable} min-h-screen bg-[#050508] text-[#eeeef0] antialiased`} data-nonce={nonce}>
+    <html lang="en" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable} ${interTight.variable} ${outfit.variable}`}>
+        <body suppressHydrationWarning className="min-h-screen bg-[#050508] text-[#eeeef0] antialiased" data-nonce={nonce}>
         <Providers>
           <CursorGlow />
           <div className="relative z-[1] flex min-h-screen flex-col">
