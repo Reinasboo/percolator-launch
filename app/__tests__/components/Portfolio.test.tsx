@@ -41,6 +41,7 @@ vi.mock("@/hooks/useLpPositions", () => ({
     positions: [],
     totalRedeemable: 0,
     loading: false,
+    isRefreshing: false,
     error: null,
     refresh: vi.fn(),
   }),
@@ -262,13 +263,13 @@ describe("Portfolio Component Tests", () => {
 
       render(<PortfolioPage />);
 
-      const refreshButton = screen.getByRole("button", { name: /Refreshing/i });
+      const refreshButton = screen.getByRole("button", { name: /Refresh/i });
       expect(refreshButton).toBeDisabled();
     });
   });
 
-  describe("PORT-003: Auto-refresh timer", () => {
-    it("should automatically refresh every 15 seconds", async () => {
+  describe("PORT-003: Auto-refresh delegated to hook", () => {
+    it("should not manage its own refresh interval (delegated to usePortfolio hook)", async () => {
       const mockRefresh = vi.fn();
 
       (useWalletCompat as any).mockReturnValue({
@@ -281,6 +282,7 @@ describe("Portfolio Component Tests", () => {
         totalPnl: 0n,
         totalDeposited: 0n,
         loading: false,
+        isRefreshing: false,
         refresh: mockRefresh,
       });
 
@@ -288,53 +290,7 @@ describe("Portfolio Component Tests", () => {
 
       render(<PortfolioPage />);
 
-      // Initially called once on mount
-      expect(mockRefresh).toHaveBeenCalledTimes(0);
-
-      // Advance time by 15 seconds
-      await vi.advanceTimersByTimeAsync(15000);
-
-      expect(mockRefresh).toHaveBeenCalledTimes(1);
-
-      // Advance another 15 seconds
-      await vi.advanceTimersByTimeAsync(15000);
-
-      expect(mockRefresh).toHaveBeenCalledTimes(2);
-    });
-
-    it("should stop auto-refresh when wallet disconnects", async () => {
-      const mockRefresh = vi.fn();
-
-      // Start connected
-      (useWalletCompat as any).mockReturnValue({
-        connected: true,
-        publicKey: mockPublicKey,
-      });
-
-      (usePortfolio as any).mockReturnValue({
-        positions: [],
-        totalPnl: 0n,
-        totalDeposited: 0n,
-        loading: false,
-        refresh: mockRefresh,
-      });
-
-      (useMultiTokenMeta as any).mockReturnValue(new Map());
-
-      const { rerender } = render(<PortfolioPage />);
-
-      // Now disconnect
-      (useWalletCompat as any).mockReturnValue({
-        connected: false,
-        publicKey: null,
-      });
-
-      rerender(<PortfolioPage />);
-
-      // Reset call count after disconnect
-      mockRefresh.mockClear();
-
-      // Advance time - should not call refresh
+      // Page should not call refresh on its own timer — hook handles polling
       await vi.advanceTimersByTimeAsync(30000);
 
       expect(mockRefresh).toHaveBeenCalledTimes(0);
