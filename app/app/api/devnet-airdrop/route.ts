@@ -21,19 +21,31 @@
  * Only callable on devnet.
  *
  * Requires: DEVNET_MINT_AUTHORITY_KEYPAIR env var (JSON secret key bytes)
+ *
+ * GH#1769: When the stored mint address is not owned by the server keypair
+ * (user-created devnet-native token or token-factory mint), auto-resolve to a
+ * server-owned Percolator mirror mint for the same mainnet CA. This ensures the
+ * "Get Test Tokens" flow works immediately after market creation without requiring
+ * the user to navigate to the devnet faucet page.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import {
   Connection,
+  Keypair,
   PublicKey,
+  SystemProgram,
   Transaction,
 } from "@solana/web3.js";
 import {
   getAssociatedTokenAddress,
   createAssociatedTokenAccountInstruction,
   createMintToInstruction,
+  createInitializeMintInstruction,
   getAccount,
+  MINT_SIZE,
+  TOKEN_PROGRAM_ID,
+  getMinimumBalanceForRentExemptMint,
 } from "@solana/spl-token";
 import { getConfig } from "@/lib/config";
 import { getServiceClient } from "@/lib/supabase";
@@ -192,6 +204,144 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   ]);
 }
 
+/**
+ * GH#1769: Resolve a server-owned devnet mint for a given mainnet CA.
+ *
+ * When the incoming mintAddress was NOT created by the server keypair (e.g.
+ * a user-created token-factory mint or devnet-native token), we cannot call
+ * MintTo on it. Instead, look for an existing Percolator-owned mirror in
+ * devnet_mints keyed by mainnet_ca. If none exists, create one on the fly so
+ * Get Test Tokens works immediately without requiring page reload or manual steps.
+ *
+ * Returns the devnet mint address that the server keypair can MintTo, or null
+ * if the server keypair is not configured.
+ */
+async function resolveServerOwnedDevnetMint(
+  supabase: ReturnType<typeof getServiceClient>,
+  connection: Connection,
+  mainnetCa: string,
+  mintSigner: ReturnType<typeof getDevnetMintSigner>,
+  symbol: string | null,
+  decimals: number,
+): Promise<string | null> {
+  if (!mintSigner) return null;
+
+  // 1. Look for an existing server-owned mirror in devnet_mints for this mainnetCa.
+  //    The mainnet-mirror flow stores: mainnet_ca = <REAL_MAINNET_CA>, devnet_mint = <server-created devnet SPL>
+  const { data: mirrorRow } = await (supabase as any)
+    .from("devnet_mints")
+    .select("devnet_mint")
+    .eq("mainnet_ca", mainnetCa)
+    .neq("devnet_mint", mainnetCa) // exclude self-referencing native devnet entries
+    .maybeSingle();
+
+  if (mirrorRow?.devnet_mint) {
+    // Sanity-check: verify the server keypair is still the authority on-chain
+    try {
+      const mintPk = new PublicKey(mirrorRow.devnet_mint as string);
+      const mintInfo = await connection.getAccountInfo(mintPk);
+      if (mintInfo && mintInfo.data.length >= 36) {
+        const mintData = new Uint8Array(mintInfo.data);
+        const hasAuthority = new DataView(mintData.buffer, mintData.byteOffset).getUint32(0, true) === 1;
+        const mintAuthPk = new PublicKey(mintSigner.publicKey());
+        if (hasAuthority) {
+          const onChainAuthority = new PublicKey(mintData.slice(4, 36));
+          if (onChainAuthority.equals(mintAuthPk)) {
+            return mirrorRow.devnet_mint as string;
+          }
+          // Authority mismatch — this row is stale; fall through to create a new one
+          console.warn(
+            `[devnet-airdrop] resolveServerOwnedDevnetMint: stale mirror ${mirrorRow.devnet_mint} ` +
+            `for ${mainnetCa} — authority is ${onChainAuthority.toBase58().slice(0, 8)}, not server. Creating new.`,
+          );
+        }
+      }
+    } catch (e) {
+      // RPC error — proceed with creating a new mirror
+      console.warn("[devnet-airdrop] resolveServerOwnedDevnetMint: on-chain check failed:", e instanceof Error ? e.message : e);
+    }
+  }
+
+  // 2. No valid server-owned mirror found — create one now.
+  //    This handles the "devnet-native token created by Token Factory" case where
+  //    the user is the mint authority and the server cannot MintTo the original mint.
+  console.info(`[devnet-airdrop] GH#1769: creating server-owned mirror for mainnetCa=${mainnetCa}`);
+
+  const mintAuthPk = new PublicKey(mintSigner.publicKey());
+  const mintKeypair = Keypair.generate();
+  let lamports: number;
+  try {
+    lamports = await getMinimumBalanceForRentExemptMint(connection);
+  } catch (e) {
+    Sentry.captureException(e, {
+      tags: { endpoint: "/api/devnet-airdrop", step: "resolveServerOwnedDevnetMint.getMinimumBalance" },
+    });
+    return null;
+  }
+
+  const { blockhash } = await connection.getLatestBlockhash();
+  const createTx = new Transaction();
+  createTx.recentBlockhash = blockhash;
+  createTx.feePayer = mintAuthPk;
+
+  createTx.add(
+    SystemProgram.createAccount({
+      fromPubkey: mintAuthPk,
+      newAccountPubkey: mintKeypair.publicKey,
+      lamports,
+      space: MINT_SIZE,
+      programId: TOKEN_PROGRAM_ID,
+    }),
+  );
+  createTx.add(
+    createInitializeMintInstruction(
+      mintKeypair.publicKey,
+      decimals,
+      mintAuthPk,
+      mintAuthPk,
+    ),
+  );
+
+  // Multi-signer: mintKeypair signs first, then server keypair signs
+  createTx.partialSign(mintKeypair);
+  const signedCreateTx = mintSigner.signTransaction(createTx) as Transaction;
+
+  try {
+    const createSig = await connection.sendRawTransaction(signedCreateTx.serialize());
+    await connection.confirmTransaction(createSig, "confirmed");
+  } catch (e) {
+    Sentry.captureException(e, {
+      tags: { endpoint: "/api/devnet-airdrop", step: "resolveServerOwnedDevnetMint.createMint" },
+      extra: { mainnetCa },
+    });
+    console.error("[devnet-airdrop] resolveServerOwnedDevnetMint: mint creation failed:", e instanceof Error ? e.message : e);
+    return null;
+  }
+
+  const newDevnetMint = mintKeypair.publicKey.toBase58();
+
+  // 3. Store the new mirror in devnet_mints so future requests find it.
+  //    Use upsert with ignoreDuplicates in case of concurrent creation race.
+  await (supabase as any).from("devnet_mints").upsert(
+    {
+      mainnet_ca: mainnetCa,
+      devnet_mint: newDevnetMint,
+      symbol: symbol ?? "TOKEN",
+      name: symbol ?? "Token",
+      decimals,
+      creator_wallet: mintSigner.publicKey(),
+    },
+    { onConflict: "mainnet_ca", ignoreDuplicates: false },
+  ).then((result: { error?: { message: string } }) => {
+    if (result?.error) {
+      console.warn("[devnet-airdrop] resolveServerOwnedDevnetMint: upsert failed (non-fatal):", result.error.message);
+    }
+  });
+
+  console.info(`[devnet-airdrop] GH#1769: created server-owned mirror ${newDevnetMint} for ${mainnetCa}`);
+  return newDevnetMint;
+}
+
 export async function POST(req: NextRequest) {
   try {
     if (NETWORK !== "devnet") {
@@ -242,6 +392,9 @@ export async function POST(req: NextRequest) {
     //    tokens for any active market without hitting the misleading "not a known devnet
     //    mirror mint" error. The server API (/api/faucet) already accepts these mints —
     //    the client-side gating was the only blocker.
+    //    GH#1769: When devnet_mints has a self-referencing row (mainnet_ca = devnet_mint =
+    //    mintAddress, registered via devnet-register-mint for native devnet tokens), look
+    //    up the markets table to find the real mainnet_ca for DexScreener price lookup.
     const supabase = getServiceClient();
     const { data: mintRow, error: dbErr } = await (supabase as any)
       .from("devnet_mints")
@@ -252,12 +405,36 @@ export async function POST(req: NextRequest) {
     let mainnetCa: string;
     let symbol: string | null;
     let decimals: number;
+    // GH#1769: Track whether this is a server-created mirror (can MintTo) or
+    // a user-created native devnet token (needs resolveServerOwnedDevnetMint).
+    let isSelfReferencingNativeMint = false;
 
     if (!dbErr && mintRow) {
-      // Found in devnet_mints (mirror flow)
+      // Found in devnet_mints (mirror flow or native devnet registration)
       mainnetCa = mintRow.mainnet_ca;
       symbol = mintRow.symbol;
       decimals = mintRow.decimals ?? 6;
+
+      // GH#1769: Self-referencing row = native devnet token registered by devnet-register-mint.
+      // In this case mainnet_ca === devnet_mint === mintAddress — meaning the "mainnetCa"
+      // we have is actually the devnet address, not a real mainnet CA. Try to find the
+      // real mainnet_ca from the markets table for better price lookup and mirror resolution.
+      if (mainnetCa === mintAddress) {
+        isSelfReferencingNativeMint = true;
+        const { data: marketForNative } = await (supabase as any)
+          .from("markets")
+          .select("mainnet_ca, symbol, decimals")
+          .eq("mint_address", mintAddress)
+          .maybeSingle();
+        if (marketForNative?.mainnet_ca && marketForNative.mainnet_ca !== mintAddress) {
+          // Found a real mainnet CA — use it for DexScreener price lookup
+          mainnetCa = marketForNative.mainnet_ca;
+          if (!symbol && marketForNative.symbol) symbol = marketForNative.symbol;
+          if (!decimals && marketForNative.decimals) decimals = marketForNative.decimals ?? 6;
+        }
+        // mainnetCa may still equal mintAddress if no real CA found; that's fine —
+        // DexScreener will return no price and we'll use the 1000-token fallback.
+      }
     } else {
       // Fallback: check markets table for mint_address match (direct-created market mints)
       const { data: marketRow, error: marketErr } = await (supabase as any)
@@ -276,6 +453,8 @@ export async function POST(req: NextRequest) {
       mainnetCa = marketRow.mainnet_ca;
       symbol = marketRow.symbol;
       decimals = marketRow.decimals ?? 6;
+      // Markets table entry without a devnet_mints row = native devnet mint or unregistered mirror
+      isSelfReferencingNativeMint = !mainnetCa || mainnetCa === mintAddress;
     }
 
     // 2. INSERT-as-gate: atomically reserve the claim slot BEFORE minting.
@@ -336,8 +515,13 @@ export async function POST(req: NextRequest) {
 
       // Verify we are the mint authority — if not, we cannot mint tokens.
       // This happens for devnet-native tokens (e.g. user pasted a token address
-      // that exists on devnet but was created by someone else).
-      let authorityVerified = false;
+      // that exists on devnet but was created by someone else, e.g. Token Factory).
+      //
+      // GH#1769: Instead of returning a 400, auto-resolve to a server-owned mirror mint
+      // for the same mainnet CA. This ensures "Get Test Tokens" works immediately after
+      // market creation even when the market uses a user-created devnet-native token.
+      let effectiveMintPk = mintPk;
+      let effectiveMintAddress = mintAddress;
       try {
         const mintInfo = await connection.getAccountInfo(mintPk);
         if (!mintInfo) {
@@ -354,14 +538,47 @@ export async function POST(req: NextRequest) {
           if (hasAuthority) {
             const onChainAuthority = new PublicKey(mintData.slice(4, 36));
             if (!onChainAuthority.equals(mintAuthPk)) {
-              return NextResponse.json(
-                {
-                  error: `Cannot mint tokens: this mint's authority is ${onChainAuthority.toBase58().slice(0, 8)}…, not our devnet mint authority. This token was not created by the Percolator mirror system — it may have been mirrored with an old key. Contact support or use the devnet faucet page to obtain tokens.`,
-                  mintAuthority: onChainAuthority.toBase58(),
-                  hint: "old_key_mirror",
-                },
-                { status: 400 },
+              // GH#1769: Authority mismatch — server cannot MintTo this mint.
+              // Auto-resolve to a server-owned mirror for the same mainnet CA.
+              // This handles: Token Factory mints, user-created devnet tokens, old-key mirrors.
+              if (isSelfReferencingNativeMint || !mainnetCa || mainnetCa === mintAddress) {
+                // No real mainnet CA available — cannot create a useful mirror.
+                // Return the old error for truly unknown tokens.
+                return NextResponse.json(
+                  {
+                    error: `Cannot mint tokens: this mint was not created by the Percolator mirror system. Use the devnet faucet page (/devnet-mint) to obtain tokens.`,
+                    mintAuthority: onChainAuthority.toBase58(),
+                    hint: "not_percolator_mint",
+                  },
+                  { status: 400 },
+                );
+              }
+              // We have a real mainnet CA — try to find or create a server-owned mirror.
+              console.info(
+                `[devnet-airdrop] GH#1769: authority mismatch for ${mintAddress} ` +
+                `(authority=${onChainAuthority.toBase58().slice(0, 8)}). ` +
+                `Resolving server-owned mirror for mainnetCa=${mainnetCa}`,
               );
+              const resolvedMint = await resolveServerOwnedDevnetMint(
+                supabase,
+                connection,
+                mainnetCa,
+                mintSigner,
+                symbol,
+                decimals,
+              );
+              if (!resolvedMint) {
+                return NextResponse.json(
+                  {
+                    error: "Cannot mint tokens: mint authority mismatch and server could not create a mirror. Try the devnet faucet page (/devnet-mint).",
+                    hint: "old_key_mirror",
+                  },
+                  { status: 400 },
+                );
+              }
+              // Switch to the resolved server-owned mint for the rest of the flow.
+              effectiveMintPk = new PublicKey(resolvedMint);
+              effectiveMintAddress = resolvedMint;
             }
           } else {
             return NextResponse.json(
@@ -369,7 +586,6 @@ export async function POST(req: NextRequest) {
               { status: 400 },
             );
           }
-          authorityVerified = true;
         }
       } catch (authCheckErr) {
         // RPC error during authority check — log and surface as 503 (retryable) rather than
@@ -386,13 +602,8 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // Extra guard: if the mint data was too short to parse authority (< 36 bytes),
-      // authorityVerified stays false. Proceed cautiously — sendRawTransaction will
-      // fail if authority is wrong, and we catch that below.
-      void authorityVerified; // used for Sentry context in future if needed
-
-      // Derive user's ATA
-      const ata = await getAssociatedTokenAddress(mintPk, walletPk);
+      // Derive user's ATA (using effectiveMintPk which may be the resolved server-owned mirror)
+      const ata = await getAssociatedTokenAddress(effectiveMintPk, walletPk);
       let ataExists = false;
       try {
         await getAccount(connection, ata);
@@ -409,11 +620,11 @@ export async function POST(req: NextRequest) {
             mintAuthPk, // payer
             ata,
             walletPk,
-            mintPk,
+            effectiveMintPk,
           ),
         );
       }
-      tx.add(createMintToInstruction(mintPk, ata, mintAuthPk, rawAmount));
+      tx.add(createMintToInstruction(effectiveMintPk, ata, mintAuthPk, rawAmount));
 
       // Set recentBlockhash and feePayer before signing.
       // sendRawTransaction requires both fields to be set — unlike sendAndConfirmTransaction
@@ -451,7 +662,7 @@ export async function POST(req: NextRequest) {
         if (isAuthorityError) {
           Sentry.captureException(mintErr, {
             tags: { endpoint: "/api/devnet-airdrop", step: "mint_authority_mismatch" },
-            extra: { mintAddress, walletAddress },
+            extra: { mintAddress: effectiveMintAddress, walletAddress },
           });
           // Don't re-throw — let the finally block release the claim, then return 400
           return NextResponse.json(

@@ -746,6 +746,32 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // GH#1769: Ensure devnet_mints has a row for this market's devnet mint address.
+  // The devnet-airdrop endpoint looks up devnet_mints.devnet_mint = mintAddress to
+  // find the mainnet_ca for price lookup. If the wizard's devnet-mirror-mint step
+  // ran, this row already exists and the upsert is a no-op. If the market was created
+  // via the mobile API or a direct /api/markets POST (without going through the wizard),
+  // this ensures the airdrop endpoint can still resolve the token metadata.
+  // Only write if we have a valid mint_address and mainnet_ca (to avoid polluting the
+  // table with self-referencing devnet-native entries that have no real mainnet CA).
+  if (mint_address && mainnet_ca && mainnet_ca !== mint_address) {
+    try {
+      await ((supabase as any).from("devnet_mints")).upsert(
+        {
+          mainnet_ca,
+          devnet_mint: mint_address,
+          symbol: symbol || mint_address.slice(0, 4).toUpperCase(),
+          name: name || `Token ${mint_address.slice(0, 8)}`,
+          decimals: decimals || 6,
+          creator_wallet: deployer,
+        },
+        { onConflict: "mainnet_ca", ignoreDuplicates: true },
+      );
+    } catch {
+      // Non-fatal — devnet-airdrop has fallback via markets table
+    }
+  }
+
     return NextResponse.json({ market }, { status: 201 });
   } catch (error) {
     Sentry.captureException(error, {
