@@ -2,6 +2,7 @@
 
 import { useTradeHistory } from "@/hooks/useTradeHistory";
 import { formatTokenAmount } from "@/lib/format";
+import { getMarket } from "@/lib/markets";
 import { useMultiTokenMeta } from "@/hooks/useMultiTokenMeta";
 import { ShimmerSkeleton } from "@/components/ui/ShimmerSkeleton";
 
@@ -29,14 +30,14 @@ function formatFee(feeNum: number): string {
   }
 }
 
-function formatSize(sizeStr: string): string {
+function formatSize(sizeStr: string, decimals: number = 6): string {
   try {
     const raw = BigInt(sizeStr.split(".")[0]);
     const abs = raw < 0n ? -raw : raw;
-    return formatTokenAmount(abs, 6);
+    return formatTokenAmount(abs, decimals);
   } catch {
     const n = Math.abs(parseFloat(sizeStr) || 0);
-    return formatTokenAmount(BigInt(Math.round(n)), 6);
+    return formatTokenAmount(BigInt(Math.round(n)), decimals);
   }
 }
 
@@ -176,7 +177,7 @@ export function TradeHistoryTable({
                   className="text-[11px] text-white"
                   style={{ fontFamily: "var(--font-jetbrains-mono)", fontVariantNumeric: "tabular-nums" }}
                 >
-                  {formatSize(trade.size)}
+                  {formatSize(trade.size, getMarket(trade.slab_address)?.decimals ?? 6)}
                 </p>
               </div>
 
