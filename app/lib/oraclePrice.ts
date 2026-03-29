@@ -55,6 +55,9 @@ export function detectOracleMode(cfg: {
  * For display purposes (markets page, trade page), this returns the best available
  * price from on-chain data. The caller should divide by 1_000_000 to get USD.
  *
+ * Applies config.invert if provided: when invert === 1, inverts the price via 1e12 / price.
+ * This is crucial for markets like SOL/USD where on-chain price is stored as inverted.
+ *
  * @returns priceE6 (bigint) or 0n if no valid price available
  */
 export function resolveMarketPriceE6(cfg: {
@@ -63,6 +66,7 @@ export function resolveMarketPriceE6(cfg: {
   lastEffectivePriceE6: bigint;
   authorityPriceE6: bigint;
   authorityTimestamp?: bigint;
+  invert?: number;  // Optional invert flag (0 or 1)
 }): bigint {
   const mode = detectOracleMode(cfg);
 
@@ -92,7 +96,17 @@ export function resolveMarketPriceE6(cfg: {
   }
 
   // Sanitize: reject corrupt/uninitialized values that exceed Rust MAX_ORACLE_PRICE
-  return sanitizePriceE6(raw);
+  raw = sanitizePriceE6(raw);
+  if (raw === 0n) return 0n;
+
+  // Apply price inversion if configured (GH#1831)
+  // Inverted markets store price as quote/base (e.g. USDC/SOL), but display as base/quote (SOL/USDC)
+  // Compute: 1e12 / raw to flip the pair
+  if (cfg.invert === 1) {
+    return 1_000_000_000_000n / raw;  // 1e12 / price
+  }
+
+  return raw;
 }
 
 /**
