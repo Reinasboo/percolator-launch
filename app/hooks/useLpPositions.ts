@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { PublicKey } from '@solana/web3.js';
 import { useWalletCompat, useConnectionCompat } from '@/hooks/useWalletCompat';
-import { getAssociatedTokenAddressSync, unpackAccount } from '@solana/spl-token';
+import { getAssociatedTokenAddressSync, unpackAccount, getMint } from '@solana/spl-token';
 import { getStakeProgramId, deriveDepositPda } from '@percolator/sdk';
 
 
@@ -163,16 +163,24 @@ export function useLpPositions(): LpPositionsState & { refresh: () => void } {
           // Skip pools where user has no LP tokens
           if (lpBalanceRaw === 0n) return null;
 
+          // Fetch actual LP mint decimals (GH#1839)
+          let decimals = 6; // fallback to 6 if fetch fails
+          try {
+            const lpMintInfo = await getMint(connection, lpMintPk);
+            decimals = lpMintInfo.decimals;
+          } catch {
+            // fallback if mint info unavailable
+          }
+
           // 3. Compute redeemable value: (lpBalance / totalLpSupply) * tvl
-          const DECIMALS = 6; // USDC 6 decimals
-          const lpBalance = Number(lpBalanceRaw) / Math.pow(10, DECIMALS);
+          const lpBalance = Number(lpBalanceRaw) / Math.pow(10, decimals);
           const totalLpSupply = pool.totalLpSupply;
           const tvlRaw = BigInt(pool.tvlRaw);
 
           const redeemableRaw: bigint = totalLpSupply > 0
             ? (lpBalanceRaw * tvlRaw) / BigInt(Math.round(totalLpSupply))
             : 0n;
-          const redeemable = Number(redeemableRaw) / Math.pow(10, DECIMALS);
+          const redeemable = Number(redeemableRaw) / Math.pow(10, decimals);
           const userSharePct = totalLpSupply > 0
             ? (Number(lpBalanceRaw) / totalLpSupply) * 100
             : 0;
