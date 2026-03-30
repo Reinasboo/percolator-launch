@@ -1139,7 +1139,7 @@ var V1M_ENGINE_LP_MAX_ABS_SWEEP_OFF = 664;
 var V1M_ENGINE_EMERGENCY_OI_MODE_OFF = 680;
 var V1M_ENGINE_EMERGENCY_START_SLOT_OFF = 688;
 var V1M_ENGINE_LAST_BREAKER_SLOT_OFF = 696;
-var V1M_ENGINE_BITMAP_OFF = 726;
+var V1M_ENGINE_BITMAP_OFF = 720;
 var ENGINE_OFF = V1_ENGINE_OFF;
 var ENGINE_MARK_PRICE_OFF = V1_ENGINE_MARK_PRICE_OFF;
 function computeSlabSize(engineOff, bitmapOff, accountSize, maxAccounts, postBitmap = 18) {
@@ -1630,6 +1630,10 @@ function parseConfig(data, layoutHint) {
   let cumulativeVolumeE6 = 0n;
   let phase2DeltaSlots = 0;
   if (remaining >= 40) {
+    marketCreatedSlot = readU64LE(data, off);
+    off += 8;
+    oiRampSlots = readU64LE(data, off);
+    off += 8;
     adaptiveFundingEnabled = readU8(data, off) !== 0;
     off += 1;
     off += 1;
@@ -1637,13 +1641,6 @@ function parseConfig(data, layoutHint) {
     off += 2;
     off += 4;
     adaptiveMaxFundingBps = readU64LE(data, off);
-    off += 8;
-    marketCreatedSlot = readU64LE(data, off);
-    off += 8;
-    oiRampSlots = readU64LE(data, off);
-    off += 8;
-    resolvedSlot = readU64LE(data, off);
-    off += 8;
     off += 8;
     if (remaining >= 42) {
       insuranceIsolationBps = readU16LE(data, off);
