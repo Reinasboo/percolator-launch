@@ -86,7 +86,9 @@ export async function GET(
   const rawLimit = parseInt(url.searchParams.get("limit") ?? "20", 10);
   const limit = Math.min(Math.max(1, Number.isNaN(rawLimit) ? 20 : rawLimit), 100);
   const rawOffset = parseInt(url.searchParams.get("offset") ?? "0", 10);
-  const offset = Math.max(0, Number.isNaN(rawOffset) ? 0 : rawOffset);
+  // VAL-001: Clamp offset to reasonable maximum (100k) to prevent query performance issues
+  const MAX_OFFSET = 100_000;
+  const offset = Math.max(0, Math.min(Number.isNaN(rawOffset) ? 0 : rawOffset, MAX_OFFSET));
 
   // Optional slab filter
   const slabFilter = url.searchParams.get("slab");

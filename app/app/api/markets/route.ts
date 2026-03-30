@@ -746,7 +746,13 @@ export async function POST(req: NextRequest) {
         },
         body: JSON.stringify({ slabAddress: slab_address, mainnetCA: mainnet_ca }),
         signal: AbortSignal.timeout(5000),
-      }).catch(() => {});
+      }).catch((err) => {
+        // EH-001: Log keeper registration failures without blocking market creation
+        console.debug(
+          '[markets POST] Keeper registration failed (non-fatal):',
+          err instanceof Error ? err.message : String(err)
+        );
+      });
     } catch {
       // Non-fatal — oracle keeper will discover via Supabase polling
     }

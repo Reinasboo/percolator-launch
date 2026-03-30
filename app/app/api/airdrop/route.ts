@@ -337,7 +337,17 @@ export async function POST(req: NextRequest) {
       if (stats?.last_price && stats.last_price > 0) {
         priceUsd = stats.last_price;
       }
-    } catch {}
+    } catch (err) {
+      // EH-001: Log price fetch failures for debugging without blocking the airdrop
+      console.warn(
+        '[airdrop] Failed to fetch market stats for pricing:',
+        err instanceof Error ? err.message : String(err)
+      );
+      Sentry.captureException(err, {
+        tags: { endpoint: '/api/airdrop', step: 'fetch_market_stats' },
+        extra: { marketAddress },
+      });
+    }
 
     // Load mint authority via sealed signer (consistent with devnet-mint-token and devnet-mirror-mint)
     const mintSigner = getDevnetMintSigner();
