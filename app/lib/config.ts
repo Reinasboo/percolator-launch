@@ -208,7 +208,7 @@ export function getBackendUrl(): string {
       "No hardcoded fallback is provided — ensure your environment configuration is correct."
     );
   }
-  return url;
+  return url.trim();
 }
 
 /** Build an explorer URL for a transaction */
