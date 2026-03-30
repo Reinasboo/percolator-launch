@@ -167,7 +167,8 @@ export const PositionPanel: FC<{ slabAddress: string }> = ({ slabAddress }) => {
   if (hasPosition && sanitizedFundingRate !== null) {
     const rateBpsPerSlot = Number(sanitizedFundingRate);
     const slotsPerHour = 9000;
-    const hourlyRatePercent = (rateBpsPerSlot * slotsPerHour) / 10000;
+    // /100 converts bps → percent (GH#1943: was /10000 causing 10,000x underreport)
+    const hourlyRatePercent = (rateBpsPerSlot * slotsPerHour) / 100;
     const rate8hPercent = hourlyRatePercent * 8;
 
     const longsPay = rateBpsPerSlot > 0;
@@ -196,8 +197,10 @@ export const PositionPanel: FC<{ slabAddress: string }> = ({ slabAddress }) => {
   if (hasPosition && sanitizedFundingRate !== null) {
     const rateBpsPerSlot = Number(sanitizedFundingRate);
     const slotsPerHour = 9000;
-    const hourlyRatePercent = (rateBpsPerSlot * slotsPerHour) / 10000;
+    // /100 converts bps → percent (GH#1943: was /10000 causing 10,000x underreport)
+    const hourlyRatePercent = (rateBpsPerSlot * slotsPerHour) / 100;
     const positionTokens = Number(absPosition) / (10 ** decimals);
+    // hourlyRatePercent is already in percent; /100 converts to fraction for est24h
     const est24h = Math.abs((hourlyRatePercent / 100) * 24 * positionTokens);
     const longsPay = rateBpsPerSlot > 0;
     const userPays = isLong ? longsPay : !longsPay;

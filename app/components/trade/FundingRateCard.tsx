@@ -110,7 +110,8 @@ export const FundingRateCard: FC<{ slabAddress: string }> = ({ slabAddress }) =>
         });
         // P3-4: fetch last 4 funding history points for mini bar chart
         // /history returns { rateBpsPerSlot } — convert to 8h rate%:
-        // hourly% = (rateBpsPerSlot / 10000) * 9000  →  8h% = hourly * 8
+        // 8h rate% = (rateBpsPerSlot * 9000 * 8) / 100
+        // GH#1943: was (raw / 10000) * 9000 * 8 — 10,000x underreport, fixed.
         try {
           const histRes = await fetch(`/api/funding/${slabAddress}/history?limit=4`, { signal });
           if (histRes.ok && !cancelled) {
@@ -123,7 +124,7 @@ export const FundingRateCard: FC<{ slabAddress: string }> = ({ slabAddress }) =>
               .map(p => {
                 const raw = p.rateBpsPerSlot ?? 0;
                 if (!Number.isFinite(raw) || Math.abs(raw) > RATE_BPS_MAX) return null;
-                return (raw / 10000) * 9000 * 8;
+                return (raw * 9000 * 8) / 100;
               })
               .filter((r): r is number => r !== null);
             if (!cancelled) setMiniChartRates(rates);
@@ -136,7 +137,8 @@ export const FundingRateCard: FC<{ slabAddress: string }> = ({ slabAddress }) =>
         // Silently fall back to on-chain data — no error shown to user
         if (!cancelled && engine && sanitizeFundingRateBps(fundingRate) !== null) {
           const rate = Number(sanitizeFundingRateBps(fundingRate)!);
-          const hourly = (rate * 9000) / 10000;
+          // /100 converts bps → percent (GH#1943: was /10000)
+          const hourly = (rate * 9000) / 100;
           const apr = hourly * 24 * 365;
           const netLp = engine?.netLpPos ?? 0n;
           setFundingData({

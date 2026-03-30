@@ -16,8 +16,9 @@ export const FundingRate: FC = () => {
   // Values outside this range are garbage (wrong offset / uninit slab) — show zero.
   const sanitized = sanitizeFundingRateBps(fundingRate);
   const bpsPerSlot = sanitized !== null ? Number(sanitized) : 0;
-  // Slots ≈ 400ms → 9000 slots/hr; divide by 100 to convert bps → %
-  const hourlyRate = (bpsPerSlot * 9000) / 10000;
+  // Slots ≈ 400ms → 9000 slots/hr; /100 converts bps → percent.
+  // GH#1943: previously used /10000 which gave 10,000x underreport — fixed.
+  const hourlyRate = (bpsPerSlot * 9000) / 100;
   // 8h rate = hourly * 8 — consistent with FundingRateCard and MarketStatsCard
   const eightHourRate = hourlyRate * 8;
   const annualizedRate = hourlyRate * 24 * 365;

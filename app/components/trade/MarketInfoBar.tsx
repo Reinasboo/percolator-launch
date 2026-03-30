@@ -24,10 +24,12 @@ function formatCompact(n: number | null | undefined): string {
 /**
  * Phase 2: funding rate display — designer note says show funding / 8h.
  * fundingRateBps is per-slot bps. Solana ~9000 slots/hr → convert to 8-hour rate.
- * 8h rate% = (rateBps * 9000 * 8) / 10000 / 100
+ * 8h rate% = (rateBpsPerSlot * slotsPerHr * 8) / 100
+ * where slotsPerHr ≈ 9000 (400ms slots), /100 converts bps → percent.
+ * Previously used /10000/100 (GH#1943: 10,000x underreport — fixed).
  */
 function fundingRateBpsTo8h(rateBps: bigint): number {
-  return ((Number(rateBps) * 9000 * 8) / 10000) / 100;
+  return (Number(rateBps) * 9000 * 8) / 100;
 }
 
 /** P3-3: Market health badge — surfaces oracle/liquidity status in the ticker bar */

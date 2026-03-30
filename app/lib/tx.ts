@@ -406,9 +406,11 @@ export async function sendTx({
 
       const signed = await wallet.signTransaction(tx);
 
-      // GH#1209: devnet RPC batch simulation can fail with "Missing response from batch".
-      // When that happens, retry with skipPreflight: true — safe because we already ran
-      // our own pre-sign simulateTransaction above which catches program errors.
+      // Send with preflight always enabled — skipPreflight is unsafe on production
+      // because it bypasses node-level validation before broadcast. Our pre-sign
+      // simulateTransaction above already catches program errors; if the RPC is
+      // unhealthy enough to fail here, we surface the error and let the retry loop
+      // handle it rather than silently skipping preflight (GH#1942 fix).
       try {
         lastSignature = await connection.sendRawTransaction(signed.serialize(), {
           skipPreflight: false,
@@ -422,26 +424,12 @@ export async function sendTx({
           sendMsg.includes("RPC response error");
 
         if (isBatchError) {
-          // Extract logs from SendTransactionError if available
-          let extraLogs = "";
-          if (sendErr instanceof SendTransactionError) {
-            try {
-              const logs = await sendErr.getLogs(connection);
-              if (logs && logs.length > 0) {
-                extraLogs = `\nLogs:\n${logs.slice(-5).join("\n")}`;
-              }
-            } catch {
-              // getLogs() may fail if RPC is unhealthy — don't block
-            }
-          }
+          // RPC is unhealthy — log and let the outer retry loop handle it.
+          // We no longer fall back to skipPreflight:true on this path (GH#1942).
           console.warn(
-            `[sendTx] Batch RPC simulation error (attempt ${attempt + 1}); retrying with skipPreflight: true.${extraLogs}`
+            `[sendTx] Batch RPC error (attempt ${attempt + 1}); will retry.`
           );
-          // Retry without preflight — we already validated via simulateTransaction
-          lastSignature = await connection.sendRawTransaction(signed.serialize(), {
-            skipPreflight: true,
-            maxRetries: 5,
-          });
+          throw sendErr;
         } else if (sendErr instanceof SendTransactionError) {
           // Extract logs for non-batch SendTransactionErrors to give a clearer message
           try {

@@ -39,11 +39,13 @@ function formatPriceE6(priceE6: bigint): string {
 /**
  * Convert fundingRateBpsPerSlotLast (i64) to 8-hour percentage.
  * Solana slots ≈ 400ms → 9000 slots/hr → 72000 slots/8h
- * 8h rate% = (rateBpsPerSlot * 9000 * 8) / 10000 / 100
+ * 8h rate% = (rateBpsPerSlot * slotsPerHr * 8) / 100
+ * where /100 converts bps → percent.
+ * Previously used /10000/100 (GH#1943: 10,000x underreport — fixed).
  * Consistent with MarketInfoBar label "/ 8h".
  */
 function fundingRateBpsTo8h(rateBps: bigint): number {
-  return ((Number(rateBps) * 9000 * 8) / 10000) / 100;
+  return (Number(rateBps) * 9000 * 8) / 100;
 }
 
 export const MarketStatsCard: FC = () => {
