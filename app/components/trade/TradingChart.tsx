@@ -36,6 +36,12 @@ const TIMEFRAME_MS: Record<Timeframe, number> = {
 
 const CANDLE_INTERVAL_MS = 5 * 60 * 1000;
 
+/** Oracle price history uses unix seconds; external chart candles use ms (Prompt 89). */
+function pricePointTimestampToMs(t: number): number {
+  if (!Number.isFinite(t) || t <= 0) return Date.now();
+  return t < 100_000_000_000 ? t * 1000 : t;
+}
+
 // PERC-8090: removed 7d/30d from TIMEFRAMES — too exotic for a perps UI
 const VISIBLE_TIMEFRAMES: Timeframe[] = ["1m", "5m", "15m", "1h", "4h", "1d"];
 
@@ -126,7 +132,7 @@ export const TradingChart: FC<{ slabAddress: string; mintAddress?: string }> = (
       .then((r) => r.json())
       .then((d) => {
         const apiPrices = (d.prices ?? []).map((p: { price_e6: string; timestamp: number }) => ({
-          timestamp: p.timestamp,
+          timestamp: pricePointTimestampToMs(p.timestamp),
           price: parseInt(p.price_e6) / 1e6,
         }));
         setOraclePrices(apiPrices);
