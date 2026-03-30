@@ -20,6 +20,7 @@ import { useIsLargeScreen } from "@/hooks/useIsLargeScreen";
 import { useAdvanceOraclePhase } from "@/hooks/useAdvanceOraclePhase";
 import { TradeHistory } from "@/components/trade/TradeHistory";
 import { LiquidationAnalytics } from "@/components/trade/LiquidationAnalytics";
+import { AdlLeaderboard } from "@/components/trade/AdlLeaderboard";
 import { CrankHealthCard } from "@/components/trade/CrankHealthCard";
 import { KeeperFundCard } from "@/components/market/KeeperFundCard";
 import { SystemCapitalCard } from "@/components/trade/SystemCapitalCard";
@@ -386,8 +387,8 @@ function TradePageInner({ slab }: { slab: string }) {
           </Collapsible>
         </ErrorBoundary>
 
-        {/* Bottom tabs: Stats | Trades | Book */}
-        <Tabs tabs={["Stats", "Trades", "Health", "Risk", "Book"]}>
+        {/* Bottom tabs: Stats | Trades | Health | Risk | ADL | Book */}
+        <Tabs tabs={["Stats", "Trades", "Health", "Risk", "ADL", "Book"]}>
           <ErrorBoundary label="MarketStatsCard"><MarketStatsCard /></ErrorBoundary>
           <ErrorBoundary label="TradeHistory"><TradeHistory slabAddress={slab} /></ErrorBoundary>
           <ErrorBoundary label="EngineHealthCard">
@@ -402,6 +403,9 @@ function TradePageInner({ slab }: { slab: string }) {
             <div className="mt-2"><KeeperFundCard /></div>
             <div className="mt-2"><LiquidationAnalytics /></div>
             <div className="mt-2"><SystemCapitalCard /></div>
+          </ErrorBoundary>
+          <ErrorBoundary label="AdlLeaderboard">
+            <AdlLeaderboard slabAddress={slab} />
           </ErrorBoundary>
           <ErrorBoundary label="MarketBookCard"><MarketBookCard /></ErrorBoundary>
         </Tabs>
@@ -450,7 +454,7 @@ function TradePageInner({ slab }: { slab: string }) {
           </div>
 
           {/* Market info tabs — Book removed (now in middle column) */}
-          <Tabs tabs={["Stats", "Trades", "Health", "Risk"]}>
+          <Tabs tabs={["Stats", "Trades", "Health", "Risk", "ADL"]}>
             <ErrorBoundary label="MarketStatsCard"><MarketStatsCard /></ErrorBoundary>
             <ErrorBoundary label="TradeHistory"><TradeHistory slabAddress={slab} /></ErrorBoundary>
             <ErrorBoundary label="EngineHealthCard">
@@ -464,6 +468,9 @@ function TradePageInner({ slab }: { slab: string }) {
               <div className="mt-1.5"><KeeperFundCard /></div>
               <div className="mt-1.5"><LiquidationAnalytics /></div>
               <div className="mt-1.5"><SystemCapitalCard /></div>
+            </ErrorBoundary>
+            <ErrorBoundary label="AdlLeaderboard">
+              <AdlLeaderboard slabAddress={slab} />
             </ErrorBoundary>
           </Tabs>
         </div>
