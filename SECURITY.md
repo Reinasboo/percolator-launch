@@ -198,6 +198,12 @@ pnpm --filter=@percolator/api dev
 
 ---
 
+## Internal security review cadence
+
+For a structured, recurring review (quarterly or before major releases), use the [internal security review checklist](docs/internal-security-review-checklist.md). It complements automated checks such as dependency auditing in CI; it does not replace external penetration testing where that is warranted.
+
+---
+
 ## 🐛 Responsible Disclosure
 
 We take security seriously and appreciate the work of security researchers who help keep Percolator Launch safe for everyone.
