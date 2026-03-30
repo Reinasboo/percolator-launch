@@ -17,7 +17,8 @@
  *  6. Mobile calls POST /api/markets to register the new market in the dashboard DB
  *
  * Security: server keypairs are ephemeral (never persisted). The deployer field is
- * validated as a valid Solana pubkey. This endpoint is devnet-only for beta.
+ * validated as a valid Solana pubkey. When NEXT_PUBLIC_DEFAULT_NETWORK (or
+ * NEXT_PUBLIC_SOLANA_NETWORK) is mainnet, POST returns 403 — devnet/beta only.
  */
 import { NextRequest, NextResponse } from "next/server";
 import {
@@ -119,6 +120,16 @@ export async function POST(req: NextRequest) {
           "X-RateLimit-Reset": String(Math.max(0, rl.retryAfterSecs)),
         },
       },
+    );
+  }
+
+  const network =
+    process.env.NEXT_PUBLIC_DEFAULT_NETWORK?.trim() ??
+    process.env.NEXT_PUBLIC_SOLANA_NETWORK?.trim();
+  if (network === "mainnet") {
+    return NextResponse.json(
+      { error: "Mobile create-market is not enabled on mainnet." },
+      { status: 403 },
     );
   }
 
