@@ -497,7 +497,7 @@ const DevnetMintContent: FC = () => {
 
   const cardClass = "bg-[var(--panel-bg)] border border-[var(--border)] p-4 sm:p-6";
   const btnPrimary = "border border-[var(--accent)]/40 text-[var(--accent)] bg-transparent px-5 py-2.5 text-sm font-semibold transition-all duration-200 hover:border-[var(--accent)]/70 hover:bg-[var(--accent)]/[0.08] active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100";
-  const inputClass = "w-full bg-[var(--panel-bg)] border border-[var(--border)] px-3 py-2 text-sm text-[var(--text)] placeholder-[var(--text-muted)] focus:border-[var(--accent)]/40 focus:outline-none transition-shadow duration-200";
+  const inputClass = "w-full bg-[var(--panel-bg)] border border-[var(--border)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)]/40 focus:outline-none transition-shadow duration-200";
 
   const lowSol = balance !== null && balance < 0.01;
   const walletReady = !!publicKey && !!signTransaction;
