@@ -12,6 +12,7 @@ import { computeDisplayOiUsd } from "@/lib/oi-display";
 import { computeMarketHealthFromStats } from "@/lib/health";
 import { BLOCKED_SLAB_ADDRESSES } from "@/lib/blocklist";
 import { SLUG_ALIASES } from "@/lib/symbol-utils";
+import { getClientIp } from "@/lib/get-client-ip";
 
 /**
  * GH#1526: Map frontend oracle_mode filter values to DB-stored values.
@@ -729,12 +730,14 @@ export async function POST(req: NextRequest) {
     // the same nonce, only one UPDATE can match (used_at IS NULL), the other gets count=0.
     const supabaseAuth = getServiceClient();
     const now = new Date();
+    const clientIp = getClientIp(req);
 
     const { count: consumed, error: claimErr } = await (supabaseAuth as ReturnType<typeof getServiceClient>)
       .from("market_challenges" as never)
       .update({ used_at: now.toISOString() } as never, { count: "exact" } as never)
       .eq("nonce", nonce)
       .eq("deployer", deployer)
+      .eq("client_ip", clientIp)
       .is("used_at", null)
       .gt("expires_at", now.toISOString())
       .select("nonce" as never) as { count: number | null; error: unknown };
