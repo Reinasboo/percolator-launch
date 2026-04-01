@@ -22,10 +22,40 @@ export const dynamic = "force-dynamic";
 
 const CHALLENGE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const MAX_PENDING_PER_DEPLOYER = 10;
+const MAX_CHALLENGES_PER_IP_PER_MINUTE = 30;
+
+const ipRateMap = new Map<string, { count: number; resetAt: number }>();
+
+function isIpRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const entry = ipRateMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    ipRateMap.set(ip, { count: 1, resetAt: now + 60_000 });
+    return false;
+  }
+  if (entry.count >= MAX_CHALLENGES_PER_IP_PER_MINUTE) return true;
+  entry.count++;
+  return false;
+}
 
 export async function GET(req: NextRequest) {
   try {
     const deployer = req.nextUrl.searchParams.get("deployer");
+    const clientIp = getClientIp(req);
+
+    if (isIpRateLimited(clientIp)) {
+      return NextResponse.json(
+        { error: "Rate limited — max 30 challenge requests per minute per IP" },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": "60",
+            "X-RateLimit-Limit": String(MAX_CHALLENGES_PER_IP_PER_MINUTE),
+            "X-RateLimit-Window": "60s",
+          },
+        },
+      );
+    }
 
     if (!deployer) {
       return NextResponse.json(
@@ -47,8 +77,6 @@ export async function GET(req: NextRequest) {
     const supabase = getServiceClient();
     const now = new Date();
     const expiresAt = new Date(now.getTime() + CHALLENGE_TTL_MS);
-    const clientIp = getClientIp(req);
-
     // Prune expired challenges lazily (cap query to avoid long-running cleanup)
     await (supabase as ReturnType<typeof getServiceClient>)
       .from("market_challenges" as never)
