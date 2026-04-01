@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceClient, getServerNetwork } from "@/lib/supabase";
 import { PublicKey } from "@solana/web3.js";
+import { getClientIp } from "@/lib/get-client-ip";
 
 /**
  * GET /api/trader/:wallet/trades?limit=20&offset=0&slab=<optional>
@@ -53,10 +54,7 @@ export async function GET(
   { params }: { params: Promise<{ wallet: string }> },
 ) {
   // Rate limiting — 60 req/min per IP (fixes #700)
-  const ip =
-    _request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-    _request.headers.get("x-real-ip") ??
-    "unknown";
+  const ip = getClientIp(_request);
   if (isRateLimited(ip)) {
     return NextResponse.json(
       { error: "Too many requests — max 60 per minute" },
