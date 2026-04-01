@@ -8,6 +8,10 @@ export type AdminSessionResult =
   | { ok: true; user: User }
   | { ok: false; response: NextResponse };
 
+function normalizedEmail(value: string): string {
+  return value.trim().toLowerCase();
+}
+
 /**
  * Verify Supabase Auth session (cookies) and membership in `admin_users`.
  * For Route Handlers that return PII using `getServiceClient()`.
@@ -46,12 +50,23 @@ export async function requireAdminSession(): Promise<AdminSessionResult> {
     };
   }
 
+  // Do not trust unverified email claims for service-role admin lookups.
+  // This keeps admin elevation tied to verified identity state.
+  if (!user.email_confirmed_at) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+    };
+  }
+
+  const email = normalizedEmail(user.email);
+
   const sb = getServiceClient();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: adminRow } = await (sb as any)
     .from("admin_users")
     .select("id")
-    .eq("email", user.email)
+    .eq("email", email)
     .maybeSingle();
 
   if (!adminRow) {
