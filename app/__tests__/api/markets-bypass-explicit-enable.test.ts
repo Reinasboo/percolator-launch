@@ -1,0 +1,15 @@
+import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+describe("markets auth bypass explicit enable", () => {
+  it("requires MARKETS_AUTH_BYPASS_ENABLED=true in addition to bypass secret", () => {
+    const source = readFileSync(
+      resolve(__dirname, "../../app/api/markets/route.ts"),
+      "utf8",
+    );
+
+    expect(source).toContain("const bypassEnabled = process.env.MARKETS_AUTH_BYPASS_ENABLED === \"true\";");
+    expect(source).toContain("const isBypass = !isProd && bypassEnabled && bypassSecret && bypassHeader === bypassSecret;");
+  });
+});
