@@ -184,7 +184,13 @@ export async function POST(req: NextRequest) {
             });
           }
           const mirrorRow = mirrorRows?.[0];
-          finallyPermitted = !!mirrorRow?.devnet_mint;
+          // GH#1816: Explicit type guard — verify mirrorRow structure
+          finallyPermitted = !!(
+            mirrorRow &&
+            typeof mirrorRow === "object" &&
+            "devnet_mint" in mirrorRow &&
+            typeof (mirrorRow as Record<string, unknown>).devnet_mint === "string"
+          );
         } catch (e) {
           Sentry.captureException(e, {
             tags: { endpoint: "/api/devnet-pre-fund", phase: "dynamic-mint-check" },
@@ -209,7 +215,16 @@ export async function POST(req: NextRequest) {
           });
         }
         const mirrorRow = mirrorRows?.[0];
-        finallyPermitted = !!mirrorRow?.devnet_mint;
+        // GH#1816: Explicit type guard — verify mirrorRow has required devnet_mint property.
+        // Previously !!mirrorRow?.devnet_mint would correctly fail-closed (undefined → false),
+        // but being explicit about structure validation is clearer and prevents subtle bugs
+        // if the schema changes or malformed data is returned from DB.
+        finallyPermitted = !!(
+          mirrorRow &&
+          typeof mirrorRow === "object" &&
+          "devnet_mint" in mirrorRow &&
+          typeof (mirrorRow as Record<string, unknown>).devnet_mint === "string"
+        );
       } catch (e) {
         Sentry.captureException(e, {
           tags: { endpoint: "/api/devnet-pre-fund", phase: "dynamic-mint-check" },
