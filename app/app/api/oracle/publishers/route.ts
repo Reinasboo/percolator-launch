@@ -181,7 +181,20 @@ async function fetchPythPublishers(feedIdHex: string): Promise<PublishersRespons
     };
   }
 
-  const data = Buffer.from(json.result.value.data[0], "base64");
+  // GH#1814: Validate buffer size before decoding to prevent OOM attacks.
+  // Pyth price accounts are typically ~5-10KB; reject anything larger than 1MB.
+  const b64Data = json.result.value.data[0];
+  if (typeof b64Data === "string" && Buffer.byteLength(b64Data, "base64") > 1_000_000) {
+    console.warn("[oracle/publishers] Pyth account data too large (>1MB), rejecting");
+    return {
+      mode: "pyth-pinned",
+      publisherCount: null,
+      publisherTotal: null,
+      publishers: [],
+    };
+  }
+
+  const data = Buffer.from(b64Data, "base64");
 
   const magic = data.readUInt32LE(0);
   if (magic !== PYTH_MAGIC) {
