@@ -229,8 +229,33 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
  * devnet_mints keyed by mainnet_ca. If none exists, create one on the fly so
  * Get Test Tokens works immediately without requiring page reload or manual steps.
  *
- * Returns the devnet mint address that the server keypair can MintTo, or null
- * if the server keypair is not configured.
+ * ## What are Mirrors?
+ * On devnet, users can create tokens in two ways:
+ * 1. SPL Token Factory: User is mint authority (server cannot MintTo)
+ * 2. Server-owned SPL Token: Server is mint authority (server can MintTo freely)
+ *
+ * When a user creates a Token Factory token, we create a "mirror" — a new
+ * server-owned SPL token that tracks the same mainnet_ca. The mirror allows
+ * us to fund airdrops without requiring user signatures.
+ *
+ * ## Mirror Creation Strategy
+ * - mainnet_ca: unique identifier (mainnet token address or synthetic key for devnet natives)
+ * - devnet_mint: server-created token address (server can MintTo)
+ * - lookup: .eq("mainnet_ca", value) finds mirrors; .neq("devnet_mint", mainnet_ca) excludes self-ref
+ *
+ * ## Race Condition Fix (GH#1769)
+ * INSERT-as-gate pattern: DB INSERT is atomic; concurrent requests either:
+ * a) One succeeds, stores new mirror with unique (mainnet_ca, devnet_mint) pair
+ * b) Second fails due to UNIQUE constraint → caller retries with stored pair
+ * This prevents duplicate mirrors for the same mainnet_ca.
+ *
+ * @param supabase - Supabase client
+ * @param connection - Solana connection
+ * @param mainnetCa - Token identifier (mainnet address or synthetic __market_mirror__<slab> key)
+ * @param mintSigner - Server keypair that will be mint authority
+ * @param symbol - Token symbol (optional, defaults to "TOKEN")
+ * @param decimals - Token decimals (typically 6 or 9)
+ * @returns - Base58 address of server-owned devnet mirror, or null if creation failed
  */
 async function resolveServerOwnedDevnetMint(
   supabase: ReturnType<typeof getServiceClient>,

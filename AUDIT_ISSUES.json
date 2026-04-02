@@ -1,0 +1,266 @@
+[
+  {
+    "title": "Widespread unsafe type casting with `as any`",
+    "type": "refactor",
+    "severity": "high",
+    "file": "app/app/api/stake/pools/route.ts",
+    "description": "Multiple instances of `as any` casting bypass TypeScript type checking. Found in: stake/pools/route.ts (line 52-53), faucet/route.ts (207-208), devnet-airdrop/route.ts (96, 106, 115, 131, 141), devnet-mirror-mint/route.ts (119), and 30+ other files. This creates runtime bugs and makes the code harder to maintain.",
+    "proposed_fix": "Replace `as any` with proper type definitions. Example: instead of `const db = supabase as any`, define `const db = supabase as typeof supabase` or use typed query builders. Create shared types for Supabase queries."
+  },
+  {
+    "title": "Missing error handling in API routes - silent failures",
+    "type": "bug",
+    "severity": "high",
+    "file": "app/app/api/prices/route.ts",
+    "description": "Multiple API endpoints catch errors but only log to Sentry without returning proper error responses. Example: /api/prices (line 84-95), /api/markets (fallback behavior), /api/stats. When backend proxy fails, some routes return empty data instead of 502/503 error, masking upstream failures.",
+    "proposed_fix": "Add explicit error response for each catch block. Pattern: `catch (err) { Sentry.captureException(err); return NextResponse.json({ error: 'Service unavailable' }, { status: 502 }); }` instead of falling back to empty responses."
+  },
+  {
+    "title": "Race condition in devnet-airdrop and devnet-mint-token endpoints",
+    "type": "bug",
+    "severity": "high",
+    "file": "app/app/api/devnet-airdrop/route.ts",
+    "description": "Although the code uses INSERT-as-gate pattern (GH#1769), the resolveServerOwnedDevnetMint function at lines 233-376 has a window where two concurrent requests could both create mirrors for the same mainnet_ca. The .limit(1) and dedup check at line 215-216 is insufficient under high concurrency.",
+    "proposed_fix": "Add database-level UNIQUE constraint on (mainnet_ca, creator) if not already present. Use PostgreSQL DO block or transaction isolation level SERIALIZABLE for the mirror creation flow. Add retry logic with exponential backoff."
+  },
+  {
+    "title": "Unsafe PublicKey operations without validation",
+    "type": "security",
+    "severity": "high",
+    "file": "app/app/api/launch/route.ts",
+    "description": "Multiple routes parse PublicKeys from user input without catching exceptions. Example in launch/route.ts line 52-55, mobile/create-market/route.ts line 139-142. If invalid format is provided, the try-catch may not trigger properly in all contexts.",
+    "proposed_fix": "Use a validation helper function for PublicKey parsing in try-catch: `function parsePublicKey(addr: string): PublicKey { try { return new PublicKey(addr); } catch { throw new Error('Invalid address format'); } }`"
+  },
+  {
+    "title": "Missing input validation for numeric parameters",
+    "type": "bug",
+    "severity": "high",
+    "file": "app/app/api/markets/route.ts",
+    "description": "Line 554-566: parseInt handling has edge cases. Comments acknowledge that `parseInt('NaN')` returns NaN, but the fallback to DEFAULT_LIMIT only occurs if parsed result is NaN. However, negative numbers or extremely large numbers aren't validated. `/api/trader/:wallet/trades` at line 86-88 uses parseInt but doesn't clamp the resulting limit value.",
+    "proposed_fix": "Add proper numeric validation: `const limit = Math.max(0, Math.min(parseInt(val, 10) || DEFAULT, MAX_LIMIT))`"
+  },
+  {
+    "title": "Potential N+1 query pattern in stake pools APR calculation",
+    "type": "performance",
+    "severity": "high",
+    "file": "app/app/api/stake/pools/route.ts",
+    "description": "The computeAprs function (lines 45-141) makes 3 separate queries to insurance_snapshots table (lines 56-76) with .in(slabAddresses) filters. Then the main handler at lines 265-391 iterates through all RPC accounts and calls getMultipleAccountsInfo. This could result in O(n) RPC calls.",
+    "proposed_fix": "Batch the RPC calls: instead of iterating, call `getProgramAccounts` with a filter to reduce results, then use `getMultipleAccountsInfo` with chunked arrays (max 100 accounts per call)."
+  },
+  {
+    "title": "SQL injection risk in markets route filtering",
+    "type": "security",
+    "severity": "high",
+    "file": "app/app/api/markets/route.ts",
+    "description": "Lines 388-412: The search filter builds a complex query dynamically based on user input like 'search' and 'orderBy' parameters. While Supabase is parameterized, custom .select() and .filter() chains could be vulnerable if malformed inputs reach them. The 'orderBy' parameter at line 410-411 is user-controlled.",
+    "proposed_fix": "Whitelist allowed orderBy values and search fields: `const ALLOWED_ORDER_BY = ['symbol', 'volume_24h', 'last_price']; if (!ALLOWED_ORDER_BY.includes(orderByParam)) return error;`"
+  },
+  {
+    "title": "Unhandled promise rejection in WebSocket listeners",
+    "type": "bug",
+    "severity": "medium",
+    "file": "app/hooks/useLivePrice.ts",
+    "description": "Lines 109-113, 244-248: The code has `try { stale.close() } catch { /* ignore */ }` blocks but the WebSocket message handlers and fetch operations could throw unhandled rejections. The pattern `<!-- ignore -->` comment is unclear and could hide real errors.",
+    "proposed_fix": "Replace generic catch-ignore with proper error logging: `catch (err) { console.debug('[useLivePrice] WebSocket cleanup failed:', err); }` to enable debugging."
+  },
+  {
+    "title": "Missing null/undefined checks on critical paths",
+    "type": "bug",
+    "severity": "medium",
+    "file": "app/app/api/devnet-pre-fund/route.ts",
+    "description": "Lines 131-149: The code does `const { data: mirrorRow } = await ...` then checks `mirrorRow?.devnet_mint` but doesn't validate the actual structure. If mirrorRow exists but is malformed, the guard at line 141 comment 'fail-closed' may not work as intended.",
+    "proposed_fix": "Add explicit type guard: `if (!mirrorRow || typeof mirrorRow.devnet_mint !== 'string') { return NextResponse.json({ error: 'No mirror found' }, { status: 400 }); }`"
+  },
+  {
+    "title": "Rate limit bypass via multiple IP headers",
+    "type": "security",
+    "severity": "medium",
+    "file": "app/middleware.ts",
+    "description": "The getClientIp function (middleware.ts) extracts IP from headers but X-Forwarded-For can be spoofed. Line 29-38 tries to handle this but doesn't account for all attack vectors. An attacker using X-Forwarded-For: <real-ip>, <spoofed-ip> could bypass per-IP rate limits.",
+    "proposed_fix": "Use only the rightmost (most recent) proxy IP in X-Forwarded-For chain: `const ips = (headers.get('x-forwarded-for') || '').split(','); return ips[ips.length - 1].trim();`"
+  },
+  {
+    "title": "Missing validation of tier parameter in market creation",
+    "type": "bug",
+    "severity": "medium",
+    "file": "app/app/api/mobile/create-market/route.ts",
+    "description": "Line 128-129: The slabTier parameter is validated against SLAB_TIERS, but if an invalid tier is provided, the error response might not be clear. Additionally, the tier is used to select a program ID at line 221 without re-validating.",
+    "proposed_fix": "Extract tier validation into a reusable function and use it consistently throughout the route."
+  },
+  {
+    "title": "Missing error context in promise chains",
+    "type": "refactor",
+    "severity": "medium",
+    "file": "app/app/api/faucet/route.ts",
+    "description": "Lines 136-180: The code catches airdrop errors and checks for rate-limit messages, but the error handling doesn't preserve the original error context. If the error is neither a rate-limit nor a transient error, it still releases the gate (line 209) but might not surface the root cause.",
+    "proposed_fix": "Add structured error logging: `console.error('[faucet] Airdrop fatal error:', { error: airdropErr, rpcUrl, wallet })` before releasing gate."
+  },
+  {
+    "title": "Missing timeout handling in fetch operations",
+    "type": "bug",
+    "severity": "medium",
+    "file": "app/app/api/launch/route.ts",
+    "description": "Lines 52-87: The fetch calls to external APIs (Metaplex, token metadata) don't have explicit timeout handling. If an external service hangs, the entire request times out after Next.js default (30s), blocking resources.",
+    "proposed_fix": "Add AbortSignal.timeout() to fetch calls: `await fetch(url, { signal: AbortSignal.timeout(5000) })`"
+  },
+  {
+    "title": "Inconsistent error response formats",
+    "type": "refactor",
+    "severity": "medium",
+    "file": "app/app/api/markets/route.ts",
+    "description": "Different API routes return errors in different formats. Some return `{ error: string }`, others return `{ error: string, funded: boolean }` (faucet). This inconsistency makes client error handling complicated.",
+    "proposed_fix": "Define a standard error response type: `interface ApiError { error: string; code?: string; details?: unknown; }` and use it consistently across all routes."
+  },
+  {
+    "title": "Missing request body size limits",
+    "type": "security",
+    "severity": "medium",
+    "file": "app/app/api/rpc/route.ts",
+    "description": "The /api/rpc endpoint accepts JSON-RPC batch requests but doesn't limit the number of requests in a batch. A malicious user could send a batch with 1000s of requests, causing DOS.",
+    "proposed_fix": "Add a check: `if (Array.isArray(body) && body.length > 100) return NextResponse.json({ error: 'Batch limit exceeded (max 100)' }, { status: 400 });`"
+  },
+  {
+    "title": "Missing transaction confirmation timeout handling",
+    "type": "bug",
+    "severity": "medium",
+    "file": "app/lib/tx.ts",
+    "description": "Lines 259-306: The confirmTransaction function doesn't have an explicit timeout guard. It relies on the connection's default timeout, which could be too long or too short. If a transaction hangs in pending state indefinitely, resources are wasted.",
+    "proposed_fix": "Add Promise.race with explicit timeout: `Promise.race([confirmTxPromise, timeoutPromise(30000)])`"
+  },
+  {
+    "title": "Hardcoded RPC endpoints and fallback paths",
+    "type": "refactor",
+    "severity": "low",
+    "file": "app/app/api/faucet/route.ts",
+    "description": "Lines 54-57: DEVNET_RPC_POOL is hardcoded. While this is intentional, if Solana changes public RPC endpoints, the code will fail silently. The fallback to rpc.ankr.com is not ideal for production.",
+    "proposed_fix": "Move to environment configuration and add monitoring/alerting for endpoint health."
+  },
+  {
+    "title": "Missing deprecation warnings for legacy endpoints",
+    "type": "docs",
+    "severity": "low",
+    "file": "app/app/api/airdrop/route.ts",
+    "description": "The /api/airdrop endpoint is superseded by /api/devnet-airdrop (PERC-475) but there's no deprecation notice or redirect. Clients might still be using the old endpoint.",
+    "proposed_fix": "Add a deprecation header and log warning: `response.headers.set('X-Deprecated', 'Use /api/devnet-airdrop instead');`"
+  },
+  {
+    "title": "Missing API documentation for new endpoints",
+    "type": "docs",
+    "severity": "low",
+    "file": "app/app/api/prices/route.ts",
+    "description": "The /api/prices endpoint lacks documentation about network restrictions (devnet-only check at lines 31-38). This could confuse developers trying to use it on mainnet.",
+    "proposed_fix": "Add detailed JSDoc comments explaining network guards, fallback behavior, and error codes."
+  },
+  {
+    "title": "Incomplete test coverage for rate limiting",
+    "type": "test",
+    "severity": "medium",
+    "file": "playwright.config.ts",
+    "description": "The E2E tests don't cover rate limiting edge cases (concurrent requests, rate limit headers, retry timing). The faucet and create-market endpoints have complex rate limiting logic but no tests for boundary conditions.",
+    "proposed_fix": "Add E2E tests: test 6 concurrent create-market requests (5 succeed, 6th returns 429), verify Retry-After header is accurate, test 24h airdrop claim window."
+  },
+  {
+    "title": "Missing unit tests for critical path validations",
+    "type": "test",
+    "severity": "medium",
+    "file": "app/__tests__/",
+    "description": "No unit tests found for PublicKey parsing, numeric parameter validation, or Supabase query building. These are critical for security and should have 100% coverage.",
+    "proposed_fix": "Add test files: __tests__/api/route-validators.test.ts, __tests__/lib/publickey.test.ts, __tests__/lib/numeric.test.ts"
+  },
+  {
+    "title": "Missing test coverage for SDK integration",
+    "type": "test",
+    "severity": "low",
+    "file": "app/__tests__/",
+    "description": "Tests don't cover the percolator-sdk package integration. Critical functions like encodeInitMarket, deriveLpPda are used in routes but not tested in the app context.",
+    "proposed_fix": "Add integration tests that mock SDK functions and verify correct parameter passing in API routes."
+  },
+  {
+    "title": "Potential buffer overflow in oracle data parsing",
+    "type": "security",
+    "severity": "low",
+    "file": "app/app/api/oracle/publishers/route.ts",
+    "description": "Lines 174: `const data = Buffer.from(json.result.value.data[0], 'base64')` doesn't validate the buffer size. If data is extremely large, it could cause memory issues.",
+    "proposed_fix": "Add size check: `if (Buffer.byteLength(b64String, 'base64') > 1_000_000) throw new Error('Data too large');`"
+  },
+  {
+    "title": "Inconsistent handling of null/undefined prices",
+    "type": "bug",
+    "severity": "low",
+    "file": "app/app/api/markets/route.ts",
+    "description": "Lines 85-95: The rawToUsd function explicitly handles null prices (returns null), but isSaneMarketValue requires strict inequality. This could cause inconsistent filtering of markets with zero-price.",
+    "proposed_fix": "Document the behavior clearly in comments and add unit tests for edge cases (price=0, price=null, price=undefined)."
+  },
+  {
+    "title": "Missing CORS validation for sensitive endpoints",
+    "type": "security",
+    "severity": "low",
+    "file": "app/middleware.ts",
+    "description": "While CORS headers are set in next-config.ts, some sensitive endpoints like /api/oracle/set-price-cap don't explicitly reject requests from unauthorized origins.",
+    "proposed_fix": "Add endpoint-specific CORS checks for sensitive operations. Example: `if (request.headers.get('origin') && !ALLOWED_PRICE_CAP_ORIGINS.includes(...)) return 403`"
+  },
+  {
+    "title": "Missing logging for rate limit events",
+    "type": "refactor",
+    "severity": "low",
+    "file": "app/middleware.ts",
+    "description": "Rate limit rejections (429) are returned but not logged or monitored. DDoS attacks could be happening without visibility.",
+    "proposed_fix": "Add logging: `if (!allowed) { console.warn('[RateLimit] Blocked request:', { ip, path, remaining }); Sentry.captureMessage(...); }`"
+  },
+  {
+    "title": "Complex regex pattern in IP blocklist without limits",
+    "type": "performance",
+    "severity": "low",
+    "file": "app/middleware.ts",
+    "description": "Lines 130-189: The CIDR parsing converts IPs to 32-bit integers on every request. While fast, the IP_BLOCKLIST env var could be extremely large, causing parsing delay at startup.",
+    "proposed_fix": "Add validation: `if (_blocklist.length > 10_000) console.warn('Large blocklist detected');`"
+  },
+  {
+    "title": "Missing monitoring for backend service health",
+    "type": "refactor",
+    "severity": "low",
+    "file": "app/app/api/health/route.ts",
+    "description": "The /api/health endpoint exists but doesn't check backend service availability. If Railway is down, the API returns 200 but is not functional.",
+    "proposed_fix": "Add backend health check: `const backendHealth = await fetch(backendUrl + '/health').then(() => true).catch(() => false);` and return 503 if unhealthy."
+  },
+  {
+    "title": "Missing JSDoc documentation for complex functions",
+    "type": "docs",
+    "severity": "low",
+    "file": "app/app/api/devnet-airdrop/route.ts",
+    "description": "The resolveServerOwnedDevnetMint function (lines 208-284) has complex logic but minimal documentation. Contributors won't understand the mirror creation flow.",
+    "proposed_fix": "Add detailed JSDoc explaining: what mirrors are, when they're created, the TOCTOU fix, and the mainnet_ca lookup strategy."
+  },
+  {
+    "title": "Unclear error messages for users",
+    "type": "refactor",
+    "severity": "low",
+    "file": "app/app/api/devnet-mint-token/route.ts",
+    "description": "Line 180: Returns 'Cannot fetch token info. Token may not have liquidity on any DEX.' but this is confusing when the real issue is missing metadata or network error.",
+    "proposed_fix": "Return more specific errors: 'Token metadata not found on-chain' vs 'No DEX liquidity detected' vs 'Network error fetching dex data'."
+  },
+  {
+    "title": "Missing validation of dex_pool_address parameter",
+    "type": "security",
+    "severity": "low",
+    "file": "app/app/api/mobile/create-market/route.ts",
+    "description": "Lines 156-161: If dex_pool_address is provided for hyperp mode, it's not validated as a valid Solana address before being used in Oracle setup.",
+    "proposed_fix": "Add validation: `if (oracle_mode === 'hyperp' && dex_pool_address) { new PublicKey(dex_pool_address); } // throws if invalid`"
+  },
+  {
+    "title": "Race condition in simultaneous market creation",
+    "type": "bug",
+    "severity": "low",
+    "file": "app/app/api/mobile/create-market/route.ts",
+    "description": "The rate limit is enforced (lines 108-130) but two requests from the same IP arriving within the same millisecond could both pass the check before the first is recorded.",
+    "proposed_fix": "Use database-backed atomic rate limiting with SERIALIZABLE isolation or Upstash Redis (already used in middleware - extend to this endpoint)."
+  },
+  {
+    "title": "Missing deprecation path for old token metadata endpoints",
+    "type": "refactor",
+    "severity": "low",
+    "file": "app/app/api/tokens/[mint]/logo/route.ts",
+    "description": "Multiple endpoints serve logo/metadata. The API doesn't clearly document which is the preferred path, causing duplication.",
+    "proposed_fix": "Create a unified TokenMetadataService and redirect old endpoints with proper deprecation headers."
+  }
+]

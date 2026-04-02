@@ -176,8 +176,12 @@ export async function POST(req: NextRequest) {
           devnetMint: existing.devnet_mint,
         });
       }
+      // GH#1825: Return specific error distinguishing root causes
+      // (vs generic "Token may not have liquidity on any DEX" that confuses users)
       return NextResponse.json(
-        { error: "Cannot fetch token info. Token may not have liquidity on any DEX." },
+        {
+          error: "Cannot fetch token metadata. Token metadata not found on-chain, no DEX liquidity detected, or network error occurred. Verify the mainnet token is valid and has DEX liquidity.",
+        },
         { status: 400 },
       );
     }

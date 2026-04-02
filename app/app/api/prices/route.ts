@@ -28,9 +28,19 @@ const NO_STORE = { "Cache-Control": "private, no-store" } as const;
  *     }
  *   }
  *
- * Network: this route is restricted to devnet only.
- * On mainnet, `market_stats` will contain mainnet oracle data — this guard
- * prevents accidental serving of stale devnet prices on production.
+ * ## Network Restrictions
+ * This route is restricted to devnet only. Why?
+ * - market_stats table contains environment-specific oracle data
+ * - Mainnet oracle prices stored in mainnet market_stats, not devnet table
+ * - Network guard prevents accidentally serving stale/mismatched prices in production
+ * - On mainnet, use dedicated production price endpoints with proper authentication
+ *
+ * ## Error Handling
+ * - Supabase unavailable: Returns 503 with fallback message
+ * - No markets found: Returns empty prices object (not 404 — valid edge case)
+ * - Mainnet request: Returns 403 Forbidden with clear error message
+ *
+ * @returns { prices: Record<string, PriceData> } - Current market prices by slab address
  */
 export async function GET() {
   // ── Network guard: devnet only (GH#1574) ───────────────────

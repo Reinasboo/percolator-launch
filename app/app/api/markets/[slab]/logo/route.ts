@@ -12,7 +12,19 @@ export const dynamic = "force-dynamic";
 const uploadTimestamps = new Map<string, number>();
 const RATE_LIMIT_MS = 30_000; // 1 upload per 30s per slab
 
-// GET /api/markets/[slab]/logo
+/**
+ * GET /api/markets/[slab]/logo
+ *
+ * Retrieve logo URL for a market by slab address.
+ * Stores logo_url directly in the markets table (denormalized for performance).
+ *
+ * Related endpoint: GET /api/tokens/[mint]/logo retrieves token logos from Supabase Storage.
+ * Note: This endpoint serves markets; tokens use a different implementation.
+ * For service consolidation, both could be unified under a TokenMetadataService.
+ *
+ * @param slab - Base58-encoded market slab address
+ * @returns { logo_url: string | null } - URL to market logo or null if not found
+ */
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ slab: string }> }

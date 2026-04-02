@@ -10,7 +10,18 @@ export const dynamic = "force-dynamic";
 const uploadTimestamps = new Map<string, number>();
 const RATE_LIMIT_MS = 30_000;
 
-// GET — retrieve logo for a token mint
+/**
+ * GET /api/tokens/[mint]/logo
+ *
+ * Retrieve logo for a token by mint address.
+ * Stores logos in Supabase Storage under token-logos/. Supports png, jpg, webp, gif.
+ *
+ * Related endpoint: POST /api/markets/[slab]/logo stores logo_url in markets table.
+ * For service consolidation, consider unifying both endpoints under a single TokenMetadataService.
+ *
+ * @param mint - Base58-encoded Solana token mint address
+ * @returns { logo_url: string | null } - Public URL to logo file or null if not found
+ */
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ mint: string }> }
