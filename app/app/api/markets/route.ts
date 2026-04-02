@@ -911,6 +911,24 @@ export async function POST(req: NextRequest) {
           { status: 400 },
         );
       }
+
+      // Cross-check oracle_authority against on-chain slab config.
+      // Without this, a deployer could register a false oracle_authority in the DB,
+      // misleading off-chain tooling (admin dashboards, keeper configs) that reads
+      // markets.oracle_authority instead of querying the chain directly.
+      const onChainOracleAuth = config.oracleAuthority.toBase58();
+      const resolvedOracleAuth = oracle_authority || deployer;
+      const SYSTEM_PROGRAM = "11111111111111111111111111111111";
+      // Only enforce when on-chain authority is set (non-zero / non-system-program)
+      if (onChainOracleAuth !== SYSTEM_PROGRAM && onChainOracleAuth !== resolvedOracleAuth) {
+        return NextResponse.json(
+          {
+            error: `oracle_authority does not match on-chain oracle authority. ` +
+              `On-chain: ${onChainOracleAuth}. Provided: ${resolvedOracleAuth}`,
+          },
+          { status: 400 },
+        );
+      }
     } catch {
       // CR fix (GH#1987): parseConfig failure must fail closed — an unparseable slab
       // cannot be verified, so reject registration rather than silently falling through.
