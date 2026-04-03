@@ -112,7 +112,7 @@ export function useStakeWithdraw() {
         }
 
         // Build stake withdraw instruction
-        const data = encodeStakeWithdraw(lpAmount);
+        const data = Buffer.from(encodeStakeWithdraw(lpAmount));
         const keys = withdrawAccounts({
           user: wallet.publicKey,
           pool,

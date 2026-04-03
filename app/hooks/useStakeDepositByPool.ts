@@ -144,7 +144,7 @@ export function useStakeDepositByPool({ slabAddress, collateralMint }: StakeDepo
         }
 
         // Build stake deposit instruction
-        const data = encodeStakeDeposit(amount);
+        const data = Buffer.from(encodeStakeDeposit(amount));
         const keys = depositAccounts({
           user: wallet.publicKey,
           pool,
