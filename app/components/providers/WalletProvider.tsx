@@ -88,3 +88,4 @@ export const WalletProvider: FC<{ children: ReactNode }> = ({ children }) => {
     </PrivyErrorBoundary>
   );
 };
+// wallet connect fix - 1775223675
