@@ -94,7 +94,8 @@ export function useInitUser(slabAddress: string) {
           // itself validates correctly without Lighthouse assertions.
           const isLighthouse =
             /custom program error:\s*0x1900\b/i.test(errMsg) ||
-            /L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95/i.test(errMsg);
+            /L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95/i.test(errMsg) ||
+            (/"Custom"\s*:\s*6400/.test(errMsg) && /InstructionError/.test(errMsg));
 
           if (isLighthouse) {
             console.warn(
@@ -119,7 +120,9 @@ export function useInitUser(slabAddress: string) {
         // PERC-8388: Lighthouse/Blowfish 0x1900 — wallet middleware assertion failure.
         // If the skipPreflight retry in the try block above also failed, surface
         // a more helpful message than the raw Lighthouse error code.
-        const is0x1900 = /custom program error:\s*0x1900\b/i.test(raw);
+        const is0x1900 =
+          /custom program error:\s*0x1900\b/i.test(raw) ||
+          (/"Custom"\s*:\s*6400/.test(raw) && /InstructionError/.test(raw));
         const userMsg = is0x4
           ? "This market uses an older format that's incompatible with the current program version. " +
             "The market creator needs to re-initialize it. Please try a different market or contact support."

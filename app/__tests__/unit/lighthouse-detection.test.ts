@@ -9,6 +9,9 @@ describe("Lighthouse 0x1900 detection", () => {
     "Transaction simulation failed: custom program error: 0x1900",
     "failed to send transaction: Transaction simulation failed: Error processing Instruction 3: custom program error: 0x1900",
     "Program L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95 consumed 12345 of 200000 compute units",
+    // JSON format from RPC — 6400 decimal = 0x1900 hex
+    '{"InstructionError":[3,{"Custom":6400}]}',
+    'Transaction simulation failed: Error processing Instruction 3: {"InstructionError":[3,{"Custom":6400}]}',
   ];
 
   const NON_LIGHTHOUSE = [
@@ -20,7 +23,8 @@ describe("Lighthouse 0x1900 detection", () => {
 
   const isLighthouse = (msg: string) =>
     /custom program error:\s*0x1900\b/i.test(msg) ||
-    /L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95/i.test(msg);
+    /L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95/i.test(msg) ||
+    (/"Custom"\s*:\s*6400/.test(msg) && /InstructionError/.test(msg));
 
   test.each(LIGHTHOUSE_PATTERNS)("detects Lighthouse error: %s", (msg) => {
     expect(isLighthouse(msg)).toBe(true);
@@ -30,7 +34,7 @@ describe("Lighthouse 0x1900 detection", () => {
     expect(isLighthouse(msg)).toBe(false);
   });
 
-  test("user-facing message for 0x1900", () => {
+  test("user-facing message for 0x1900 hex format", () => {
     const is0x1900 = /custom program error:\s*0x1900\b/i.test(
       "custom program error: 0x1900"
     );
@@ -44,5 +48,13 @@ describe("Lighthouse 0x1900 detection", () => {
 
     expect(userMsg).toContain("Blowfish");
     expect(userMsg).toContain("Backpack");
+  });
+
+  test("user-facing message for JSON Custom:6400 format", () => {
+    const raw = '{"InstructionError":[3,{"Custom":6400}]}';
+    const is0x1900 =
+      /custom program error:\s*0x1900\b/i.test(raw) ||
+      (/"Custom"\s*:\s*6400/.test(raw) && /InstructionError/.test(raw));
+    expect(is0x1900).toBe(true);
   });
 });
