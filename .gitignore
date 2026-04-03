@@ -93,6 +93,20 @@ inspect-slabs-tmp.mjs
 *-tmp.mjs
 *-debug.mjs
 scratch*.mjs
+
+# Audit/test artifacts — generate locally, don't track
+pnpm_audit_*.json
+*.patch
+test-hidden-*
+test-funding-*
+security_findings.csv
+audit_output.json
+full_audit.json
+AUDIT_*.md
+CONTRIBUTOR_*.md
+QUICK_START_CONTRIBUTOR.md
+SECURITY_REMEDIATION_*.md
+SECURITY_AUDIT_REPORT_*.md
 docs/MAINNET-BETA-PLAN.md
 docs/MAINNET-ENV.md
 app/.env.vercel-prod
