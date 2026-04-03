@@ -17,19 +17,19 @@ describe("/api/rpc allowlist", () => {
     "utf-8"
   );
 
-  // PERC-8308: mutating methods must NOT be in the public allowlist
-  it("does NOT allow sendTransaction (PERC-8308 security fix)", () => {
-    // sendTransaction must not appear inside ALLOWED_RPC_METHODS
-    // The comment referencing it (as excluded) is okay, but the string literal in the Set must not exist
-    expect(routeSource).not.toMatch(/ALLOWED_RPC_METHODS[^;]*"sendTransaction"/s);
+  // PERC-8308 originally removed sendTransaction/simulateTransaction.
+  // a70eebd1: Khubair re-added them — origin guard makes them safe for
+  // user-signed transactions without exposing the Helius key to abuse.
+  // Tests now verify they ARE allowed (policy change) and origin guard exists.
+  it("allows sendTransaction (re-enabled with origin guard)", () => {
+    expect(routeSource).toMatch(/ALLOWED_RPC_METHODS[^;]*"sendTransaction"/s);
   });
 
-  it("does NOT allow simulateTransaction (PERC-8308 security fix)", () => {
-    expect(routeSource).not.toMatch(/ALLOWED_RPC_METHODS[^;]*"simulateTransaction"/s);
+  it("allows simulateTransaction (re-enabled with origin guard)", () => {
+    expect(routeSource).toMatch(/ALLOWED_RPC_METHODS[^;]*"simulateTransaction"/s);
   });
 
-  it("returns 403 for sendTransaction (documented in route source)", () => {
-    // Route source should document the exclusion with a PERC-8308 reference
+  it("references PERC-8308 security decision", () => {
     expect(routeSource).toContain("PERC-8308");
   });
 

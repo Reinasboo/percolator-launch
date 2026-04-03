@@ -125,9 +125,9 @@ function getRpcUrl(networkOverride?: "mainnet" | "devnet"): string {
  * Allowlist of JSON-RPC methods that may be proxied to Helius.
  * Prevents abuse of the API key for unauthorized operations.
  *
- * PERC-8308: sendTransaction and simulateTransaction are intentionally EXCLUDED.
- * Mutating RPC methods must not be exposed publicly — clients should submit
- * transactions via their own RPC connection or a dedicated authenticated endpoint.
+ * PERC-8308: sendTransaction and simulateTransaction were originally excluded.
+ * Re-enabled (a70eebd1) — origin guard prevents external abuse of the Helius
+ * key while allowing user-signed transactions from the app.
  */
 const ALLOWED_RPC_METHODS = new Set([
   // Health & cluster
