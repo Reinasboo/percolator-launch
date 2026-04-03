@@ -19,6 +19,22 @@ import { useSlabState } from "@/components/providers/SlabProvider";
 import { applyInvert, resolveMarketPriceE6, sanitizePriceE6 } from "@/lib/oraclePrice";
 import { getBackendUrl } from "@/lib/config";
 
+// ── SECURITY REVIEW (mainnet) ─────────────────────────────────────────────
+// The WS price feed client sends NO authentication token when connecting.
+// If WS_AUTH_REQUIRED=false on the server (current default per SECURITY.md),
+// any external caller can open unauthenticated connections, subscribe to any
+// slab's live prices, and enumerate active markets. Per-IP connection limits
+// (default 5) are the only protection against abuse.
+//
+// If WS_AUTH_REQUIRED=true on the server, this client will fail to
+// authenticate and silently fall back to 30s REST polling — the WS feature
+// becomes a no-op with no user-visible indication.
+//
+// Before mainnet: decide whether the price feed is intentionally public
+// (document it, set aggressive per-IP limits) or requires auth (implement
+// HMAC token generation here matching the scheme in SECURITY.md).
+// ──────────────────────────────────────────────────────────────────────────
+
 // Derive WebSocket URL from API URL: https://... → wss://...
 function getWsUrl(): string {
   const explicit = process.env.NEXT_PUBLIC_WS_URL;
