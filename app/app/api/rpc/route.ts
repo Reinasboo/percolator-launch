@@ -157,6 +157,10 @@ const ALLOWED_RPC_METHODS = new Set([
   // Helius DAS API — token metadata resolution (PERC-198)
   "getAsset",
   "getAssetBatch",
+  // Transaction submission — required for wallet to send signed transactions.
+  // Safe: transactions are user-signed, API key abuse is mitigated by origin check.
+  "sendTransaction",
+  "simulateTransaction",
 ]);
 
 /** Maximum number of requests allowed in a single batch */
