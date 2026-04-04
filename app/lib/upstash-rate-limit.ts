@@ -115,12 +115,19 @@ export function createUpstashRateLimiter(
       const limiter = getUpstashLimiter();
 
       if (limiter) {
-        const result = await limiter.limit(key);
-        return {
-          allowed: result.success,
-          remaining: result.remaining,
-          retryAfterSecs: Math.ceil((result.reset - Date.now()) / 1000),
-        };
+        try {
+          const result = await limiter.limit(key);
+          return {
+            allowed: result.success,
+            remaining: result.remaining,
+            retryAfterSecs: Math.max(
+              0,
+              Math.ceil((result.reset - Date.now()) / 1000)
+            ),
+          };
+        } catch {
+          // Redis/network error — fall through to in-memory fallback
+        }
       }
 
       return checkLocal(key);
