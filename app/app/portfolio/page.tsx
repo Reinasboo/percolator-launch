@@ -31,7 +31,8 @@ function formatPnl(pnl: bigint | undefined | null, decimals = 6): string {
   return `${isNeg ? "-" : "+"}${formatTokenAmount(abs, decimals)}`;
 }
 
-function formatPnlPct(pct: number): string {
+function formatPnlPct(pct: number | null | undefined): string {
+  if (pct == null) return "0.00%";
   const sign = pct >= 0 ? "+" : "";
   return `${sign}${pct.toFixed(2)}%`;
 }
