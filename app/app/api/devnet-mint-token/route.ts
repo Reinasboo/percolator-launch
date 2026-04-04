@@ -64,15 +64,15 @@ async function fetchTokenInfo(ca: string): Promise<DexScreenerToken | null> {
       priceUsd?: string;
       liquidity?: { usd?: number };
       info?: { imageUrl?: string };
-    }>[] | undefined;
+    }> | undefined;
 
     if (!pairs || pairs.length === 0) return null;
 
     // Sort by liquidity, pick best
     const sorted = [...pairs].sort(
-      (a: any, b: any) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0),
+      (a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0),
     );
-    const best = sorted[0] as any;
+    const best = sorted[0];
     const price = parseFloat(best.priceUsd ?? "0");
     if (price <= 0) return null;
 
@@ -143,7 +143,7 @@ export async function POST(req: NextRequest) {
     // Check if we already have a devnet mint for this CA
     const supabase = getServiceClient();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: existing } = await (supabase as any)
+    const { data: existing } = await supabase
       .from("devnet_mints")
       .select("devnet_mint")
       .eq("mainnet_ca", mainnetCA)
@@ -325,7 +325,7 @@ export async function POST(req: NextRequest) {
     // Store in DB — INSERT-as-gate: devnet_mints has UNIQUE(mainnet_ca).
     // Under concurrent requests, the race loser gets Postgres 23505.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: insertErr } = await (supabase as any).from("devnet_mints").insert({
+    const { error: insertErr } = await supabase.from("devnet_mints").insert({
       mainnet_ca: mainnetCA,
       devnet_mint: devnetMint,
       market_address: marketAddress ?? null,
@@ -344,7 +344,7 @@ export async function POST(req: NextRequest) {
         `devnet-mint-token: TOCTOU race for ${mainnetCA} — orphaned mint ${devnetMint}, fetching winner`,
       );
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: winner } = await (supabase as any)
+      const { data: winner } = await supabase
         .from("devnet_mints")
         .select("devnet_mint")
         .eq("mainnet_ca", mainnetCA)
@@ -371,15 +371,12 @@ export async function POST(req: NextRequest) {
     // The airdrop route looks up mint_address in the markets table, not devnet_mints.
     // Best-effort: if this fails, airdrop can still fall back to devnet_mints.
     if (marketAddress) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: upsertErr } = await (supabase as any).from("markets").upsert(
-        {
-          slab_address: marketAddress,
+      const { error: upsertErr } = await supabase.from("markets")
+        .update({
           mint_address: devnetMint,
           symbol: tokenInfo.symbol,
-        },
-        { onConflict: "slab_address" },
-      );
+        })
+        .eq("slab_address", marketAddress);
       if (upsertErr) {
         console.warn("devnet-mint-token: markets upsert failed (non-fatal):", upsertErr.message);
       }
