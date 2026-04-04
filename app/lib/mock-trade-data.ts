@@ -6,6 +6,7 @@
 import { PublicKey } from "@solana/web3.js";
 import type { MarketConfig, EngineState, RiskParams, SlabHeader, Account } from "@percolator/sdk";
 import { AccountKind } from "@percolator/sdk";
+import type { PortfolioPosition } from "@/hooks/usePortfolio";
 
 interface MockMarketData {
   symbol: string;
@@ -285,8 +286,8 @@ export function getMockTrades(address: string) {
 
 /* ── Mock portfolio positions ── */
 
-export function getMockPortfolioPositions() {
-  const positions = [];
+export function getMockPortfolioPositions(): PortfolioPosition[] {
+  const positions: PortfolioPosition[] = [];
   const slabs = Object.entries(MOCK_MAP);
   // Pick a subset that have open positions
   const withPositions = slabs.filter((_, i) => i < 4);
@@ -301,10 +302,33 @@ export function getMockPortfolioPositions() {
     const capital: bigint = BigInt(Math.round((500 + positions.length * 200) * 1_000_000));
     const mintPk = (() => { try { return new PublicKey(m.mint); } catch { return PublicKey.default; } })();
 
+    // Compute enriched fields that PortfolioPosition requires
+    const absPosSize = posSize < 0n ? -posSize : posSize;
+    const notional = Number(absPosSize) / 1e6 * Number(priceE6) / 1e6;
+    const capitalNum = Number(capital) / 1e6;
+    const leverage = capitalNum > 0 ? notional / capitalNum : 0;
+    const pnlNum = Number(pnl) / 1e6;
+    const pnlPercent = capitalNum > 0 ? (pnlNum / capitalNum) * 100 : 0;
+    const maintenanceBps = BigInt(m.initialMarginBps / 2);
+    // Mock liquidation: assume liq at 80% loss for longs, 120% gain for shorts
+    const liqFactor = isLong ? 0.2 : 1.8;
+    const liquidationPriceE6 = BigInt(Math.round(m.priceUsd * liqFactor * 1_000_000));
+    const liqDist = isLong
+      ? (Number(priceE6 - liquidationPriceE6) / Number(priceE6)) * 100
+      : (Number(liquidationPriceE6 - priceE6) / Number(priceE6)) * 100;
+    const liquidationDistancePct = Math.max(0, Math.min(100, liqDist));
+
     positions.push({
       slabAddress: slabAddr,
       symbol: m.symbol,
       idx: 2,
+      oraclePriceE6: priceE6,
+      liquidationPriceE6,
+      liquidationDistancePct,
+      unrealizedPnl: pnl,
+      pnlPercent,
+      leverage,
+      maintenanceMarginBps: maintenanceBps,
       account: {
         kind: AccountKind.User,
         accountId: BigInt(positions.length + 1),
@@ -338,7 +362,7 @@ export function getMockPortfolioPositions() {
         } as any,
         params: {
           initialMarginBps: BigInt(m.initialMarginBps),
-          maintenanceMarginBps: BigInt(m.initialMarginBps / 2),
+          maintenanceMarginBps: maintenanceBps,
           tradingFeeBps: BigInt(m.tradingFeeBps),
         } as any,
       },
