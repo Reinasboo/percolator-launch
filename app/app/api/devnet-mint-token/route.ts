@@ -32,6 +32,7 @@ import {
 import { getConfig } from "@/lib/config";
 import { getServiceClient } from "@/lib/supabase";
 import { getDevnetMintSigner } from "@/lib/devnet-signer";
+import { validateTokenMetadata, validateDexScreenerResponse } from "@/lib/token-metadata-validators";
 import * as Sentry from "@sentry/nextjs";
 
 export const dynamic = "force-dynamic";
@@ -50,7 +51,7 @@ interface DexScreenerToken {
   logoUrl?: string;
 }
 
-/** Fetch token metadata and price from DexScreener */
+/** Fetch token metadata and price from DexScreener, with DEXSCREENER-001 validation */
 async function fetchTokenInfo(ca: string): Promise<DexScreenerToken | null> {
   try {
     const resp = await fetch(
@@ -59,29 +60,22 @@ async function fetchTokenInfo(ca: string): Promise<DexScreenerToken | null> {
     );
     if (!resp.ok) return null;
     const json = await resp.json();
-    const pairs = json.pairs as Array<{
-      baseToken?: { name?: string; symbol?: string };
-      priceUsd?: string;
-      liquidity?: { usd?: number };
-      info?: { imageUrl?: string };
-    }> | undefined;
+    const pairs = json.pairs as unknown;
 
-    if (!pairs || pairs.length === 0) return null;
+    // DEXSCREENER-001: Validate external API response
+    const validated = validateDexScreenerResponse(pairs);
+    if (!validated) return null;
 
-    // Sort by liquidity, pick best
-    const sorted = [...pairs].sort(
-      (a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0),
-    );
-    const best = sorted[0];
-    const price = parseFloat(best.priceUsd ?? "0");
-    if (price <= 0) return null;
+    // Extract price from best pair (validate separately)
+    if (!Array.isArray(json.pairs) || json.pairs.length === 0) {
+      return null;
+    }
+    const rawPrice = parseFloat(json.pairs[0]?.priceUsd ?? "0");
+    if (rawPrice <= 0) return null;
 
     return {
-      name: best.baseToken?.name ?? `Token ${ca.slice(0, 6)}`,
-      symbol: best.baseToken?.symbol ?? ca.slice(0, 4).toUpperCase(),
-      decimals: 6, // Default to 6 for devnet mirror (simplifies math)
-      priceUsd: price,
-      logoUrl: best.info?.imageUrl,
+      ...validated,
+      priceUsd: rawPrice,
     };
   } catch {
     return null;

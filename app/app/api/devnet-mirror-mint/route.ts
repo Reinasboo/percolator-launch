@@ -40,6 +40,7 @@ import {
 import { getConfig } from "@/lib/config";
 import { getServiceClient } from "@/lib/supabase";
 import { getDevnetMintSigner } from "@/lib/devnet-signer";
+import { validateTokenMetadata, validateDexScreenerResponse, validateJupiterTokenResponse } from "@/lib/token-metadata-validators";
 import * as Sentry from "@sentry/nextjs";
 
 export const dynamic = "force-dynamic";
@@ -100,7 +101,7 @@ interface TokenInfo {
   logoUrl?: string;
 }
 
-/** Fetch token metadata from DexScreener (mainnet). */
+/** Fetch token metadata from DexScreener (mainnet). DEXSCREENER-001: Validates response. */
 async function fetchMainnetTokenInfo(ca: string): Promise<TokenInfo | null> {
   try {
     const resp = await fetch(
@@ -109,32 +110,17 @@ async function fetchMainnetTokenInfo(ca: string): Promise<TokenInfo | null> {
     );
     if (!resp.ok) return null;
     const json = await resp.json();
-    const pairs = json.pairs as Array<{
-      baseToken?: { name?: string; symbol?: string };
-      priceUsd?: string;
-      liquidity?: { usd?: number };
-      info?: { imageUrl?: string };
-    }> | undefined;
-    if (!pairs || pairs.length === 0) return null;
+    const pairs = json.pairs as unknown;
 
-    // Sort by liquidity, pick best
-    const sorted = [...pairs].sort(
-      (a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0),
-    );
-    const best = sorted[0];
-
-    return {
-      name: best.baseToken?.name ?? `Token ${ca.slice(0, 6)}`,
-      symbol: best.baseToken?.symbol ?? ca.slice(0, 4).toUpperCase(),
-      decimals: 6, // Default to 6 for devnet mirror (simplifies math)
-      logoUrl: best.info?.imageUrl,
-    };
+    // DEXSCREENER-001: Validate external API response
+    const validated = validateDexScreenerResponse(pairs);
+    return validated ?? null;
   } catch {
     return null;
   }
 }
 
-/** Fallback: fetch metadata from Jupiter token list. */
+/** Fallback: fetch metadata from Jupiter token list. DEXSCREENER-001: Validates response. */
 async function fetchJupiterTokenInfo(ca: string): Promise<TokenInfo | null> {
   try {
     const resp = await fetch(
@@ -143,14 +129,10 @@ async function fetchJupiterTokenInfo(ca: string): Promise<TokenInfo | null> {
     );
     if (!resp.ok) return null;
     const tokens = await resp.json();
-    const token = tokens.find((t: any) => t.address === ca);
-    if (!token) return null;
-    return {
-      name: token.name,
-      symbol: token.symbol,
-      decimals: Math.min(token.decimals, 9), // Cap at 9 for devnet sanity
-      logoUrl: token.logoURI,
-    };
+
+    // DEXSCREENER-001: Validate external API response
+    const validated = validateJupiterTokenResponse(tokens, ca);
+    return validated ?? null;
   } catch {
     return null;
   }
