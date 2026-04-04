@@ -51,7 +51,15 @@ export function useDexPoolSearch(mint: string | null) {
           signal: controller.signal,
           headers: { "User-Agent": "percolator-app/1.0" },
         });
-        const json = (await resp.json()) as any;
+        const json: { pairs?: Array<{
+          chainId?: string;
+          dexId?: string;
+          pairAddress: string;
+          baseToken?: { symbol?: string };
+          quoteToken?: { symbol?: string };
+          liquidity?: { usd?: number };
+          priceUsd?: string;
+        }> } = await resp.json();
         const pairs = json.pairs || [];
 
         const results: DexPoolResult[] = [];
@@ -68,7 +76,7 @@ export function useDexPoolSearch(mint: string | null) {
             dexId,
             pairLabel: `${pair.baseToken?.symbol || "?"} / ${pair.quoteToken?.symbol || "?"}`,
             liquidityUsd: liquidity,
-            priceUsd: parseFloat(pair.priceUsd) || 0,
+            priceUsd: parseFloat(pair.priceUsd ?? "0") || 0,
           });
         }
 
