@@ -144,10 +144,17 @@ export default function Home() {
         // the homepage's direct Supabase query applies different filtering logic
         // from /api/stats (which uses the server-side indexer view), causing
         // discrepancies (107 vs 69 after #1449). API count wins.
-        const [{ data, error: dbError }, apiStatsRes] = await Promise.all([
+        let [{ data, error: dbError }, apiStatsRes] = await Promise.all([
           getSupabase().from("markets_with_stats").select("slab_address, symbol, volume_24h, insurance_balance, insurance_fund, last_price, total_open_interest, open_interest_long, open_interest_short, decimals, vault_balance, total_accounts").neq("indexer_excluded", true),
           fetch("/api/stats").then((r) => r.ok ? r.json() : null).catch(() => null),
         ]);
+        // PERC-8387/GH#2080: indexer_excluded column may not exist — retry without filter
+        if (dbError && dbError.message?.includes("indexer_excluded")) {
+          console.warn("[homepage] indexer_excluded column missing — retrying without filter");
+          const retry = await getSupabase().from("markets_with_stats").select("slab_address, symbol, volume_24h, insurance_balance, insurance_fund, last_price, total_open_interest, open_interest_long, open_interest_short, decimals, vault_balance, total_accounts");
+          data = retry.data;
+          dbError = retry.error;
+        }
         // totalMarkets from /api/stats (authoritative). Fall back to local count if unavailable.
         const apiTotalMarkets: number | null = (apiStatsRes && typeof apiStatsRes.totalMarkets === "number") ? apiStatsRes.totalMarkets : null;
         if (dbError) {

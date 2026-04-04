@@ -46,7 +46,7 @@ export function ProtocolStatsBar() {
 
   async function fetchStats() {
     try {
-      const { data } = await getSupabase()
+      let { data, error: dbErr } = await getSupabase()
         .from("markets_with_stats")
         .select("slab_address, symbol, volume_24h, last_price, decimals, total_open_interest, open_interest_long, open_interest_short, vault_balance, total_accounts")
         .neq("indexer_excluded", true)
@@ -62,6 +62,14 @@ export function ProtocolStatsBar() {
           vault_balance: number | null;
           total_accounts: number | null;
         }[]>();
+
+      // PERC-8387/GH#2080: indexer_excluded column may not exist — retry without filter
+      if (dbErr && dbErr.message?.includes("indexer_excluded")) {
+        const retry = await getSupabase()
+          .from("markets_with_stats")
+          .select("slab_address, symbol, volume_24h, last_price, decimals, total_open_interest, open_interest_long, open_interest_short, vault_balance, total_accounts");
+        data = retry.data as typeof data;
+      }
 
       if (!data || data.length === 0) {
         setStats({ volume24h: 0, openInterest: 0, activeMarkets: 0, traders: null });

@@ -31,10 +31,18 @@ export function useAllMarketStats() {
 
     async function load() {
       try {
-        const { data, error: dbError } = await supabase
+        let { data, error: dbError } = await supabase
           .from("markets_with_stats")
           .select("*")
           .neq("indexer_excluded", true);
+
+        // PERC-8387/GH#2080: indexer_excluded column may not exist — retry without filter
+        if (dbError && dbError.message?.includes("indexer_excluded")) {
+          console.warn("[useAllMarketStats] indexer_excluded column missing — retrying without filter");
+          const retry = await supabase.from("markets_with_stats").select("*");
+          data = retry.data;
+          dbError = retry.error;
+        }
 
         if (dbError) {
           setError(dbError.message);
