@@ -306,7 +306,7 @@ export async function POST(req: NextRequest) {
 
     // Look up the devnet mint for this market (try markets table first, then devnet_mints)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: marketData } = await (supabase as any)
+    const { data: marketData } = await supabase
       .from("markets")
       .select("mint_address, symbol")
       .eq("slab_address", marketAddress)
@@ -319,7 +319,7 @@ export async function POST(req: NextRequest) {
     if (!mintAddress) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       // GH#1590: devnet_mints has no market_address column — use mainnet_ca synthetic key
-      const { data: devnetMintData, error: fallbackErr } = await (supabase as any)
+      const { data: devnetMintData, error: fallbackErr } = await supabase
         .from("devnet_mints")
         .select("devnet_mint, symbol")
         .eq("mainnet_ca", `__market_mirror__${marketAddress}`)
@@ -345,7 +345,7 @@ export async function POST(req: NextRequest) {
     let priceUsd = 1.0; // fallback
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: stats } = await (supabase as any)
+      const { data: stats } = await supabase
         .from("markets_with_stats")
         .select("last_price")
         .eq("slab_address", marketAddress)
@@ -473,11 +473,12 @@ export async function POST(req: NextRequest) {
       // Update claim row with amount + signature now that mint succeeded.
       // The row was already inserted by tryAirdropClaimGate; we patch it in-place.
       // Non-fatal if this fails — the claim gate already blocked re-use.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any)
-        .from("airdrop_claims")
-        .update({ amount_tokens: tokensFloat, amount_usd: AIRDROP_USD_VALUE, signature: sig })
-        .eq("id", claimId);
+      if (claimId !== undefined) {
+        await supabase
+          .from("airdrop_claims")
+          .update({ amount_tokens: tokensFloat, amount_usd: AIRDROP_USD_VALUE, signature: sig })
+          .eq("id", claimId);
+      }
     } finally {
       // If mint failed for any reason, release the gate so user isn't locked out.
       if (!mintSucceeded && claimId !== undefined) {

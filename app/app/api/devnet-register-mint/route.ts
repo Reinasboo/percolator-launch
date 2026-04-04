@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
 
     // Upsert: use mintAddress as both mainnet_ca and devnet_mint for native devnet mints.
     // This allows devnet-airdrop to look up by devnet_mint and find the row.
-    const { error } = await (supabase as any).from("devnet_mints").upsert(
+    const { error } = await supabase.from("devnet_mints").upsert(
       {
         mainnet_ca: mintAddress, // self-referencing for devnet-native mints
         devnet_mint: mintAddress,

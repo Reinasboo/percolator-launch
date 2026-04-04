@@ -134,7 +134,7 @@ export async function POST(req: NextRequest) {
     // Fetch all admin-oracle markets from DB where oracle_authority == our crank pubkey
     try {
       const supabase = getServiceClient();
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("markets")
         .select("slab_address, oracle_authority, symbol")
         .not("oracle_authority", "is", null);

@@ -20,7 +20,7 @@ const TABLE = "ideas";
 export async function GET() {
   try {
     const sb = getServiceClient();
-    const { data, error } = await (sb.from as any)(TABLE)
+    const { data, error } = await sb.from(TABLE)
       .select("id, handle, idea, created_at")
       .order("created_at", { ascending: false })
       .limit(50);
@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
     }
 
     const sb = getServiceClient();
-    const { error } = await (sb.from as any)(TABLE)
+    const { error } = await sb.from(TABLE)
       .insert({ handle, idea, contact, ip });
 
     if (error) throw error;

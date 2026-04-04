@@ -25,7 +25,7 @@ export async function GET() {
 
   try {
     const sb = getServiceClient();
-    const { data, error } = await (sb.from as any)("job_applications")
+    const { data, error } = await sb.from("job_applications")
       .select(
         "id, name, twitter_handle, discord, telegram, email, desired_role, experience_level, about, portfolio_links, cv_filename, availability, solana_wallet, status, created_at"
       )
@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
     }
 
     const sb = getServiceClient();
-    const { error } = await (sb.from as any)(TABLE).insert({
+    const { error } = await sb.from(TABLE).insert({
       name,
       twitter_handle,
       discord,

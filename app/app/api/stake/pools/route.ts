@@ -24,7 +24,7 @@ const MS_PER_DAY = 86_400_000;
 interface InsuranceSnapshotRow {
   slab: string;
   redemption_rate_e6: number;
-  created_at: string;
+  created_at: string | null;
 }
 
 /**
@@ -52,8 +52,7 @@ async function computeAprs(
   const since7d = new Date(now - 7 * MS_PER_DAY).toISOString();
   const since30d = new Date(now - 30 * MS_PER_DAY).toISOString();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = supabase as any;
+  const db = supabase;
 
   // PERC-8195: filter by network so devnet/mainnet rows don't mix
   const networkFilter = getServerNetwork();
@@ -91,7 +90,7 @@ async function computeAprs(
   ]);
 
   // Handle network column fallback for all three queries in parallel
-  const networkFallbackPromises: Promise<{ data: InsuranceSnapshotRow[] | null }>[] = [];
+  const networkFallbackPromises: PromiseLike<{ data: InsuranceSnapshotRow[] | null }>[] = [];
   
   if (result7d.error && result7d.error.message?.includes("network")) {
     networkFallbackPromises.push(
@@ -158,7 +157,7 @@ async function computeAprs(
     if (!earliest7dBySlab.has(row.slab)) {
       earliest7dBySlab.set(row.slab, {
         rate: Number(row.redemption_rate_e6),
-        ts: new Date(row.created_at).getTime(),
+        ts: new Date(row.created_at ?? 0).getTime(),
       });
     }
   }
@@ -166,7 +165,7 @@ async function computeAprs(
     if (!earliest30dBySlab.has(row.slab)) {
       earliest30dBySlab.set(row.slab, {
         rate: Number(row.redemption_rate_e6),
-        ts: new Date(row.created_at).getTime(),
+        ts: new Date(row.created_at ?? 0).getTime(),
       });
     }
   }
@@ -174,7 +173,7 @@ async function computeAprs(
     if (!latestBySlab.has(row.slab)) {
       latestBySlab.set(row.slab, {
         rate: Number(row.redemption_rate_e6),
-        ts: new Date(row.created_at).getTime(),
+        ts: new Date(row.created_at ?? 0).getTime(),
       });
     }
   }

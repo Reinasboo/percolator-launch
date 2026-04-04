@@ -92,7 +92,7 @@ async function tryClaimGate(
   try {
     // Pre-check (GH#1803-style): active claim in window → deny before INSERT so a
     // transient INSERT error cannot fail-open into the mint path for rate-limited wallets.
-    const { data: activeClaim } = await (supabase as any)
+    const { data: activeClaim } = await supabase
       .from("devnet_airdrop_claims")
       .select("claimed_at")
       .eq("wallet", walletAddress)
@@ -109,7 +109,7 @@ async function tryClaimGate(
     // Step 1: Clear any expired claim so the unique slot is free for re-claiming.
     // This is safe even under concurrency: two concurrent DELETEs on the same
     // expired row are idempotent; the second finds nothing and succeeds silently.
-    await (supabase as any)
+    await supabase
       .from("devnet_airdrop_claims")
       .delete()
       .eq("wallet", walletAddress)
@@ -119,7 +119,7 @@ async function tryClaimGate(
     // Step 2: INSERT-as-gate.
     // Only one concurrent request can win the unique constraint; all others get
     // a postgres error code 23505 and are denied — atomically, with no gap.
-    const { data, error } = await (supabase as any)
+    const { data, error } = await supabase
       .from("devnet_airdrop_claims")
       .insert({ wallet: walletAddress, mint: mintAddress, claimed_at: new Date().toISOString() })
       .select("id, claimed_at")
@@ -128,7 +128,7 @@ async function tryClaimGate(
     if (error) {
       if (error.code === "23505") {
         // Unique violation = active claim within 24h. Fetch it to compute retry time.
-        const { data: existing } = await (supabase as any)
+        const { data: existing } = await supabase
           .from("devnet_airdrop_claims")
           .select("claimed_at")
           .eq("wallet", walletAddress)
@@ -154,7 +154,7 @@ async function tryClaimGate(
       return { allowed: true, retryAfterSecs: 0 };
     }
 
-    return { allowed: true, retryAfterSecs: 0, claimId: (data as any)?.id };
+    return { allowed: true, retryAfterSecs: 0, claimId: data?.id };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.warn("[devnet-airdrop] tryClaimGate threw:", msg);
@@ -176,7 +176,7 @@ async function releaseClaim(
   supabase: ReturnType<typeof getServiceClient>,
   claimId: number,
 ): Promise<void> {
-  const { error } = await (supabase as any)
+  const { error } = await supabase
     .from("devnet_airdrop_claims")
     .delete()
     .eq("id", claimId);
@@ -202,7 +202,7 @@ async function fetchTokenPriceUsd(mainnetCa: string): Promise<{ priceUsd: number
     const sorted = [...pairs].sort(
       (a: any, b: any) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0),
     );
-    const price = parseFloat((sorted[0] as any).priceUsd ?? "0");
+    const price = parseFloat(sorted[0].priceUsd ?? "0");
     if (price <= 0) return null;
     return { priceUsd: price };
   } catch {
@@ -246,7 +246,7 @@ async function resolveServerOwnedDevnetMint(
   //    The mainnet-mirror flow stores: mainnet_ca = <REAL_MAINNET_CA>, devnet_mint = <server-created devnet SPL>
   // GH#1771: Use .limit(1) instead of .maybeSingle() — multiple mirrors may exist
   // for the same mainnet_ca (e.g. re-keyed mirrors), causing a PGRST116 multi-row error.
-  const { data: mirrorRows } = await (supabase as any)
+  const { data: mirrorRows } = await supabase
     .from("devnet_mints")
     .select("devnet_mint")
     .eq("mainnet_ca", mainnetCa)
@@ -342,7 +342,7 @@ async function resolveServerOwnedDevnetMint(
 
   // 3. Store the new mirror in devnet_mints so future requests find it.
   //    Use upsert with ignoreDuplicates in case of concurrent creation race.
-  await (supabase as any).from("devnet_mints").upsert(
+  await supabase.from("devnet_mints").upsert(
     {
       mainnet_ca: mainnetCa,
       devnet_mint: newDevnetMint,
@@ -352,7 +352,7 @@ async function resolveServerOwnedDevnetMint(
       creator_wallet: mintSigner.publicKey(),
     },
     { onConflict: "mainnet_ca", ignoreDuplicates: false },
-  ).then((result: { error?: { message: string } }) => {
+  ).then((result) => {
     if (result?.error) {
       console.warn("[devnet-airdrop] resolveServerOwnedDevnetMint: upsert failed (non-fatal):", result.error.message);
     }
@@ -418,7 +418,7 @@ export async function POST(req: NextRequest) {
     const supabase = getServiceClient();
     // GH#1771: devnet_mints.devnet_mint should be unique, but add .limit(1) as a defensive
     // guard against any duplicate rows that could cause .maybeSingle() to throw.
-    const { data: mintRow, error: dbErr } = await (supabase as any)
+    const { data: mintRow, error: dbErr } = await supabase
       .from("devnet_mints")
       .select("mainnet_ca, symbol, decimals")
       .eq("devnet_mint", mintAddress)
@@ -426,7 +426,7 @@ export async function POST(req: NextRequest) {
       .limit(1)
       .maybeSingle();
 
-    let mainnetCa: string;
+    let mainnetCa: string | null;
     let symbol: string | null;
     let decimals: number;
     // GH#1769: Track whether this is a server-created mirror (can MintTo) or
@@ -448,7 +448,7 @@ export async function POST(req: NextRequest) {
         // GH#1771: mint_address can appear in multiple markets rows (shared mints).
         // Use .limit(1) to avoid .maybeSingle() multi-row error; prefer rows with a non-null
         // mainnet_ca by ordering newest first so we get the most useful row.
-        const { data: _nativeRows } = await (supabase as any)
+        const { data: _nativeRows } = await supabase
           .from("markets")
           .select("mainnet_ca, symbol, decimals")
           .eq("mint_address", mintAddress)
@@ -472,7 +472,7 @@ export async function POST(req: NextRequest) {
       // Fallback: check markets table for mint_address match (direct-created market mints)
       // GH#1771: Use .limit(1) instead of .maybeSingle() — a mint can appear
       // in multiple markets rows (shared mints), causing a PGRST116 multi-row error.
-      const { data: marketRows, error: marketErr } = await (supabase as any)
+      const { data: marketRows, error: marketErr } = await supabase
         .from("markets")
         .select("mainnet_ca, symbol, decimals")
         .eq("mint_address", mintAddress)
@@ -522,7 +522,7 @@ export async function POST(req: NextRequest) {
     let rawAmount: bigint;
     try {
       // 3. Fetch mainnet price from DexScreener
-      const priceResult = await fetchTokenPriceUsd(mainnetCa);
+      const priceResult = mainnetCa ? await fetchTokenPriceUsd(mainnetCa) : null;
 
       if (priceResult && priceResult.priceUsd > 0) {
         // $500 / price = tokens; scale by decimals

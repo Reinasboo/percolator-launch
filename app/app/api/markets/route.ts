@@ -1115,7 +1115,7 @@ export async function POST(req: NextRequest) {
   // table with self-referencing devnet-native entries that have no real mainnet CA).
   if (mint_address && mainnet_ca && mainnet_ca !== mint_address) {
     try {
-      await ((supabase as any).from("devnet_mints")).upsert(
+      await (supabase.from("devnet_mints")).upsert(
         {
           mainnet_ca,
           devnet_mint: mint_address,

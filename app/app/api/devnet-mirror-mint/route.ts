@@ -109,14 +109,19 @@ async function fetchMainnetTokenInfo(ca: string): Promise<TokenInfo | null> {
     );
     if (!resp.ok) return null;
     const json = await resp.json();
-    const pairs = json.pairs;
+    const pairs = json.pairs as Array<{
+      baseToken?: { name?: string; symbol?: string };
+      priceUsd?: string;
+      liquidity?: { usd?: number };
+      info?: { imageUrl?: string };
+    }> | undefined;
     if (!pairs || pairs.length === 0) return null;
 
     // Sort by liquidity, pick best
     const sorted = [...pairs].sort(
-      (a: any, b: any) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0),
+      (a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0),
     );
-    const best = sorted[0] as any;
+    const best = sorted[0];
 
     return {
       name: best.baseToken?.name ?? `Token ${ca.slice(0, 6)}`,
@@ -212,7 +217,7 @@ export async function POST(req: NextRequest) {
 
     // 1. Check for existing mapping
     const supabase = getServiceClient();
-    const { data: existing } = await (supabase as any)
+    const { data: existing } = await supabase
       .from("devnet_mints")
       .select("devnet_mint, name, symbol, decimals, logo_url")
       .eq("mainnet_ca", mainnetCA)
@@ -345,7 +350,7 @@ export async function POST(req: NextRequest) {
     //  upsert ON CONFLICT (mainnet_ca) DO NOTHING prevents duplicate rows and
     //  avoids a second createMint call winning a race that corrupts the table.)
     // GH#1476: include creator_wallet so the column constraint is satisfied.
-    const { error: upsertError } = await (supabase as any).from("devnet_mints").upsert(
+    const { error: upsertError } = await supabase.from("devnet_mints").upsert(
       {
         mainnet_ca: mainnetCA,
         devnet_mint: devnetMint,
@@ -370,7 +375,7 @@ export async function POST(req: NextRequest) {
     // Re-SELECT the canonical row from DB to handle TOCTOU races (#772):
     // If two concurrent requests both created mints, only one wins the upsert.
     // Return the DB-canonical devnetMint so all callers get the same address.
-    const { data: canonical } = await (supabase as any)
+    const { data: canonical } = await supabase
       .from("devnet_mints")
       .select("devnet_mint")
       .eq("mainnet_ca", mainnetCA)

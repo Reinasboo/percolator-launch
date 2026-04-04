@@ -180,7 +180,7 @@ export async function POST(req: NextRequest) {
     if (results.sol_airdropped || results.usdc_minted) {
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase as any).from("auto_fund_log").insert({
+        await supabase.from("auto_fund_log").insert({
           wallet: walletAddress,
           sol_airdropped: results.sol_airdropped,
           usdc_minted: results.usdc_minted,

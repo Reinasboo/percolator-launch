@@ -172,7 +172,7 @@ export async function POST(req: NextRequest) {
         // Not in static list — check dynamic mirror-mint table as fallback
         try {
           const supabase = getServiceClient();
-          const { data: mirrorRows, error: mirrorErr } = await (supabase as any)
+          const { data: mirrorRows, error: mirrorErr } = await supabase
             .from("devnet_mints")
             .select("devnet_mint")
             .eq("devnet_mint", mintAddress)
@@ -203,7 +203,7 @@ export async function POST(req: NextRequest) {
       // #873: No static allowlist — ALWAYS query DB (never default to permitted=true)
       try {
         const supabase = getServiceClient();
-        const { data: mirrorRows, error: mirrorErr } = await (supabase as any)
+        const { data: mirrorRows, error: mirrorErr } = await supabase
           .from("devnet_mints")
           .select("devnet_mint")
           .eq("devnet_mint", mintAddress)
