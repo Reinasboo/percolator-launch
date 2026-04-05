@@ -321,7 +321,14 @@ const V2_ENGINE_LP_MAX_ABS_SWEEP_OFF = 552;
 // Prior value of 1006 was an arithmetic transcription error.
 // Derivation: trade_twap_e6(8)@992 + twap_last_slot(8)@1000 = bitmap@1008.
 const V_ADL_ENGINE_OFF = 624;      // align_up(HEADER=104 + CONFIG=520, 8) = 624
-const V_ADL_CONFIG_LEN = 520;      // BPF/native MarketConfig with current fields
+const V_ADL_CONFIG_LEN = 520;      // BPF/native MarketConfig with current fields (pre-SetDexPool)
+
+// V_SETDEXPOOL: PERC-SetDexPool security fix — adds dex_pool: [u8; 32] to MarketConfig.
+// BPF CONFIG_LEN: 496→528 (+32). ENGINE_OFF: align_up(104+528,8) = 632 (+8 from V_ADL=624).
+// Engine struct and account layout are identical to V_ADL — only CONFIG_LEN/ENGINE_OFF changed.
+const V_SETDEXPOOL_CONFIG_LEN = 544;   // SBF on-chain CONFIG_LEN after PERC-SetDexPool (target_arch=sbf uses native alignment)
+const V_SETDEXPOOL_ENGINE_OFF = 648;   // align_up(HEADER=104 + CONFIG=544, 8) = 648
+// All engine field offsets are identical to V_ADL (same engine struct, only engineOff differs).
 const V_ADL_ACCOUNT_SIZE = 312;    // 248 + 8(pad) + 56(new ADL fields) = 312 bytes
 const V_ADL_ENGINE_PARAMS_OFF = 96; // vault(16) + InsuranceFund(80) = 96
 
@@ -517,6 +524,10 @@ const V_ADL_SIZES = new Map<number, number>();
 //   V_ADL medium (1024 accts): computeSlabSize(624, 1008, 312, 1024, 18) = 323320
 // No disambiguation probe required — size-based detection works correctly.
 const V1M2_SIZES = new Map<number, number>();
+// V_SETDEXPOOL: PERC-SetDexPool — ENGINE_OFF=648, BITMAP_OFF=1008, ACCOUNT_SIZE=312.
+// Same engine and account layout as V_ADL; only ENGINE_OFF changed (+8 from config growth).
+//   e.g. large (4096 accts): computeSlabSize(632, 1008, 312, 4096, 18) = 1288336
+const V_SETDEXPOOL_SIZES = new Map<number, number>();
 const V1D_SIZES_LEGACY = new Map<number, number>();
 for (const n of TIERS) {
   V0_SIZES.set(computeSlabSize(V0_ENGINE_OFF, V0_ENGINE_BITMAP_OFF, V0_ACCOUNT_SIZE, n), n);
@@ -539,6 +550,9 @@ for (const n of TIERS) {
   // V1M2: main@4861c56 rebuild — engineOff=616, bitmapOff=1008, accountSize=312.
   // e.g. n=1024 → 323312 bytes (confirmed on-chain for slab CCTegYZ...).
   V1M2_SIZES.set(computeSlabSize(V1M2_ENGINE_OFF, V1M2_ENGINE_BITMAP_OFF, V1M2_ACCOUNT_SIZE, n, 18), n);
+  // V_SETDEXPOOL: PERC-SetDexPool — engineOff=648, bitmapOff=1008, accountSize=312.
+  // e.g. n=4096 → 1288336 bytes.
+  V_SETDEXPOOL_SIZES.set(computeSlabSize(V_SETDEXPOOL_ENGINE_OFF, V_ADL_ENGINE_BITMAP_OFF, V_ADL_ACCOUNT_SIZE, n, 18), n);
 }
 
 /**
@@ -1021,9 +1035,88 @@ function buildLayoutVADL(maxAccounts: number): SlabLayout {
 }
 
 /**
+ * V_SETDEXPOOL slab tier sizes — PERC-SetDexPool security fix.
+ * ENGINE_OFF=632, BITMAP_OFF=1008, ACCOUNT_SIZE=312, CONFIG_LEN=528.
+ * e.g. large (4096 accts) = 1288336 bytes.
+ */
+export const SLAB_TIERS_V_SETDEXPOOL: Record<string, { maxAccounts: number; dataSize: number; label: string; description: string }> = {};
+for (const [label, n] of [["Micro", 64], ["Small", 256], ["Medium", 1024], ["Large", 4096]] as const) {
+  const size = computeSlabSize(V_SETDEXPOOL_ENGINE_OFF, V_ADL_ENGINE_BITMAP_OFF, V_ADL_ACCOUNT_SIZE, n, 18);
+  SLAB_TIERS_V_SETDEXPOOL[label.toLowerCase()] = { maxAccounts: n, dataSize: size, label, description: `${n} slots (V_SETDEXPOOL PERC-SetDexPool)` };
+}
+
+/**
+ * Build a SlabLayout for V_SETDEXPOOL slabs (PERC-SetDexPool security fix).
+ * ENGINE_OFF=632 (+8 from V_ADL=624 due to CONFIG_LEN growing 520→528).
+ * All engine and account field offsets are identical to V_ADL.
+ */
+function buildLayoutVSetDexPool(maxAccounts: number): SlabLayout {
+  const engineOff = V_SETDEXPOOL_ENGINE_OFF;
+  const bitmapOff = V_ADL_ENGINE_BITMAP_OFF;
+  const accountSize = V_ADL_ACCOUNT_SIZE;
+  const bitmapWords = Math.ceil(maxAccounts / 64);
+  const bitmapBytes = bitmapWords * 8;
+  const postBitmap = 18;
+  const nextFreeBytes = maxAccounts * 2;
+  const preAccountsLen = bitmapOff + bitmapBytes + postBitmap + nextFreeBytes;
+  const accountsOffRel = Math.ceil(preAccountsLen / 8) * 8;
+
+  return {
+    version: 1,
+    headerLen: V1_HEADER_LEN,
+    configOffset: V1_HEADER_LEN,
+    configLen: V_SETDEXPOOL_CONFIG_LEN,   // 544
+    reservedOff: V1_RESERVED_OFF,
+    engineOff,
+    accountSize,
+    maxAccounts,
+    bitmapWords,
+    accountsOff: engineOff + accountsOffRel,
+
+    engineInsuranceOff: 16,
+    engineParamsOff: V_ADL_ENGINE_PARAMS_OFF,
+    paramsSize: V_ADL_PARAMS_SIZE,
+    engineCurrentSlotOff: V_ADL_ENGINE_CURRENT_SLOT_OFF,
+    engineFundingIndexOff: V_ADL_ENGINE_FUNDING_INDEX_OFF,
+    engineLastFundingSlotOff: V_ADL_ENGINE_LAST_FUNDING_SLOT_OFF,
+    engineFundingRateBpsOff: V_ADL_ENGINE_FUNDING_RATE_BPS_OFF,
+    engineMarkPriceOff: V_ADL_ENGINE_MARK_PRICE_OFF,
+    engineLastCrankSlotOff: V_ADL_ENGINE_LAST_CRANK_SLOT_OFF,
+    engineMaxCrankStalenessOff: V_ADL_ENGINE_MAX_CRANK_STALENESS_OFF,
+    engineTotalOiOff: V_ADL_ENGINE_TOTAL_OI_OFF,
+    engineLongOiOff: V_ADL_ENGINE_LONG_OI_OFF,
+    engineShortOiOff: V_ADL_ENGINE_SHORT_OI_OFF,
+    engineCTotOff: V_ADL_ENGINE_C_TOT_OFF,
+    enginePnlPosTotOff: V_ADL_ENGINE_PNL_POS_TOT_OFF,
+    engineLiqCursorOff: V_ADL_ENGINE_LIQ_CURSOR_OFF,
+    engineGcCursorOff: V_ADL_ENGINE_GC_CURSOR_OFF,
+    engineLastSweepStartOff: V_ADL_ENGINE_LAST_SWEEP_START_OFF,
+    engineLastSweepCompleteOff: V_ADL_ENGINE_LAST_SWEEP_COMPLETE_OFF,
+    engineCrankCursorOff: V_ADL_ENGINE_CRANK_CURSOR_OFF,
+    engineSweepStartIdxOff: V_ADL_ENGINE_SWEEP_START_IDX_OFF,
+    engineLifetimeLiquidationsOff: V_ADL_ENGINE_LIFETIME_LIQUIDATIONS_OFF,
+    engineLifetimeForceClosesOff: V_ADL_ENGINE_LIFETIME_FORCE_CLOSES_OFF,
+    engineNetLpPosOff: V_ADL_ENGINE_NET_LP_POS_OFF,
+    engineLpSumAbsOff: V_ADL_ENGINE_LP_SUM_ABS_OFF,
+    engineLpMaxAbsOff: V_ADL_ENGINE_LP_MAX_ABS_OFF,
+    engineLpMaxAbsSweepOff: V_ADL_ENGINE_LP_MAX_ABS_SWEEP_OFF,
+    engineEmergencyOiModeOff: V_ADL_ENGINE_EMERGENCY_OI_MODE_OFF,
+    engineEmergencyStartSlotOff: V_ADL_ENGINE_EMERGENCY_START_SLOT_OFF,
+    engineLastBreakerSlotOff: V_ADL_ENGINE_LAST_BREAKER_SLOT_OFF,
+    engineBitmapOff: V_ADL_ENGINE_BITMAP_OFF,
+    postBitmap: 18,
+    acctOwnerOff: V_ADL_ACCT_OWNER_OFF,
+
+    hasInsuranceIsolation: true,
+    engineInsuranceIsolatedOff: 48,
+    engineInsuranceIsolationBpsOff: 64,
+  };
+}
+
+/**
  * Detect the slab layout version from the raw account data length.
  * Returns the full SlabLayout descriptor, or null if the size is unrecognised.
- * Checks V1M2, V_ADL, V1M, V0, V1D, V1D-legacy, V1, and V1-legacy sizes in priority order.
+ * Checks V_SETDEXPOOL, V1M2, V_ADL, V1M, V0, V1D, V1D-legacy, V1, and V1-legacy sizes.
  *
  * When `data` is provided and the size matches V1D, the version field at offset 8 is read
  * to disambiguate V2 slabs (which produce identical sizes to V1D with postBitmap=2).
@@ -1033,7 +1126,12 @@ function buildLayoutVADL(maxAccounts: number): SlabLayout {
  * @param data    - Optional raw slab data for version-field disambiguation
  */
 export function detectSlabLayout(dataLen: number, data?: Uint8Array): SlabLayout | null {
-  // Check V1M2 sizes first. After fixing bitmapOff to 1008 for both V1M2 and V_ADL,
+  // Check V_SETDEXPOOL sizes first (PERC-SetDexPool, ENGINE_OFF=632, CONFIG_LEN=528).
+  // These are the newest slabs — largest ENGINE_OFF so no size collision with V_ADL (624).
+  const vsdpn = V_SETDEXPOOL_SIZES.get(dataLen);
+  if (vsdpn !== undefined) return buildLayoutVSetDexPool(vsdpn);
+
+  // Check V1M2 sizes. After fixing bitmapOff to 1008 for both V1M2 and V_ADL,
   // their sizes no longer collide (engineOff differs: 616 vs 624), so size-based detection
   // works directly — no data-probe disambiguation required.
   //   V1M2 medium (1024 accts): computeSlabSize(616, 1008, 312, 1024, 18) = 323312
@@ -1201,6 +1299,14 @@ export interface MarketConfig {
   cumulativeVolumeE6: bigint;
   /** PERC-622: Slots elapsed from market creation to Phase 2 entry (u24) */
   phase2DeltaSlots: number;
+  /**
+   * PERC-SetDexPool: Admin-pinned DEX pool pubkey for HYPERP markets.
+   * Null when reading old slabs (pre-SetDexPool configLen < 528) or when
+   * SetDexPool has never been called (all-zero pubkey).
+   * Non-null means the program will reject any UpdateHyperpMark that passes
+   * a different pool account.
+   */
+  dexPool: PublicKey | null;
 }
 
 export interface InsuranceFund {
@@ -1557,6 +1663,19 @@ export function parseConfig(data: Uint8Array, layoutHint?: SlabLayout | null): M
     }
   }
 
+  // PERC-SetDexPool: read dex_pool at BPF offset 496 within config.
+  // Only present in V_SETDEXPOOL slabs (configLen >= 528).
+  // All-zero pubkey means SetDexPool was never called.
+  let dexPool: PublicKey | null = null;
+  const DEX_POOL_REL_OFF = 512; // SBF offset of dex_pool within MarketConfig (CONFIG_LEN=544, dex_pool at end = 544-32=512)
+  if (configLen >= DEX_POOL_REL_OFF + 32 && data.length >= configOff + DEX_POOL_REL_OFF + 32) {
+    const dexPoolBytes = data.subarray(configOff + DEX_POOL_REL_OFF, configOff + DEX_POOL_REL_OFF + 32);
+    // Return null if all-zero (SetDexPool never called)
+    if (dexPoolBytes.some(b => b !== 0)) {
+      dexPool = new PublicKey(dexPoolBytes);
+    }
+  }
+
   return {
     collateralMint,
     vaultPubkey,
@@ -1600,6 +1719,7 @@ export function parseConfig(data: Uint8Array, layoutHint?: SlabLayout | null): M
     oraclePhase,
     cumulativeVolumeE6,
     phase2DeltaSlots,
+    dexPool,
   };
 }
 
