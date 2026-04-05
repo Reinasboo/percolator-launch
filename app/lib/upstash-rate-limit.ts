@@ -77,6 +77,9 @@ export function createUpstashRateLimiter(
 
   // In-memory sliding-window fallback
   const localMap = new Map<string, number[]>();
+  // Cap map size to prevent unbounded growth under distributed attacks.
+  // Similar to memory-rate-limit.ts evictionThreshold (500).
+  const MAP_SIZE_CAP = 500;
 
   function checkLocal(rateKey: string): RateLimitResult {
     const now = Date.now();
@@ -86,8 +89,8 @@ export function createUpstashRateLimiter(
     timestamps.push(now);
     localMap.set(rateKey, timestamps);
 
-    // Periodic full cleanup (~0.1% of requests)
-    if (Math.random() < 0.001) {
+    // Deterministic cleanup when map exceeds size cap (prevents memory exhaustion)
+    if (localMap.size > MAP_SIZE_CAP) {
       for (const [key, ts] of localMap) {
         const pruned = ts.filter((t) => t > windowStart);
         if (pruned.length === 0) localMap.delete(key);
@@ -125,8 +128,13 @@ export function createUpstashRateLimiter(
               Math.ceil((result.reset - Date.now()) / 1000)
             ),
           };
-        } catch {
-          // Redis/network error — fall through to in-memory fallback
+        } catch (err) {
+          // Redis/network error — fall through to per-instance in-memory fallback.
+          // Log so operators know rate limiting is degraded (per-instance, not global).
+          console.warn(
+            `[rate-limit] ${prefix}: Redis error, falling back to in-memory limiter (per-instance only).`,
+            err instanceof Error ? err.message : err,
+          );
         }
       }
 
